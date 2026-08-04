@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from datetime import date
 import os
 
 load_dotenv()
@@ -78,3 +79,51 @@ def get_timeline(year_level: int):
         return {"error": "Invalid year level. Please enter 1, 2, 3, or 4."}
 
     return timelines[year_level]
+
+@app.get("/status")
+def get_status(program_end_date: str, year_level: int):
+    today = date.today()
+    end_date = date.fromisoformat(program_end_date)
+
+    opt_window_opens = (end_date - today).days - 90
+    days_until_deadline = (end_date - today).days
+
+    if year_level < 4:
+        return {
+            "status": "on_track",
+            "color": "green",
+            "message": f"You are on track. Your OPT window opens in {opt_window_opens} days.",
+            "action_needed": False
+        }
+    elif opt_window_opens > 90:
+        return {
+            "status": "on_track",
+            "color": "green",
+            "message": f"You are on track. Your OPT window opens in {opt_window_opens} days. No action needed today.",
+            "action_needed": False
+        }
+    elif opt_window_opens > 30:
+        return {
+            "status": "prepare",
+            "color": "yellow",
+            "message": f"Your OPT window opens in {opt_window_opens} days. Start preparing your documents now.",
+            "action_needed": True,
+            "action": "Review your OPT checklist"
+        }
+    elif opt_window_opens > 0:
+        return {
+            "status": "urgent",
+            "color": "red",
+            "message": f"Urgent. Your OPT window is open and closes in {opt_window_opens} days. Apply now.",
+            "action_needed": True,
+            "action": "Start Form I-765 immediately",
+            "link": "https://www.uscis.gov/i-765"
+        }
+    else:
+        return {
+            "status": "critical",
+            "color": "red",
+            "message": "Your OPT window may have closed. Contact your DSO immediately.",
+            "action_needed": True,
+            "action": "Contact DSO now"
+        }
