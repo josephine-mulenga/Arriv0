@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import date
+from pydantic import BaseModel
 import os
 
 load_dotenv()
@@ -13,9 +14,64 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI()
 
+# This is a new concept called a model
+# It defines the shape of data we expect to receive
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+    school: str
+    visa_type: str
+    year_level: int
+    program_end_date: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
 @app.get("/")
 def home():
     return {"message": "Arriv0 backend is running"}
+
+@app.post("/signup")
+def signup(data: SignupRequest):
+    try:
+        # Step 1 — Create the account in Supabase auth
+        response = supabase.auth.sign_up({
+            "email": data.email,
+            "password": data.password
+        })
+
+        # Step 2 — Save their profile to the users table
+        supabase.table("users").insert({
+            "name": data.name,
+            "school": data.school,
+            "visa_type": data.visa_type,
+            "year_level": data.year_level,
+            "program_end_date": data.program_end_date
+        }).execute()
+
+        return {"message": f"Account created successfully. Welcome to Arriv0, {data.name}."}
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/login")
+def login(data: LoginRequest):
+    try:
+        response = supabase.auth.sign_in_with_password({
+            "email": data.email,
+            "password": data.password
+        })
+
+        return {
+            "message": "Login successful",
+            "access_token": response.session.access_token,
+            "user_id": response.user.id
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
 @app.post("/onboarding")
 def save_user(name: str, school: str, visa_type: str, year_level: str, program_end_date: str):
@@ -69,7 +125,7 @@ def get_timeline(year_level: int):
                 {"task": "Confirm program end date with DSO", "done": True},
                 {"task": "Request OPT recommendation from DSO", "done": True},
                 {"task": "Complete Form I-765 on USCIS", "done": False, "link": "https://www.uscis.gov/i-765"},
-                {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/high"},
+                {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home"},
                 {"task": "Submit and track your case", "done": False, "link": "https://egov.uscis.gov/casestatus/landing.do"}
             ]
         }
@@ -86,7 +142,6 @@ def get_status(program_end_date: str, year_level: int):
     end_date = date.fromisoformat(program_end_date)
 
     opt_window_opens = (end_date - today).days - 90
-    days_until_deadline = (end_date - today).days
 
     if year_level < 4:
         return {
