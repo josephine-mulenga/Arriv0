@@ -69,7 +69,7 @@ def get_timeline(year_level: int):
                 {"task": "Confirm program end date with DSO", "done": True},
                 {"task": "Request OPT recommendation from DSO", "done": True},
                 {"task": "Complete Form I-765 on USCIS", "done": False, "link": "https://www.uscis.gov/i-765"},
-                {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home"},
+                {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/high"},
                 {"task": "Submit and track your case", "done": False, "link": "https://egov.uscis.gov/casestatus/landing.do"}
             ]
         }
@@ -127,3 +127,37 @@ def get_status(program_end_date: str, year_level: int):
             "action_needed": True,
             "action": "Contact DSO now"
         }
+
+@app.get("/news")
+def get_news():
+    news = [
+        {
+            "title": "USCIS OPT processing times now 3 to 4 months",
+            "body": "New data shows average processing has increased. Submit your application on the first day your window opens to avoid gaps in work authorization.",
+            "affects_you": True,
+            "tag": "Affects you directly",
+            "link": "https://www.uscis.gov/tools/processing-times"
+        },
+        {
+            "title": "STEM OPT extension rules remain unchanged",
+            "body": "Computer Science and Cybersecurity both qualify. You are eligible for 24 additional months of work authorization after standard OPT.",
+            "affects_you": True,
+            "tag": "Affects you directly",
+            "link": "https://www.ice.gov/sevis/stemlist"
+        },
+        {
+            "title": "New social media screening for visa renewals",
+            "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.",
+            "affects_you": False,
+            "tag": "General F1 news",
+            "link": None
+        },
+        {
+            "title": "OPT application fee increased to $520",
+            "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.",
+            "affects_you": True,
+            "tag": "Affects you directly",
+            "link": "https://www.uscis.gov/i-765"
+        }
+    ]
+    return {"news": news, "updated": "August 4 2026"}
