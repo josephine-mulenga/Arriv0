@@ -14,8 +14,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI()
 
-# This is a new concept called a model
-# It defines the shape of data we expect to receive
 class SignupRequest(BaseModel):
     email: str
     password: str
@@ -42,8 +40,12 @@ def signup(data: SignupRequest):
             "password": data.password
         })
 
-        # Step 2 — Save their profile to the users table
+        # Step 2 — Get the user ID from auth
+        auth_user_id = response.user.id
+
+        # Step 3 — Save their profile using the same ID from auth
         supabase.table("users").insert({
+            "id": auth_user_id,
             "name": data.name,
             "school": data.school,
             "visa_type": data.visa_type,
@@ -83,6 +85,19 @@ def save_user(name: str, school: str, visa_type: str, year_level: str, program_e
         "program_end_date": program_end_date
     }).execute()
     return {"message": f"Welcome to Arriv0, {name}. Your profile has been saved."}
+
+@app.get("/user/{user_id}")
+def get_user_profile(user_id: str):
+    try:
+        response = supabase.table("users").select("*").eq("id", user_id).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return response.data[0]
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/timeline/{year_level}")
 def get_timeline(year_level: int):
