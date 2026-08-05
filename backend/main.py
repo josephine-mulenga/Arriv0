@@ -34,16 +34,13 @@ def home():
 @app.post("/signup")
 def signup(data: SignupRequest):
     try:
-        # Step 1 — Create the account in Supabase auth
         response = supabase.auth.sign_up({
             "email": data.email,
             "password": data.password
         })
 
-        # Step 2 — Get the user ID from auth
         auth_user_id = response.user.id
 
-        # Step 3 — Save their profile using the same ID from auth
         supabase.table("users").insert({
             "id": auth_user_id,
             "name": data.name,
@@ -230,4 +227,75 @@ def get_news():
             "link": "https://www.uscis.gov/i-765"
         }
     ]
-    return {"news": news, "updated": "August 4 2026"}
+    return {"news": news, "updated": "August 5 2026"}
+
+@app.get("/milestones/{year_level}")
+def get_milestones(year_level: int):
+    all_milestones = [
+        {
+            "id": 1,
+            "icon": "🛬",
+            "title": "Arrived and reported to DSO",
+            "description": "Your F1 journey officially started. SEVIS record active.",
+            "status": "done" if year_level >= 1 else "locked"
+        },
+        {
+            "id": 2,
+            "icon": "🏦",
+            "title": "Opened a US bank account",
+            "description": "You can now receive payments and build credit history.",
+            "status": "done" if year_level >= 1 else "locked"
+        },
+        {
+            "id": 3,
+            "icon": "💼",
+            "title": "First CPT internship authorized",
+            "description": "You gained real US work experience. This goes on your resume.",
+            "status": "done" if year_level >= 2 else "next" if year_level == 2 else "locked"
+        },
+        {
+            "id": 4,
+            "icon": "📋",
+            "title": "DSO OPT recommendation received",
+            "description": "Your DSO has approved your OPT application request.",
+            "status": "done" if year_level >= 4 else "next" if year_level == 3 else "locked"
+        },
+        {
+            "id": 5,
+            "icon": "📄",
+            "title": "Form I-765 submitted",
+            "description": "Your OPT application is in USCIS hands.",
+            "status": "next" if year_level == 4 else "locked"
+        },
+        {
+            "id": 6,
+            "icon": "💳",
+            "title": "EAD card received",
+            "description": "Your Employment Authorization Document arrived by mail.",
+            "status": "locked"
+        },
+        {
+            "id": 7,
+            "icon": "🎯",
+            "title": "First OPT job offer accepted",
+            "description": "The moment everything you worked for becomes real.",
+            "status": "locked"
+        },
+        {
+            "id": 8,
+            "icon": "🚀",
+            "title": "STEM OPT extension approved",
+            "description": "24 more months of work authorization secured.",
+            "status": "locked"
+        }
+    ]
+
+    completed = len([m for m in all_milestones if m["status"] == "done"])
+    total = len(all_milestones)
+
+    return {
+        "milestones": all_milestones,
+        "completed": completed,
+        "total": total,
+        "percentage": round((completed / total) * 100)
+    }
