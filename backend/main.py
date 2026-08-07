@@ -1,8 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.requests import Request
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, validator
+from typing import Optional
 import os
 
 load_dotenv()
@@ -12,10 +19,38 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-app = FastAPI()
+limiter = Limiter(key_func=get_remote_address)
+security = HTTPBearer()
+
+app = FastAPI(
+    title="Arriv0 API",
+    description="Backend for Arriv0 — From Landing to Staying",
+    version="1.0.0"
+)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+def verify_token(authorization: Optional[str] = None):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authorized. Please log in.")
+    token = authorization.split(" ")[1]
+    try:
+        user = supabase.auth.get_user(token)
+        return user
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token. Please log in again.")
 
 class SignupRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
     name: str
     school: str
@@ -23,8 +58,26 @@ class SignupRequest(BaseModel):
     year_level: int
     program_end_date: str
 
+    @validator('password')
+    def password_must_be_strong(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        return v
+
+    @validator('year_level')
+    def year_level_must_be_valid(cls, v):
+        if v not in [1, 2, 3, 4]:
+            raise ValueError('Year level must be 1, 2, 3, or 4')
+        return v
+
+    @validator('visa_type')
+    def visa_type_must_be_valid(cls, v):
+        if v not in ['F1', 'J1', 'Other']:
+            raise ValueError('Visa type must be F1, J1, or Other')
+        return v
+
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 @app.get("/")
@@ -32,7 +85,8 @@ def home():
     return {"message": "Arriv0 backend is running"}
 
 @app.post("/signup")
-def signup(data: SignupRequest):
+@limiter.limit("5/minute")
+def signup(request: Request, data: SignupRequest):
     try:
         response = supabase.auth.sign_up({
             "email": data.email,
@@ -56,7 +110,8 @@ def signup(data: SignupRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/login")
-def login(data: LoginRequest):
+@limiter.limit("10/minute")
+def login(request: Request, data: LoginRequest):
     try:
         response = supabase.auth.sign_in_with_password({
             "email": data.email,
@@ -72,19 +127,10 @@ def login(data: LoginRequest):
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-@app.post("/onboarding")
-def save_user(name: str, school: str, visa_type: str, year_level: str, program_end_date: str):
-    data = supabase.table("users").insert({
-        "name": name,
-        "school": school,
-        "visa_type": visa_type,
-        "year_level": year_level,
-        "program_end_date": program_end_date
-    }).execute()
-    return {"message": f"Welcome to Arriv0, {name}. Your profile has been saved."}
-
 @app.get("/user/{user_id}")
-def get_user_profile(user_id: str):
+@limiter.limit("30/minute")
+def get_user_profile(request: Request, user_id: str, authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
     try:
         response = supabase.table("users").select("*").eq("id", user_id).execute()
 
@@ -93,11 +139,15 @@ def get_user_profile(user_id: str):
 
         return response.data[0]
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/timeline/{year_level}")
-def get_timeline(year_level: int):
+@limiter.limit("30/minute")
+def get_timeline(request: Request, year_level: int, authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
     timelines = {
         1: {
             "year": "Freshman",
@@ -149,7 +199,9 @@ def get_timeline(year_level: int):
     return timelines[year_level]
 
 @app.get("/status")
-def get_status(program_end_date: str, year_level: int):
+@limiter.limit("30/minute")
+def get_status(request: Request, program_end_date: str, year_level: int, authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
     today = date.today()
     end_date = date.fromisoformat(program_end_date)
 
@@ -196,7 +248,9 @@ def get_status(program_end_date: str, year_level: int):
         }
 
 @app.get("/news")
-def get_news():
+@limiter.limit("30/minute")
+def get_news(request: Request, authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
     news = [
         {
             "title": "USCIS OPT processing times now 3 to 4 months",
@@ -230,7 +284,9 @@ def get_news():
     return {"news": news, "updated": "August 5 2026"}
 
 @app.get("/milestones/{year_level}")
-def get_milestones(year_level: int):
+@limiter.limit("30/minute")
+def get_milestones(request: Request, year_level: int, authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
     all_milestones = [
         {
             "id": 1,
