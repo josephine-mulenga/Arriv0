@@ -12,6 +12,10 @@ from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
 from openai import OpenAI
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -36,7 +40,14 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://arriv0.com",
+        "https://www.arriv0.com",
+        "https://arriv0-production.up.railway.app",
+        "http://localhost:8081",
+        "http://localhost:19006",
+        "exp://localhost:19000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,12 +55,14 @@ app.add_middleware(
 
 def verify_token(authorization: Optional[str] = None):
     if not authorization or not authorization.startswith("Bearer "):
+        logger.warning("Unauthorized request — missing or malformed token")
         raise HTTPException(status_code=401, detail="Not authorized. Please log in.")
     token = authorization.split(" ")[1]
     try:
         user = supabase.auth.get_user(token)
         return user
     except Exception:
+        logger.warning("Unauthorized request — invalid or expired token")
         raise HTTPException(status_code=401, detail="Invalid or expired token. Please log in again.")
 
 class SignupRequest(BaseModel):
@@ -67,6 +80,18 @@ class SignupRequest(BaseModel):
             raise ValueError('Password must be at least 8 characters')
         return v
 
+    @validator('name')
+    def name_must_be_valid(cls, v):
+        if len(v) > 100:
+            raise ValueError('Name must be under 100 characters')
+        return v.strip()
+
+    @validator('school')
+    def school_must_be_valid(cls, v):
+        if len(v) > 200:
+            raise ValueError('School name must be under 200 characters')
+        return v.strip()
+
     @validator('year_level')
     def year_level_must_be_valid(cls, v):
         if v not in [1, 2, 3, 4]:
@@ -77,6 +102,16 @@ class SignupRequest(BaseModel):
     def visa_type_must_be_valid(cls, v):
         if v not in ['F1', 'J1', 'Other']:
             raise ValueError('Visa type must be F1, J1, or Other')
+        return v
+
+    @validator('program_end_date')
+    def date_must_be_valid(cls, v):
+        try:
+            parsed = date.fromisoformat(v)
+            if parsed < date.today():
+                raise ValueError('Program end date cannot be in the past')
+        except ValueError as e:
+            raise ValueError(f'Invalid date format. Use YYYY-MM-DD. {e}')
         return v
 
 class LoginRequest(BaseModel):
@@ -110,7 +145,8 @@ def signup(request: Request, data: SignupRequest):
         return {"message": f"Account created successfully. Welcome to Arriv0, {data.name}."}
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Signup error: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
 
 @app.post("/login")
 @limiter.limit("10/minute")
@@ -128,35 +164,41 @@ def login(request: Request, data: LoginRequest):
         }
 
     except Exception as e:
+        logger.warning(f"Failed login attempt for email: {data.email[:3]}***")
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
 @app.post("/onboarding")
 def save_user(name: str, school: str, visa_type: str, year_level: str, program_end_date: str):
-    data = supabase.table("users").insert({
-        "name": name,
-        "school": school,
-        "visa_type": visa_type,
-        "year_level": year_level,
-        "program_end_date": program_end_date
-    }).execute()
-    return {"message": f"Welcome to Arriv0, {name}. Your profile has been saved."}
+    try:
+        data = supabase.table("users").insert({
+            "name": name,
+            "school": school,
+            "visa_type": visa_type,
+            "year_level": year_level,
+            "program_end_date": program_end_date
+        }).execute()
+        return {"message": f"Welcome to Arriv0, {name}. Your profile has been saved."}
+    except Exception as e:
+        logger.error(f"Onboarding error: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Failed to save profile. Please try again.")
 
 @app.get("/user/{user_id}")
 @limiter.limit("30/minute")
 def get_user_profile(request: Request, user_id: str, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    verified = verify_token(authorization)
+    if verified.user.id != user_id:
+        logger.warning(f"User {verified.user.id[:8]}*** attempted to access profile of {user_id[:8]}***")
+        raise HTTPException(status_code=403, detail="Access denied. You can only view your own profile.")
     try:
         response = supabase.table("users").select("*").eq("id", user_id).execute()
-
         if not response.data:
             raise HTTPException(status_code=404, detail="User not found")
-
         return response.data[0]
-
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Profile fetch error: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Failed to fetch profile. Please try again.")
 
 @app.get("/timeline/{year_level}")
 @limiter.limit("30/minute")
@@ -218,7 +260,6 @@ def get_status(request: Request, program_end_date: str, year_level: int, authori
     verify_token(authorization)
     today = date.today()
     end_date = date.fromisoformat(program_end_date)
-
     opt_window_opens = (end_date - today).days - 90
 
     if year_level < 4:
@@ -385,7 +426,9 @@ def get_ai_status(request: Request, name: str, school: str, year_level: int, pro
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(year_level, "Student")
 
-    prompt = f"""You are Arriv0, a friendly and knowledgeable AI advisor for international students on F1 visas in the United States.
+    prompt = f"""You are Arriv0, a friendly AI study companion for international students on F1 visas in the United States.
+
+IMPORTANT: You provide general guidance and encouragement only. You are NOT a lawyer or immigration advisor. For any specific legal immigration questions, students must consult their DSO or a qualified immigration attorney.
 
 A student has opened the app this morning. Here is their profile:
 - Name: {name}
@@ -408,7 +451,7 @@ Also vary based on urgency:
 - More than 180 days until OPT: focus on building skills, networking, and finding internships
 - 90 to 180 days: start researching employers and preparing documents
 - 30 to 90 days: action oriented with specific next steps
-- Less than 30 days: urgent and very specific action needed today
+- Less than 30 days: urgent and very specific action needed today, and remind them to contact their DSO
 
 Rules:
 - Address them by first name
@@ -416,13 +459,14 @@ Rules:
 - Sound like a trusted friend who knows their situation deeply
 - Never start with Good morning every time — vary the opening
 - Do not use bullet points
-- Plain conversational English only"""
+- Plain conversational English only
+- If urgency is less than 30 days always end with: Contact your DSO immediately for personalized guidance."""
 
     try:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are Arriv0, a friendly AI advisor for international F1 students in the US. Every message you write should feel genuinely different from the last."},
+                {"role": "system", "content": "You are Arriv0, a friendly AI study companion for F1 students. You provide general encouragement and reminders only. You are not a lawyer. Always recommend consulting a DSO for specific immigration questions."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=150,
@@ -435,22 +479,26 @@ Rules:
             "ai_message": message,
             "days_until_opt": opt_window_opens,
             "day": day_of_week,
-            "powered_by": "GPT-4o mini"
+            "powered_by": "GPT-4o mini",
+            "disclaimer": "Arriv0 provides general guidance only. For immigration advice consult your DSO or a qualified immigration attorney."
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
+        logger.error(f"AI status error: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again.")
 
 @app.post("/save-token")
 @limiter.limit("10/minute")
 def save_push_token(request: Request, user_id: str, push_token: str, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    verified = verify_token(authorization)
+    if verified.user.id != user_id:
+        logger.warning(f"User {verified.user.id[:8]}*** attempted to save token for {user_id[:8]}***")
+        raise HTTPException(status_code=403, detail="Access denied.")
     try:
         supabase.table("users").update({
             "push_token": push_token
         }).eq("id", user_id).execute()
-
         return {"message": "Push token saved successfully"}
-
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Push token save error: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Failed to save push token. Please try again.")
