@@ -379,6 +379,8 @@ def get_ai_status(request: Request, name: str, school: str, year_level: int, pro
     end_date = date.fromisoformat(program_end_date)
     days_until_end = (end_date - today).days
     opt_window_opens = days_until_end - 90
+    day_of_week = today.strftime("%A")
+    week_number = today.isocalendar()[1]
 
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(year_level, "Student")
@@ -392,26 +394,39 @@ A student has opened the app this morning. Here is their profile:
 - Program end date: {program_end_date}
 - Days until program ends: {days_until_end}
 - Days until OPT window opens: {opt_window_opens}
+- Today is: {day_of_week}
+- Week number of the year: {week_number}
 
-Write a short, warm, personalized morning message for this student. It should:
+Write a short warm personalized morning message. Vary the tone and focus based on the day:
+- Monday: motivational and goal setting for the week ahead
+- Tuesday or Wednesday: check in on progress and keep momentum
+- Thursday: push toward finishing the week strong
+- Friday: celebrate the week and wind down positively
+- Saturday or Sunday: lighter more personal tone, rest and reflect
+
+Also vary based on urgency:
+- More than 180 days until OPT: focus on building skills, networking, and finding internships
+- 90 to 180 days: start researching employers and preparing documents
+- 30 to 90 days: action oriented with specific next steps
+- Less than 30 days: urgent and very specific action needed today
+
+Rules:
 - Address them by first name
-- Acknowledge where they are in their F1 journey
-- Give them one specific, actionable thing to focus on today
-- Be encouraging but honest
-- Be 3 to 4 sentences maximum
-- Sound like a trusted advisor not a robot
-
-Do not use bullet points. Write in plain conversational English."""
+- 3 to 4 sentences maximum
+- Sound like a trusted friend who knows their situation deeply
+- Never start with Good morning every time — vary the opening
+- Do not use bullet points
+- Plain conversational English only"""
 
     try:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are Arriv0, a friendly AI advisor for international F1 students in the US."},
+                {"role": "system", "content": "You are Arriv0, a friendly AI advisor for international F1 students in the US. Every message you write should feel genuinely different from the last."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=150,
-            temperature=0.7
+            temperature=0.9
         )
 
         message = response.choices[0].message.content
@@ -419,6 +434,7 @@ Do not use bullet points. Write in plain conversational English."""
         return {
             "ai_message": message,
             "days_until_opt": opt_window_opens,
+            "day": day_of_week,
             "powered_by": "GPT-4o mini"
         }
 
