@@ -10,14 +10,17 @@ from dotenv import load_dotenv
 from datetime import date
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
+from openai import OpenAI
 import os
 
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 limiter = Limiter(key_func=get_remote_address)
 security = HTTPBearer()
@@ -126,6 +129,17 @@ def login(request: Request, data: LoginRequest):
 
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+@app.post("/onboarding")
+def save_user(name: str, school: str, visa_type: str, year_level: str, program_end_date: str):
+    data = supabase.table("users").insert({
+        "name": name,
+        "school": school,
+        "visa_type": visa_type,
+        "year_level": year_level,
+        "program_end_date": program_end_date
+    }).execute()
+    return {"message": f"Welcome to Arriv0, {name}. Your profile has been saved."}
 
 @app.get("/user/{user_id}")
 @limiter.limit("30/minute")
@@ -281,7 +295,7 @@ def get_news(request: Request, authorization: Optional[str] = Header(None)):
             "link": "https://www.uscis.gov/i-765"
         }
     ]
-    return {"news": news, "updated": "August 5 2026"}
+    return {"news": news, "updated": "August 8 2026"}
 
 @app.get("/milestones/{year_level}")
 @limiter.limit("30/minute")
@@ -355,3 +369,58 @@ def get_milestones(request: Request, year_level: int, authorization: Optional[st
         "total": total,
         "percentage": round((completed / total) * 100)
     }
+
+@app.get("/ai-status")
+@limiter.limit("10/minute")
+def get_ai_status(request: Request, name: str, school: str, year_level: int, program_end_date: str, authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
+
+    today = date.today()
+    end_date = date.fromisoformat(program_end_date)
+    days_until_end = (end_date - today).days
+    opt_window_opens = days_until_end - 90
+
+    year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
+    year_name = year_names.get(year_level, "Student")
+
+    prompt = f"""You are Arriv0, a friendly and knowledgeable AI advisor for international students on F1 visas in the United States.
+
+A student has opened the app this morning. Here is their profile:
+- Name: {name}
+- School: {school}
+- Year: {year_name}
+- Program end date: {program_end_date}
+- Days until program ends: {days_until_end}
+- Days until OPT window opens: {opt_window_opens}
+
+Write a short, warm, personalized morning message for this student. It should:
+- Address them by first name
+- Acknowledge where they are in their F1 journey
+- Give them one specific, actionable thing to focus on today
+- Be encouraging but honest
+- Be 3 to 4 sentences maximum
+- Sound like a trusted advisor not a robot
+
+Do not use bullet points. Write in plain conversational English."""
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are Arriv0, a friendly AI advisor for international F1 students in the US."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=150,
+            temperature=0.7
+        )
+
+        message = response.choices[0].message.content
+
+        return {
+            "ai_message": message,
+            "days_until_opt": opt_window_opens,
+            "powered_by": "GPT-4o mini"
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
