@@ -374,7 +374,6 @@ def get_milestones(request: Request, year_level: int, authorization: Optional[st
 @limiter.limit("10/minute")
 def get_ai_status(request: Request, name: str, school: str, year_level: int, program_end_date: str, authorization: Optional[str] = Header(None)):
     verify_token(authorization)
-
     today = date.today()
     end_date = date.fromisoformat(program_end_date)
     days_until_end = (end_date - today).days
