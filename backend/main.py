@@ -295,7 +295,7 @@ def get_news(request: Request, authorization: Optional[str] = Header(None)):
             "link": "https://www.uscis.gov/i-765"
         }
     ]
-    return {"news": news, "updated": "August 8 2026"}
+    return {"news": news, "updated": "August 9 2026"}
 
 @app.get("/milestones/{year_level}")
 @limiter.limit("30/minute")
@@ -374,6 +374,7 @@ def get_milestones(request: Request, year_level: int, authorization: Optional[st
 @limiter.limit("10/minute")
 def get_ai_status(request: Request, name: str, school: str, year_level: int, program_end_date: str, authorization: Optional[str] = Header(None)):
     verify_token(authorization)
+
     today = date.today()
     end_date = date.fromisoformat(program_end_date)
     days_until_end = (end_date - today).days
@@ -423,3 +424,17 @@ Do not use bullet points. Write in plain conversational English."""
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
+
+@app.post("/save-token")
+@limiter.limit("10/minute")
+def save_push_token(request: Request, user_id: str, push_token: str, authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
+    try:
+        supabase.table("users").update({
+            "push_token": push_token
+        }).eq("id", user_id).execute()
+
+        return {"message": "Push token saved successfully"}
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
