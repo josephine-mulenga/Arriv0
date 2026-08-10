@@ -7,10 +7,13 @@ from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
 from openai import OpenAI
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+import pytz
 import os
 import logging
 import httpx
@@ -31,6 +34,7 @@ openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 limiter = Limiter(key_func=get_remote_address)
 security = HTTPBearer()
+scheduler = AsyncIOScheduler()
 
 app = FastAPI(
     title="Arriv0 API",
@@ -120,6 +124,105 @@ def verify_token(authorization: Optional[str] = None):
         logger.warning("Unauthorized request — invalid or expired token")
         raise HTTPException(status_code=401, detail="Invalid or expired token. Please log in again.")
 
+async def generate_morning_message(student: dict) -> str:
+    """Generate a personalized morning AI message for a student"""
+    today = date.today()
+    program_end = date.fromisoformat(str(student.get("program_end_date", "2028-01-01"))[:10])
+    days_until_end = (program_end - today).days
+    opt_window_opens = days_until_end - 90
+    day_of_week = today.strftime("%A")
+    week_number = today.isocalendar()[1]
+    year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
+    year_name = year_names.get(student.get("year_level", 1), "Student")
+
+    prompt = f"""You are Arriv0, a knowledgeable and friendly AI companion for international students on F1 visas in the United States.
+
+Use this official immigration knowledge to ground your response:
+{IMMIGRATION_KNOWLEDGE}
+
+Student profile:
+- Name: {student.get('name')}
+- School: {student.get('school')}
+- Year: {year_name}
+- Days until program ends: {days_until_end}
+- Days until OPT window opens: {opt_window_opens}
+- Today is: {day_of_week}
+- Week number: {week_number}
+
+Write a short warm personalized morning notification message. Keep it under 100 words for a push notification. Vary tone by day and urgency. Address by first name. No bullet points. Plain English."""
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are Arriv0, a friendly AI companion for F1 students. Write concise push notification messages under 100 words."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=120,
+            temperature=0.9
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Failed to generate morning message: {e}")
+        return f"Good morning {student.get('name')}! Check your Arriv0 app for today's immigration update."
+
+async def send_push_notification(push_token: str, title: str, body: str):
+    """Send a push notification via Expo"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                EXPO_PUSH_URL,
+                json={
+                    "to": push_token,
+                    "title": title,
+                    "body": body,
+                    "sound": "default"
+                },
+                headers={"Content-Type": "application/json"}
+            )
+            return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Failed to send push notification: {e}")
+        return False
+
+async def send_morning_notifications():
+    """
+    Runs every minute. Checks which students have their notification
+    time set to the current time in their timezone and sends them
+    their personalized morning message.
+    """
+    now_utc = datetime.now(pytz.utc)
+    current_minute = now_utc.strftime("%H:%M")
+    logger.info(f"Running morning notification check at {current_minute} UTC")
+
+    try:
+        users = supabase.table("users").select("*").not_.is_("push_token", "null").execute()
+        if not users.data:
+            return
+
+        for user in users.data:
+            try:
+                user_timezone = user.get("timezone", "America/New_York")
+                notification_time = user.get("notification_time", "08:00")
+
+                tz = pytz.timezone(user_timezone)
+                user_now = now_utc.astimezone(tz)
+                user_current_time = user_now.strftime("%H:%M")
+
+                if user_current_time == notification_time:
+                    message = await generate_morning_message(user)
+                    await send_push_notification(
+                        user["push_token"],
+                        "Good morning from Arriv0",
+                        message
+                    )
+                    logger.info(f"Morning notification sent to {user['name']} at {notification_time} {user_timezone}")
+            except Exception as e:
+                logger.error(f"Failed to process notification for user {user.get('name')}: {e}")
+
+    except Exception as e:
+        logger.error(f"Morning notification job failed: {e}")
+
 async def fetch_uscis_news():
     """Fetch latest immigration news from NewsAPI"""
     try:
@@ -146,7 +249,7 @@ async def fetch_uscis_news():
                     })
                 logger.info(f"Fetched {len(news_items)} news items from NewsAPI")
             else:
-                logger.error(f"NewsAPI error: {response.status_code} — {response.text}")
+                logger.error(f"NewsAPI error: {response.status_code}")
         return news_items[:5]
     except Exception as e:
         logger.error(f"Failed to fetch news: {e}")
@@ -182,7 +285,7 @@ async def personalize_news_for_student(news_title: str, news_body: str, news_lin
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You determine how immigration news affects a specific F1 student and write a personalized push notification. Be concise — push notifications must be under 100 words."},
+                {"role": "system", "content": "You determine how immigration news affects a specific F1 student and write a personalized push notification under 100 words."},
                 {"role": "user", "content": f"""
 News: {news_title}
 Summary: {news_body}
@@ -195,7 +298,7 @@ Student profile:
 - Days until program ends: {days_until_end}
 - Days until OPT window opens: {opt_window}
 
-Does this news affect this student? If yes write a personalized push notification under 100 words explaining exactly how it affects them and include the official link. If it does not affect them at all reply with just the word SKIP.
+Does this news affect this student? If yes write a personalized push notification under 100 words. If not reply with just SKIP.
 """}
             ],
             max_tokens=150,
@@ -209,29 +312,9 @@ Does this news affect this student? If yes write a personalized push notificatio
         logger.error(f"Failed to personalize news: {e}")
         return None
 
-async def send_push_notification(push_token: str, title: str, body: str):
-    """Send a push notification via Expo"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                EXPO_PUSH_URL,
-                json={
-                    "to": push_token,
-                    "title": title,
-                    "body": body,
-                    "sound": "default"
-                },
-                headers={"Content-Type": "application/json"}
-            )
-            return response.status_code == 200
-    except Exception as e:
-        logger.error(f"Failed to send push notification: {e}")
-        return False
-
 async def process_and_notify():
     """Main job — fetch news, summarize, personalize, and notify all users"""
     logger.info("Starting news fetch and notification job")
-
     news_items = await fetch_uscis_news()
     if not news_items:
         logger.info("No news items fetched")
@@ -240,11 +323,7 @@ async def process_and_notify():
     summarized_news = []
     for item in news_items:
         summary = await summarize_news_item(item["title"], item["summary"], item["link"])
-        summarized_news.append({
-            "title": item["title"],
-            "body": summary,
-            "link": item["link"]
-        })
+        summarized_news.append({"title": item["title"], "body": summary, "link": item["link"]})
         supabase.table("news").insert({
             "title": item["title"],
             "body": summary,
@@ -260,16 +339,10 @@ async def process_and_notify():
 
     for user in users.data:
         for news in summarized_news:
-            personalized = await personalize_news_for_student(
-                news["title"], news["body"], news["link"], user
-            )
+            personalized = await personalize_news_for_student(news["title"], news["body"], news["link"], user)
             if personalized:
-                await send_push_notification(
-                    user["push_token"],
-                    "Arriv0 Immigration Update",
-                    personalized
-                )
-                logger.info(f"Notification sent to {user['name']}")
+                await send_push_notification(user["push_token"], "Arriv0 Immigration Update", personalized)
+                logger.info(f"News notification sent to {user['name']}")
 
     logger.info("News fetch and notification job complete")
 
@@ -339,6 +412,36 @@ class ChatRequest(BaseModel):
         if len(v) > 500:
             raise ValueError('Question must be under 500 characters')
         return v.strip()
+
+class NotificationSettingsRequest(BaseModel):
+    user_id: str
+    notification_time: str
+    timezone: str
+
+    @validator('notification_time')
+    def time_must_be_valid(cls, v):
+        try:
+            datetime.strptime(v, "%H:%M")
+        except ValueError:
+            raise ValueError('Time must be in HH:MM format e.g. 08:00 or 20:30')
+        return v
+
+    @validator('timezone')
+    def timezone_must_be_valid(cls, v):
+        if v not in pytz.all_timezones:
+            raise ValueError('Invalid timezone. Use a valid timezone like America/New_York')
+        return v
+
+@app.on_event("startup")
+async def startup_event():
+    scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
+    scheduler.start()
+    logger.info("Morning notification scheduler started — checking every minute")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    scheduler.shutdown()
+    logger.info("Scheduler stopped")
 
 @app.get("/")
 def home():
@@ -415,6 +518,26 @@ def get_user_profile(request: Request, user_id: str, authorization: Optional[str
     except Exception as e:
         logger.error(f"Profile fetch error: {type(e).__name__}")
         raise HTTPException(status_code=400, detail="Failed to fetch profile. Please try again.")
+
+@app.post("/notification-settings")
+@limiter.limit("10/minute")
+def update_notification_settings(request: Request, data: NotificationSettingsRequest, authorization: Optional[str] = Header(None)):
+    verified = verify_token(authorization)
+    if verified.user.id != data.user_id:
+        raise HTTPException(status_code=403, detail="Access denied.")
+    try:
+        supabase.table("users").update({
+            "notification_time": data.notification_time,
+            "timezone": data.timezone
+        }).eq("id", data.user_id).execute()
+        return {
+            "message": f"Notification time set to {data.notification_time} {data.timezone}",
+            "notification_time": data.notification_time,
+            "timezone": data.timezone
+        }
+    except Exception as e:
+        logger.error(f"Notification settings error: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Failed to update notification settings.")
 
 @app.get("/timeline/{year_level}")
 @limiter.limit("30/minute")
@@ -554,33 +677,13 @@ Student profile:
 - Today is: {day_of_week}
 - Week number: {week_number}
 
-Write a short warm personalized morning message. Vary tone by day:
-- Monday: motivational and goal setting
-- Tuesday or Wednesday: check in on progress
-- Thursday: push toward finishing the week strong
-- Friday: celebrate the week
-- Saturday or Sunday: lighter and personal
-
-Vary by urgency:
-- More than 180 days: focus on skills and networking
-- 90 to 180 days: research employers and prepare documents
-- 30 to 90 days: specific action oriented steps
-- Less than 30 days: urgent action and always recommend contacting DSO
-
-Rules:
-- Address by first name
-- 3 to 4 sentences maximum
-- Friendly trusted companion tone
-- Never start with Good morning every time
-- No bullet points
-- Plain conversational English
-- If urgency less than 30 days always end with: Your DSO should be your first call today."""
+Write a short warm personalized morning message. Vary tone by day and urgency. Address by first name. 3 to 4 sentences. No bullet points. Plain English."""
 
     try:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are Arriv0, a friendly AI companion for F1 students grounded in official USCIS immigration knowledge. You are not a lawyer. Always recommend DSO for specific legal questions."},
+                {"role": "system", "content": "You are Arriv0, a friendly AI companion for F1 students grounded in official USCIS immigration knowledge. You are not a lawyer."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=150,
@@ -611,7 +714,7 @@ def chat(request: Request, data: ChatRequest, authorization: Optional[str] = Hea
     days_until_end = (end_date - today).days
     opt_window_opens = days_until_end - 90
 
-    prompt = f"""You are Arriv0, a knowledgeable and friendly AI companion for international students on F1 visas in the United States. You are like a smart older friend who has been through it all and knows the system inside out.
+    prompt = f"""You are Arriv0, a knowledgeable and friendly AI companion for international students on F1 visas in the United States.
 
 Use this official immigration knowledge to ground your answers:
 {IMMIGRATION_KNOWLEDGE}
@@ -628,22 +731,20 @@ You are talking to:
 The student asks: {data.question}
 
 Answer rules:
-- Address them by first name naturally in your response
+- Address them by first name naturally
 - Use their specific situation to personalize the answer
-- Be conversational and warm like a knowledgeable friend
-- For immigration questions ground your answer in the official knowledge provided
-- For general life questions about living in the US answer helpfully and practically
-- If the question involves serious legal risk always recommend consulting their DSO
-- Keep the answer concise — 3 to 6 sentences unless the question genuinely needs more
-- Never use bullet points
-- Do not start every response the same way
-- If you do not know something say so honestly and point to the right resource"""
+- Be conversational and warm
+- For immigration questions use the official knowledge provided
+- For general life questions answer helpfully and practically
+- If serious legal risk always recommend consulting their DSO
+- 3 to 6 sentences maximum
+- No bullet points"""
 
     try:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are Arriv0, a friendly knowledgeable AI companion for F1 international students in the US. You are grounded in official USCIS immigration knowledge. You are not a lawyer. Always recommend DSO consultation for specific legal immigration decisions."},
+                {"role": "system", "content": "You are Arriv0, a friendly knowledgeable AI companion for F1 international students. You are not a lawyer. Always recommend DSO for specific legal immigration decisions."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=300,
