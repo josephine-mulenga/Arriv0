@@ -125,7 +125,6 @@ def verify_token(authorization: Optional[str] = None):
         raise HTTPException(status_code=401, detail="Invalid or expired token. Please log in again.")
 
 async def generate_morning_message(student: dict) -> str:
-    """Generate a personalized morning AI message for a student"""
     today = date.today()
     program_end = date.fromisoformat(str(student.get("program_end_date", "2028-01-01"))[:10])
     days_until_end = (program_end - today).days
@@ -149,7 +148,7 @@ Student profile:
 - Today is: {day_of_week}
 - Week number: {week_number}
 
-Write a short warm personalized morning notification message. Keep it under 100 words for a push notification. Vary tone by day and urgency. Address by first name. No bullet points. Plain English."""
+Write a short warm personalized morning notification message under 100 words. Vary tone by day and urgency. Address by first name. No bullet points. Plain English."""
 
     try:
         response = openai_client.chat.completions.create(
@@ -167,17 +166,11 @@ Write a short warm personalized morning notification message. Keep it under 100 
         return f"Good morning {student.get('name')}! Check your Arriv0 app for today's immigration update."
 
 async def send_push_notification(push_token: str, title: str, body: str):
-    """Send a push notification via Expo"""
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 EXPO_PUSH_URL,
-                json={
-                    "to": push_token,
-                    "title": title,
-                    "body": body,
-                    "sound": "default"
-                },
+                json={"to": push_token, "title": title, "body": body, "sound": "default"},
                 headers={"Content-Type": "application/json"}
             )
             return response.status_code == 200
@@ -186,45 +179,29 @@ async def send_push_notification(push_token: str, title: str, body: str):
         return False
 
 async def send_morning_notifications():
-    """
-    Runs every minute. Checks which students have their notification
-    time set to the current time in their timezone and sends them
-    their personalized morning message.
-    """
     now_utc = datetime.now(pytz.utc)
-    current_minute = now_utc.strftime("%H:%M")
-    logger.info(f"Running morning notification check at {current_minute} UTC")
-
+    logger.info(f"Running morning notification check at {now_utc.strftime('%H:%M')} UTC")
     try:
         users = supabase.table("users").select("*").not_.is_("push_token", "null").execute()
         if not users.data:
             return
-
         for user in users.data:
             try:
                 user_timezone = user.get("timezone", "America/New_York")
                 notification_time = user.get("notification_time", "08:00")
-
                 tz = pytz.timezone(user_timezone)
                 user_now = now_utc.astimezone(tz)
                 user_current_time = user_now.strftime("%H:%M")
-
                 if user_current_time == notification_time:
                     message = await generate_morning_message(user)
-                    await send_push_notification(
-                        user["push_token"],
-                        "Good morning from Arriv0",
-                        message
-                    )
+                    await send_push_notification(user["push_token"], "Good morning from Arriv0", message)
                     logger.info(f"Morning notification sent to {user['name']} at {notification_time} {user_timezone}")
             except Exception as e:
-                logger.error(f"Failed to process notification for user {user.get('name')}: {e}")
-
+                logger.error(f"Failed to process notification for {user.get('name')}: {e}")
     except Exception as e:
         logger.error(f"Morning notification job failed: {e}")
 
 async def fetch_uscis_news():
-    """Fetch latest immigration news from NewsAPI"""
     try:
         news_items = []
         async with httpx.AsyncClient() as client:
@@ -256,7 +233,6 @@ async def fetch_uscis_news():
         return []
 
 async def summarize_news_item(title: str, summary: str, link: str):
-    """Use AI to summarize a news item in plain language"""
     try:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
@@ -273,7 +249,6 @@ async def summarize_news_item(title: str, summary: str, link: str):
         return summary[:200]
 
 async def personalize_news_for_student(news_title: str, news_body: str, news_link: str, student: dict):
-    """Personalize news impact for a specific student"""
     today = date.today()
     program_end = date.fromisoformat(str(student.get("program_end_date", "2028-01-01"))[:10])
     days_until_end = (program_end - today).days
@@ -313,7 +288,6 @@ Does this news affect this student? If yes write a personalized push notificatio
         return None
 
 async def process_and_notify():
-    """Main job — fetch news, summarize, personalize, and notify all users"""
     logger.info("Starting news fetch and notification job")
     news_items = await fetch_uscis_news()
     if not news_items:
@@ -398,6 +372,9 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
 
 class ChatRequest(BaseModel):
     question: str
@@ -485,6 +462,16 @@ def login(request: Request, data: LoginRequest):
     except Exception as e:
         logger.warning(f"Failed login attempt for email: {data.email[:3]}***")
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+@app.post("/reset-password")
+@limiter.limit("3/minute")
+def reset_password(request: Request, data: PasswordResetRequest):
+    try:
+        supabase.auth.reset_password_email(data.email)
+        return {"message": "If an account exists with that email a password reset link has been sent."}
+    except Exception as e:
+        logger.error(f"Password reset error: {type(e).__name__}")
+        return {"message": "If an account exists with that email a password reset link has been sent."}
 
 @app.post("/onboarding")
 def save_user(name: str, school: str, visa_type: str, year_level: str, program_end_date: str):
