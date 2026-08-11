@@ -5,6 +5,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
+from starlette.middleware.base import BaseHTTPMiddleware
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import date, datetime
@@ -17,6 +18,7 @@ import pytz
 import os
 import logging
 import httpx
+import uuid
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,6 +46,16 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+class CorrelationIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        correlation_id = str(uuid.uuid4())
+        request.state.correlation_id = correlation_id
+        response = await call_next(request)
+        response.headers["X-Correlation-ID"] = correlation_id
+        return response
+
+app.add_middleware(CorrelationIDMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -112,16 +124,20 @@ Important Contacts:
 - Form I-765: uscis.gov/i-765
 """
 
-def verify_token(authorization: Optional[str] = None):
+def log_security_event(event_type: str, details: str, correlation_id: str = None):
+    """Log structured security events"""
+    logger.info(f"SECURITY_EVENT type={event_type} details={details} correlation_id={correlation_id}")
+
+def verify_token(authorization: Optional[str] = None, correlation_id: str = None):
     if not authorization or not authorization.startswith("Bearer "):
-        logger.warning("Unauthorized request — missing or malformed token")
+        log_security_event("UNAUTHORIZED", "Missing or malformed token", correlation_id)
         raise HTTPException(status_code=401, detail="Not authorized. Please log in.")
     token = authorization.split(" ")[1]
     try:
         user = supabase.auth.get_user(token)
         return user
     except Exception:
-        logger.warning("Unauthorized request — invalid or expired token")
+        log_security_event("INVALID_TOKEN", "Invalid or expired token", correlation_id)
         raise HTTPException(status_code=401, detail="Invalid or expired token. Please log in again.")
 
 async def generate_morning_message(student: dict) -> str:
@@ -198,7 +214,7 @@ async def send_morning_notifications():
                 if user_current_time == notification_time:
                     message = await generate_morning_message(user)
                     await send_push_notification(user["push_token"], "Good morning from Arriv0", message)
-                    logger.info(f"Morning notification sent to {user['name']} at {notification_time} {user_timezone}")
+                    log_security_event("NOTIFICATION_SENT", f"Morning notification sent to user at {notification_time} {user_timezone}")
             except Exception as e:
                 logger.error(f"Failed to process notification for {user.get('name')}: {e}")
     except Exception as e:
@@ -433,6 +449,7 @@ def home():
 @app.post("/signup")
 @limiter.limit("5/minute")
 def signup(request: Request, data: SignupRequest):
+    correlation_id = getattr(request.state, "correlation_id", None)
     try:
         response = supabase.auth.sign_up({
             "email": data.email,
@@ -447,36 +464,41 @@ def signup(request: Request, data: SignupRequest):
             "year_level": data.year_level,
             "program_end_date": data.program_end_date
         }).execute()
+        log_security_event("SIGNUP_SUCCESS", f"New user registered at {data.school}", correlation_id)
         return {"message": f"Account created successfully. Welcome to Arriv0, {data.name}."}
     except Exception as e:
-        logger.error(f"Signup error: {type(e).__name__}")
+        logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
 
 @app.post("/login")
 @limiter.limit("10/minute")
 def login(request: Request, data: LoginRequest):
+    correlation_id = getattr(request.state, "correlation_id", None)
     try:
         response = supabase.auth.sign_in_with_password({
             "email": data.email,
             "password": data.password
         })
+        log_security_event("LOGIN_SUCCESS", f"User logged in email={data.email[:3]}***", correlation_id)
         return {
             "message": "Login successful",
             "access_token": response.session.access_token,
             "user_id": response.user.id
         }
     except Exception as e:
-        logger.warning(f"Failed login attempt for email: {data.email[:3]}***")
+        log_security_event("LOGIN_FAILED", f"Failed login attempt email={data.email[:3]}***", correlation_id)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
 @app.post("/reset-password")
 @limiter.limit("3/minute")
 def reset_password(request: Request, data: PasswordResetRequest):
+    correlation_id = getattr(request.state, "correlation_id", None)
     try:
         supabase.auth.reset_password_email(data.email)
+        log_security_event("PASSWORD_RESET_REQUESTED", f"Reset requested email={data.email[:3]}***", correlation_id)
         return {"message": "If an account exists with that email a password reset link has been sent."}
     except Exception as e:
-        logger.error(f"Password reset error: {type(e).__name__}")
+        logger.error(f"Password reset error: {type(e).__name__} correlation_id={correlation_id}")
         return {"message": "If an account exists with that email a password reset link has been sent."}
 
 @app.post("/onboarding")
@@ -497,9 +519,10 @@ def save_user(name: str, school: str, visa_type: str, year_level: str, program_e
 @app.get("/user/{user_id}")
 @limiter.limit("30/minute")
 def get_user_profile(request: Request, user_id: str, authorization: Optional[str] = Header(None)):
-    verified = verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
     if verified.user.id != user_id:
-        logger.warning(f"User {verified.user.id[:8]}*** attempted to access profile of {user_id[:8]}***")
+        log_security_event("ACCESS_DENIED", f"User {verified.user.id[:8]}*** attempted to access profile of {user_id[:8]}***", correlation_id)
         raise HTTPException(status_code=403, detail="Access denied. You can only view your own profile.")
     try:
         response = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -509,14 +532,16 @@ def get_user_profile(request: Request, user_id: str, authorization: Optional[str
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Profile fetch error: {type(e).__name__}")
+        logger.error(f"Profile fetch error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to fetch profile. Please try again.")
 
 @app.post("/notification-settings")
 @limiter.limit("10/minute")
 def update_notification_settings(request: Request, data: NotificationSettingsRequest, authorization: Optional[str] = Header(None)):
-    verified = verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
     if verified.user.id != data.user_id:
+        log_security_event("ACCESS_DENIED", f"User attempted to update settings for different user", correlation_id)
         raise HTTPException(status_code=403, detail="Access denied.")
     try:
         supabase.table("users").update({
@@ -529,13 +554,14 @@ def update_notification_settings(request: Request, data: NotificationSettingsReq
             "timezone": data.timezone
         }
     except Exception as e:
-        logger.error(f"Notification settings error: {type(e).__name__}")
+        logger.error(f"Notification settings error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to update notification settings.")
 
 @app.get("/timeline/{year_level}")
 @limiter.limit("30/minute")
 def get_timeline(request: Request, year_level: int, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
     timelines = {
         1: {
             "year": "Freshman",
@@ -587,7 +613,8 @@ def get_timeline(request: Request, year_level: int, authorization: Optional[str]
 @app.get("/status")
 @limiter.limit("30/minute")
 def get_status(request: Request, program_end_date: str, year_level: int, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
     today = date.today()
     end_date = date.fromisoformat(program_end_date)
     opt_window_opens = (end_date - today).days - 90
@@ -606,13 +633,14 @@ def get_status(request: Request, program_end_date: str, year_level: int, authori
 @app.get("/news")
 @limiter.limit("30/minute")
 def get_news(request: Request, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
     try:
         response = supabase.table("news").select("*").order("created_at", desc=True).limit(10).execute()
         if response.data:
             return {"news": response.data, "updated": response.data[0]["created_at"][:10]}
     except Exception as e:
-        logger.error(f"News fetch error: {type(e).__name__}")
+        logger.error(f"News fetch error: {type(e).__name__} correlation_id={correlation_id}")
 
     news = [
         {"title": "USCIS OPT processing times now 3 to 4 months", "body": "New data shows average processing has increased. Submit your application on the first day your window opens to avoid gaps in work authorization.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.uscis.gov/tools/processing-times"},
@@ -625,7 +653,8 @@ def get_news(request: Request, authorization: Optional[str] = Header(None)):
 @app.get("/milestones/{year_level}")
 @limiter.limit("30/minute")
 def get_milestones(request: Request, year_level: int, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
     all_milestones = [
         {"id": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.", "status": "done" if year_level >= 1 else "locked"},
         {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if year_level >= 1 else "locked"},
@@ -633,7 +662,7 @@ def get_milestones(request: Request, year_level: int, authorization: Optional[st
         {"id": 4, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if year_level >= 4 else "next" if year_level == 3 else "locked"},
         {"id": 5, "icon": "📄", "title": "Form I-765 submitted", "description": "Your OPT application is in USCIS hands.", "status": "next" if year_level == 4 else "locked"},
         {"id": 6, "icon": "💳", "title": "EAD card received", "description": "Your Employment Authorization Document arrived by mail.", "status": "locked"},
-        {"id": 7, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you works for becomes real.", "status": "locked"},
+        {"id": 7, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you worked for becomes real.", "status": "locked"},
         {"id": 8, "icon": "🚀", "title": "STEM OPT extension approved", "description": "24 more months of work authorization secured.", "status": "locked"}
     ]
     completed = len([m for m in all_milestones if m["status"] == "done"])
@@ -643,7 +672,8 @@ def get_milestones(request: Request, year_level: int, authorization: Optional[st
 @app.get("/ai-status")
 @limiter.limit("10/minute")
 def get_ai_status(request: Request, name: str, school: str, year_level: int, program_end_date: str, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
 
     today = date.today()
     end_date = date.fromisoformat(program_end_date)
@@ -691,13 +721,14 @@ Write a short warm personalized morning message. Vary tone by day and urgency. A
             "disclaimer": "Arriv0 provides general guidance only. For immigration advice consult your DSO or a qualified immigration attorney."
         }
     except Exception as e:
-        logger.error(f"AI status error: {type(e).__name__}")
+        logger.error(f"AI status error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again.")
 
 @app.post("/chat")
 @limiter.limit("20/minute")
 def chat(request: Request, data: ChatRequest, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
 
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(data.year_level, "Student")
@@ -750,26 +781,28 @@ Answer rules:
             "disclaimer": "Arriv0 provides general guidance only. For specific immigration decisions consult your DSO or a qualified immigration attorney."
         }
     except Exception as e:
-        logger.error(f"Chat error: {type(e).__name__}")
+        logger.error(f"Chat error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again.")
 
 @app.post("/fetch-news")
 @limiter.limit("5/minute")
 async def trigger_news_fetch(request: Request, background_tasks: BackgroundTasks, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
     background_tasks.add_task(process_and_notify)
     return {"message": "News fetch and notification job started in background"}
 
 @app.post("/save-token")
 @limiter.limit("10/minute")
 def save_push_token(request: Request, user_id: str, push_token: str, authorization: Optional[str] = Header(None)):
-    verified = verify_token(authorization)
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
     if verified.user.id != user_id:
-        logger.warning(f"User {verified.user.id[:8]}*** attempted to save token for {user_id[:8]}***")
+        log_security_event("ACCESS_DENIED", f"User attempted to save token for different user", correlation_id)
         raise HTTPException(status_code=403, detail="Access denied.")
     try:
         supabase.table("users").update({"push_token": push_token}).eq("id", user_id).execute()
         return {"message": "Push token saved successfully"}
     except Exception as e:
-        logger.error(f"Push token save error: {type(e).__name__}")
+        logger.error(f"Push token save error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to save push token. Please try again.")
