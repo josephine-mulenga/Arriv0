@@ -30,7 +30,7 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
 
 limiter = Limiter(key_func=get_remote_address)
 security = HTTPBearer()
@@ -167,13 +167,16 @@ Write a short warm personalized morning notification message under 100 words. Va
 
 async def send_push_notification(push_token: str, title: str, body: str):
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(
                 EXPO_PUSH_URL,
                 json={"to": push_token, "title": title, "body": body, "sound": "default"},
                 headers={"Content-Type": "application/json"}
             )
             return response.status_code == 200
+    except httpx.TimeoutException:
+        logger.error("Push notification timed out after 5 seconds")
+        return False
     except Exception as e:
         logger.error(f"Failed to send push notification: {e}")
         return False
@@ -204,7 +207,7 @@ async def send_morning_notifications():
 async def fetch_uscis_news():
     try:
         news_items = []
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 "https://newsapi.org/v2/everything",
                 params={
@@ -228,6 +231,9 @@ async def fetch_uscis_news():
             else:
                 logger.error(f"NewsAPI error: {response.status_code}")
         return news_items[:5]
+    except httpx.TimeoutException:
+        logger.error("NewsAPI request timed out after 10 seconds")
+        return []
     except Exception as e:
         logger.error(f"Failed to fetch news: {e}")
         return []
@@ -614,7 +620,7 @@ def get_news(request: Request, authorization: Optional[str] = Header(None)):
         {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": False, "tag": "General F1 news", "link": None},
         {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.uscis.gov/i-765"}
     ]
-    return {"news": news, "updated": "August 10 2026"}
+    return {"news": news, "updated": "August 11 2026"}
 
 @app.get("/milestones/{year_level}")
 @limiter.limit("30/minute")
@@ -627,7 +633,7 @@ def get_milestones(request: Request, year_level: int, authorization: Optional[st
         {"id": 4, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if year_level >= 4 else "next" if year_level == 3 else "locked"},
         {"id": 5, "icon": "📄", "title": "Form I-765 submitted", "description": "Your OPT application is in USCIS hands.", "status": "next" if year_level == 4 else "locked"},
         {"id": 6, "icon": "💳", "title": "EAD card received", "description": "Your Employment Authorization Document arrived by mail.", "status": "locked"},
-        {"id": 7, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you worked for becomes real.", "status": "locked"},
+        {"id": 7, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you works for becomes real.", "status": "locked"},
         {"id": 8, "icon": "🚀", "title": "STEM OPT extension approved", "description": "24 more months of work authorization secured.", "status": "locked"}
     ]
     completed = len([m for m in all_milestones if m["status"] == "done"])
