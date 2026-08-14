@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { login as apiLogin, signup as apiSignup, setToken } from './api';
+import { login as apiLogin, signup as apiSignup } from './api';
 
 const AuthContext = createContext(null);
 
@@ -21,7 +21,6 @@ export const AuthProvider = ({ children }) => {
         if (storedToken && storedUserId) {
           setAuthToken(storedToken);
           setUser({ id: storedUserId, email: storedEmail });
-          setToken(storedToken, storedUserId);
         }
       } catch (err) {
         console.log('Failed to load stored auth', err);
@@ -40,7 +39,6 @@ export const AuthProvider = ({ children }) => {
       const data = await apiLogin(email, password);
       setAuthToken(data.access_token);
       setUser({ id: data.user_id, email });
-      setToken(data.access_token, data.user_id);
 
       await AsyncStorage.setItem('authToken', data.access_token);
       await AsyncStorage.setItem('userId', String(data.user_id));
@@ -72,7 +70,6 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     setUser(null);
     setAuthToken(null);
-    setToken(null, null);
     await AsyncStorage.multiRemove(['authToken', 'userId', 'userEmail']);
   };
 

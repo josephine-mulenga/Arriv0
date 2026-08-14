@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react';
+import { getAIStatus } from '@/api';
+import { useAuth } from '@/AuthContext';
 import { Image } from 'expo-image';
 import { Platform, StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -9,6 +12,25 @@ import { ThemedView } from '@/components/themed-view';
 import { Link } from 'expo-router';
 
 export default function HomeScreen() {
+  const { token } = useAuth();
+  const [statusData, setStatusData] = useState(null);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const data = await getAIStatus(token);
+        console.log('Status data:', data);
+        setStatusData(data);
+      } catch (err) {
+        console.log('Error fetching status:', err.message);
+      }
+    };
+
+    if (token) {
+      fetchStatus();
+    }
+  }, [token]);
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -25,7 +47,7 @@ export default function HomeScreen() {
 
       <ThemedView style={styles.statusContainer}>
         <ThemedText type="subtitle">Today's Status</ThemedText>
-        <ThemedText>You're on track ✅</ThemedText>
+        <ThemedText>{statusData ? statusData.ai_message : 'Loading...'}</ThemedText>
       </ThemedView>
 
       <ThemedView style={styles.ringContainer}>
@@ -47,12 +69,12 @@ export default function HomeScreen() {
               strokeWidth="10"
               fill="none"
               strokeDasharray={`${2 * Math.PI * 60}`}
-              strokeDashoffset={`${2 * Math.PI * 60 * (1 - 0.6)}`}
+              strokeDashoffset={`${2 * Math.PI * 60 * (1 - Math.min((statusData?.days_until_opt || 0) / 365, 1))}`}
               strokeLinecap="round"
               transform="rotate(-90 75 75)"
             />
           </Svg>
-          <ThemedText type="title">120</ThemedText>
+          <ThemedText type="title">{statusData ? statusData.days_until_opt : '--'}</ThemedText>
           <ThemedText>days left</ThemedText>
         </View>
       </ThemedView>
@@ -64,6 +86,7 @@ export default function HomeScreen() {
           USCIS announced a temporary extension to the OPT application processing timeline, giving students more flexibility if their program end date is approaching soon.
         </ThemedText>
       </ThemedView>
+
     </ParallaxScrollView>
   );
 }
