@@ -1,32 +1,36 @@
+import { useEffect, useState } from 'react';
+import { getTimeline } from '@/api';
+import { useAuth } from '@/AuthContext';
 import { StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { useState } from 'react';
-
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
-const checklists = {
-  Freshman: [
-    { text: 'Complete SEVIS check-in with your DSO', link: 'https://www.ice.gov/sevis' },
-    { text: 'Apply for a Social Security Number (if working on campus)', link: 'https://www.ssa.gov/ssnumber/' },
-    { text: 'Set up a US bank account', link: 'https://www.usa.gov/banking' },
-  ],
-  Sophomore: [
-    { text: 'Explore CPT eligibility for internships', link: 'https://www.uscis.gov/working-in-the-united-states' },
-    { text: 'Build your resume on Handshake', link: 'https://joinhandshake.com' },
-  ],
-  Junior: [
-    { text: 'Research OPT requirements', link: 'https://www.uscis.gov/opt' },
-    { text: 'Start networking for post-grad jobs', link: 'https://joinhandshake.com' },
-  ],
-  Senior: [
-    { text: 'File your OPT application (do this 90 days before graduation)', link: 'https://www.uscis.gov/opt' },
-    { text: 'Understand STEM OPT extension eligibility', link: 'https://www.ice.gov/sevis/stem' },
-  ],
-};
+
+
+
 
 export default function TimelineScreen() {
+  const yearLevelMap = { Freshman: 1, Sophomore: 2, Junior: 3, Senior: 4 };
   const [activeTab, setActiveTab] = useState('Freshman');
+  const { token } = useAuth();
+  const [timelineData, setTimelineData] = useState(null);
+
+  useEffect(() => {
+    const fetchTimeline = async () => {
+      try {
+        const data = await getTimeline(yearLevelMap[activeTab], token);
+        console.log('Timeline data:', data);
+        setTimelineData(data);
+      } catch (err) {
+        console.log('Error fetching timeline:', err.message);
+      }
+    };
+
+    if (token) {
+      fetchTimeline();
+    }
+  }, [activeTab, token]);
   const tabs = ['Freshman', 'Sophomore', 'Junior', 'Senior'];
 
   return (
@@ -50,11 +54,22 @@ export default function TimelineScreen() {
 
       <ThemedView style={styles.checklistContainer}>
         <ThemedText type="subtitle">{activeTab} Checklist</ThemedText>
-        {checklists[activeTab].map((item, index) => (
-          <TouchableOpacity key={index} onPress={() => Linking.openURL(item.link)}>
-            <ThemedText style={styles.checklistItem}>• {item.text}</ThemedText>
-          </TouchableOpacity>
-        ))}
+        {timelineData && <ThemedText style={styles.statusMessage}>{timelineData.status}</ThemedText>}
+
+        {timelineData ? (
+          timelineData.steps.map((step, index) => (
+            <TouchableOpacity
+              key={index}
+              disabled={!step.link}
+              onPress={() => step.link && Linking.openURL(step.link)}>
+              <ThemedText style={step.done ? styles.stepDone : styles.stepPending}>
+                {step.done ? '✅' : '⬜'} {step.task}
+              </ThemedText>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <ThemedText>Loading...</ThemedText>
+        )}
       </ThemedView>
     </ParallaxScrollView>
   );
