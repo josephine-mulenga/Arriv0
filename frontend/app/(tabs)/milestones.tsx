@@ -1,20 +1,33 @@
 import { StyleSheet } from 'react-native';
-
+import { useEffect, useState } from 'react';
+import { getMilestones } from '@/api';
+import { useAuth } from '@/AuthContext';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
-const milestones = [
-  { title: 'Arrived in the US', status: 'done' },
-  { title: 'Completed SEVIS check-in', status: 'done' },
-  { title: 'Opened a US bank account', status: 'done' },
-  { title: 'Applied for CPT', status: 'up next' },
-  { title: 'Applied for OPT', status: 'locked' },
-  { title: 'Started OPT employment', status: 'locked' },
-  { title: 'Applied for STEM OPT extension', status: 'locked' },
-];
+
 
 export default function MilestonesScreen() {
+  const { token } = useAuth();
+  const [milestonesData, setMilestonesData] = useState(null);
+
+  useEffect(() => {
+    const fetchMilestones = async () => {
+      try {
+        const data = await getMilestones(1, token);
+        console.log('Milestones data:', data);
+        setMilestonesData(data);
+      } catch (err) {
+        console.log('Error fetching milestones:', err.message);
+      }
+    };
+
+    if (token) {
+      fetchMilestones();
+    }
+  }, [token]);
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
@@ -23,21 +36,34 @@ export default function MilestonesScreen() {
         <ThemedText type="title">Milestones</ThemedText>
       </ThemedView>
 
-      {milestones.map((item, index) => (
-        <ThemedView key={index} style={styles.milestoneCard}>
-          <ThemedText type="subtitle">{item.title}</ThemedText>
-
-          {item.status === 'done' && (
-            <ThemedText style={styles.doneText}>✅ Completed, nice work!</ThemedText>
-          )}
-          {item.status === 'up next' && (
-            <ThemedText style={styles.upNextText}>🔜 Up next</ThemedText>
-          )}
-          {item.status === 'locked' && (
-            <ThemedText style={styles.lockedText}>🔒 Locked</ThemedText>
-          )}
+      {milestonesData ? (
+      <>
+        <ThemedView style={styles.progressSummary}>
+          <ThemedText type="subtitle">
+            {milestonesData.completed} of {milestonesData.total} complete ({milestonesData.percentage}%)
+          </ThemedText>
         </ThemedView>
-      ))}
+
+        {milestonesData.milestones.map((item) => (
+          <ThemedView key={item.id} style={styles.milestoneCard}>
+            <ThemedText type="subtitle">{item.icon} {item.title}</ThemedText>
+            <ThemedText>{item.description}</ThemedText>
+
+            {item.status === 'done' && (
+              <ThemedText style={styles.doneText}>✅ Completed, nice work!</ThemedText>
+            )}
+            {item.status === 'up next' && (
+              <ThemedText style={styles.upNextText}>🔜 Up next</ThemedText>
+            )}
+            {item.status === 'locked' && (
+              <ThemedText style={styles.lockedText}>🔒 Locked</ThemedText>
+            )}
+          </ThemedView>
+        ))}
+      </>
+    ) : (
+      <ThemedText style={{ paddingHorizontal: 16 }}>Loading...</ThemedText>
+    )}
     </ParallaxScrollView>
   );
 }
