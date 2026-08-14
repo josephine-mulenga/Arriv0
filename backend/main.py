@@ -33,12 +33,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
-# Regular client — used for user-facing requests with RLS
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Admin client — uses service role key, bypasses RLS for server-side jobs only
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
-
 openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
 
 limiter = Limiter(key_func=get_remote_address)
@@ -157,6 +153,53 @@ def sanitize_input(text: str) -> str:
             text = re.sub(pattern, "[removed]", text, flags=re.IGNORECASE)
     return text
 
+def calculate_year_level(program_start_date: str, program_end_date: str) -> int:
+    """Calculate year level dynamically from program start and end dates"""
+    try:
+        start = date.fromisoformat(str(program_start_date)[:10])
+        end = date.fromisoformat(str(program_end_date)[:10])
+        today = date.today()
+
+        total_days = (end - start).days
+        days_completed = (today - start).days
+
+        if total_days <= 0:
+            return 1
+
+        progress = days_completed / total_days
+
+        if progress < 0.25:
+            return 1
+        elif progress < 0.50:
+            return 2
+        elif progress < 0.75:
+            return 3
+        else:
+            return 4
+    except Exception:
+        return 1
+
+def calculate_program_progress(program_start_date: str, program_end_date: str) -> dict:
+    """Calculate how far through their program a student is"""
+    try:
+        start = date.fromisoformat(str(program_start_date)[:10])
+        end = date.fromisoformat(str(program_end_date)[:10])
+        today = date.today()
+
+        total_days = (end - start).days
+        days_completed = max(0, (today - start).days)
+        days_remaining = max(0, (end - today).days)
+        percentage = min(100, round((days_completed / total_days) * 100)) if total_days > 0 else 0
+
+        return {
+            "total_days": total_days,
+            "days_completed": days_completed,
+            "days_remaining": days_remaining,
+            "percentage": percentage
+        }
+    except Exception:
+        return {"total_days": 0, "days_completed": 0, "days_remaining": 0, "percentage": 0}
+
 def log_security_event(event_type: str, details: str, correlation_id: str = None):
     logger.info(f"SECURITY_EVENT type={event_type} details={details} correlation_id={correlation_id}")
 
@@ -173,12 +216,21 @@ def verify_token(authorization: Optional[str] = None, correlation_id: str = None
         raise HTTPException(status_code=401, detail="Invalid or expired token. Please log in again.")
 
 def get_profile_from_db(user_id: str, correlation_id: str = None) -> dict:
-    """Fetch user profile from database using admin client — never trust client-supplied profile data"""
     try:
         response = supabase_admin.table("users").select("*").eq("id", user_id).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="User profile not found.")
-        return response.data[0]
+        profile = response.data[0]
+        if profile.get("program_start_date") and profile.get("program_end_date"):
+            profile["year_level"] = calculate_year_level(
+                profile["program_start_date"],
+                profile["program_end_date"]
+            )
+            profile["program_progress"] = calculate_program_progress(
+                profile["program_start_date"],
+                profile["program_end_date"]
+            )
+        return profile
     except HTTPException:
         raise
     except Exception as e:
@@ -192,8 +244,13 @@ async def generate_morning_message(student: dict) -> str:
     opt_window_opens = days_until_end - 90
     day_of_week = today.strftime("%A")
     week_number = today.isocalendar()[1]
+
+    year_level = student.get("year_level", 1)
+    if student.get("program_start_date") and student.get("program_end_date"):
+        year_level = calculate_year_level(student["program_start_date"], student["program_end_date"])
+
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
-    year_name = year_names.get(student.get("year_level", 1), "Student")
+    year_name = year_names.get(year_level, "Student")
 
     prompt = f"""You are Arriv0, a knowledgeable and friendly AI companion for international students on F1 visas in the United States.
 
@@ -246,7 +303,6 @@ async def send_morning_notifications():
     now_utc = datetime.now(pytz.utc)
     logger.info(f"Running morning notification check at {now_utc.strftime('%H:%M')} UTC")
     try:
-        # Use admin client to bypass RLS for server-side scheduler
         users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
         if not users.data:
             return
@@ -323,8 +379,13 @@ async def personalize_news_for_student(news_title: str, news_body: str, news_lin
     program_end = date.fromisoformat(str(student.get("program_end_date", "2028-01-01"))[:10])
     days_until_end = (program_end - today).days
     opt_window = days_until_end - 90
+
+    year_level = student.get("year_level", 1)
+    if student.get("program_start_date") and student.get("program_end_date"):
+        year_level = calculate_year_level(student["program_start_date"], student["program_end_date"])
+
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
-    year_name = year_names.get(student.get("year_level", 1), "Student")
+    year_name = year_names.get(year_level, "Student")
     safe_title = sanitize_input(news_title)
     safe_body = sanitize_input(news_body)
 
@@ -370,7 +431,6 @@ async def process_and_notify():
     for item in news_items:
         summary = await summarize_news_item(item["title"], item["summary"], item["link"])
         summarized_news.append({"title": item["title"], "body": summary, "link": item["link"]})
-        # Use admin client to insert news
         supabase_admin.table("news").insert({
             "title": item["title"],
             "body": summary,
@@ -379,7 +439,6 @@ async def process_and_notify():
             "link": item["link"]
         }).execute()
 
-    # Use admin client to read all users with push tokens
     users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
     if not users.data:
         logger.info("No users with push tokens found")
@@ -400,7 +459,7 @@ class SignupRequest(BaseModel):
     name: str
     school: str
     visa_type: str
-    year_level: int
+    program_start_date: str
     program_end_date: str
 
     @validator('password')
@@ -421,24 +480,30 @@ class SignupRequest(BaseModel):
             raise ValueError('School name must be under 200 characters')
         return v.strip()
 
-    @validator('year_level')
-    def year_level_must_be_valid(cls, v):
-        if v not in [1, 2, 3, 4]:
-            raise ValueError('Year level must be 1, 2, 3, or 4')
-        return v
-
     @validator('visa_type')
     def visa_type_must_be_valid(cls, v):
         if v not in ['F1', 'J1', 'Other']:
             raise ValueError('Visa type must be F1, J1, or Other')
         return v
 
-    @validator('program_end_date')
-    def date_must_be_valid(cls, v):
+    @validator('program_start_date')
+    def start_date_must_be_valid(cls, v):
         try:
-            parsed = date.fromisoformat(v)
-            if parsed < date.today():
+            date.fromisoformat(v)
+        except ValueError:
+            raise ValueError('Invalid start date format. Use YYYY-MM-DD.')
+        return v
+
+    @validator('program_end_date')
+    def end_date_must_be_valid(cls, v, values):
+        try:
+            parsed_end = date.fromisoformat(v)
+            if parsed_end < date.today():
                 raise ValueError('Program end date cannot be in the past')
+            if 'program_start_date' in values:
+                parsed_start = date.fromisoformat(values['program_start_date'])
+                if parsed_end <= parsed_start:
+                    raise ValueError('Program end date must be after program start date')
         except ValueError as e:
             raise ValueError(f'Invalid date format. Use YYYY-MM-DD. {e}')
         return v
@@ -498,6 +563,7 @@ def home():
 def signup(request: Request, data: SignupRequest):
     correlation_id = getattr(request.state, "correlation_id", None)
     try:
+        year_level = calculate_year_level(data.program_start_date, data.program_end_date)
         response = supabase.auth.sign_up({
             "email": data.email,
             "password": data.password
@@ -508,7 +574,8 @@ def signup(request: Request, data: SignupRequest):
             "name": data.name,
             "school": data.school,
             "visa_type": data.visa_type,
-            "year_level": data.year_level,
+            "year_level": year_level,
+            "program_start_date": data.program_start_date,
             "program_end_date": data.program_end_date
         }).execute()
         log_security_event("SIGNUP_SUCCESS", f"New user registered at {data.school}", correlation_id)
@@ -635,23 +702,63 @@ def get_timeline(request: Request, year_level: int, authorization: Optional[str]
 
 @app.get("/status")
 @limiter.limit("30/minute")
-def get_status(request: Request, program_end_date: str, year_level: int, authorization: Optional[str] = Header(None)):
+def get_status(request: Request, authorization: Optional[str] = Header(None)):
+    """Status now fetches from DB and calculates dynamically from program dates"""
     correlation_id = getattr(request.state, "correlation_id", None)
-    verify_token(authorization, correlation_id)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    profile = get_profile_from_db(user_id, correlation_id)
+
     today = date.today()
-    end_date = date.fromisoformat(program_end_date)
+    end_date = date.fromisoformat(str(profile["program_end_date"])[:10])
     opt_window_opens = (end_date - today).days - 90
+    year_level = profile.get("year_level", 1)
+    progress = profile.get("program_progress", {})
 
     if year_level < 4:
-        return {"status": "on_track", "color": "green", "message": f"You are on track. Your OPT window opens in {opt_window_opens} days.", "action_needed": False}
+        return {
+            "status": "on_track",
+            "color": "green",
+            "message": f"You are on track. Your OPT window opens in {opt_window_opens} days.",
+            "action_needed": False,
+            "program_progress": progress
+        }
     elif opt_window_opens > 90:
-        return {"status": "on_track", "color": "green", "message": f"You are on track. Your OPT window opens in {opt_window_opens} days. No action needed today.", "action_needed": False}
+        return {
+            "status": "on_track",
+            "color": "green",
+            "message": f"You are on track. Your OPT window opens in {opt_window_opens} days. No action needed today.",
+            "action_needed": False,
+            "program_progress": progress
+        }
     elif opt_window_opens > 30:
-        return {"status": "prepare", "color": "yellow", "message": f"Your OPT window opens in {opt_window_opens} days. Start preparing your documents now.", "action_needed": True, "action": "Review your OPT checklist"}
+        return {
+            "status": "prepare",
+            "color": "yellow",
+            "message": f"Your OPT window opens in {opt_window_opens} days. Start preparing your documents now.",
+            "action_needed": True,
+            "action": "Review your OPT checklist",
+            "program_progress": progress
+        }
     elif opt_window_opens > 0:
-        return {"status": "urgent", "color": "red", "message": f"Urgent. Your OPT window is open and closes in {opt_window_opens} days. Apply now.", "action_needed": True, "action": "Start Form I-765 immediately", "link": "https://www.uscis.gov/i-765"}
+        return {
+            "status": "urgent",
+            "color": "red",
+            "message": f"Urgent. Your OPT window is open and closes in {opt_window_opens} days. Apply now.",
+            "action_needed": True,
+            "action": "Start Form I-765 immediately",
+            "link": "https://www.uscis.gov/i-765",
+            "program_progress": progress
+        }
     else:
-        return {"status": "critical", "color": "red", "message": "Your OPT window may have closed. Contact your DSO immediately.", "action_needed": True, "action": "Contact DSO now"}
+        return {
+            "status": "critical",
+            "color": "red",
+            "message": "Your OPT window may have closed. Contact your DSO immediately.",
+            "action_needed": True,
+            "action": "Contact DSO now",
+            "program_progress": progress
+        }
 
 @app.get("/news")
 @limiter.limit("30/minute")
@@ -671,7 +778,7 @@ def get_news(request: Request, authorization: Optional[str] = Header(None)):
         {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": False, "tag": "General F1 news", "link": None},
         {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.uscis.gov/i-765"}
     ]
-    return {"news": news, "updated": "August 11 2026"}
+    return {"news": news, "updated": "August 12 2026"}
 
 @app.get("/milestones/{year_level}")
 @limiter.limit("30/minute")
@@ -706,9 +813,9 @@ def get_ai_status(request: Request, authorization: Optional[str] = Header(None))
     opt_window_opens = days_until_end - 90
     day_of_week = today.strftime("%A")
     week_number = today.isocalendar()[1]
-
+    year_level = profile.get("year_level", 1)
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
-    year_name = year_names.get(profile["year_level"], "Student")
+    year_name = year_names.get(year_level, "Student")
 
     prompt = f"""You are Arriv0, a knowledgeable and friendly AI companion for international students on F1 visas in the United States.
 
@@ -758,9 +865,9 @@ def chat(request: Request, data: ChatRequest, authorization: Optional[str] = Hea
     profile = get_profile_from_db(user_id, correlation_id)
 
     safe_question = sanitize_input(data.question)
-
+    year_level = profile.get("year_level", 1)
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
-    year_name = year_names.get(profile["year_level"], "Student")
+    year_name = year_names.get(year_level, "Student")
 
     today = date.today()
     end_date = date.fromisoformat(str(profile["program_end_date"])[:10])
