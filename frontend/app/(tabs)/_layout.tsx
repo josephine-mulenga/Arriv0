@@ -1,25 +1,32 @@
 import { Tabs, Redirect } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/AuthContext';
+import { registerForPushNotifications } from '@/utils/registerPushNotifications';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const { user, initializing } = useAuth();
+  const { user, token, initializing } = useAuth();
 
-if (initializing) {
-  return null; // or a loading spinner later
-}
+  useEffect(() => {
+    if (user) {
+      registerForPushNotifications(user.id, token);
+    }
+  }, [user]);
 
-if (!user) {
-  return <Redirect href="/login" />;
-}
+  if (initializing) {
+    return null;
+  }
 
-return (
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
+
+  return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
