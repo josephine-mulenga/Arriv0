@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, Linking } from 'react-native';
 import { Link, router } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
@@ -15,6 +15,7 @@ export default function SignupScreen() {
   const [school, setSchool] = useState('');
   const [visaType, setVisaType] = useState('F1');
   const [yearLevel, setYearLevel] = useState('Freshman');
+  const [programStartDate, setProgramStartDate] = useState('');
   const [programEndDate, setProgramEndDate] = useState('');
 
   const yearLevelMap = { Freshman: 1, Sophomore: 2, Junior: 3, Senior: 4 };
@@ -60,6 +61,12 @@ const handleSignup = async () => {
       />
       <TextInput
         style={styles.input}
+        placeholder="Program start date (YYYY-MM-DD)"
+        value={programStartDate}
+        onChangeText={setProgramStartDate}
+      />
+      <TextInput
+        style={styles.input}
         placeholder="Program end date (YYYY-MM-DD)"
         value={programEndDate}
         onChangeText={setProgramEndDate}
@@ -74,6 +81,21 @@ const handleSignup = async () => {
       <Link href="/login" style={styles.link}>
         <ThemedText>Already have an account? Log in</ThemedText>
       </Link>
+
+      <ThemedText style={styles.legalText}>
+        By signing up, you agree to our{' '}
+        <ThemedText
+          style={styles.legalLink}
+          onPress={() => Linking.openURL('https://www.freeprivacypolicy.com/live/6d431a24-221e-4dfc-aa18-ebd77fc28f93')}>
+          Privacy Policy
+        </ThemedText>{' '}
+        and{' '}
+        <ThemedText
+          style={styles.legalLink}
+          onPress={() => Linking.openURL('https://www.freeprivacypolicy.com/live/994c0a00-5d88-47e1-99a9-1ef79f7be6f8')}>
+          Terms of Service
+        </ThemedText>
+      </ThemedText>
       
     </ThemedView>
   );
@@ -105,5 +127,16 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: 'red',
+  },
+  legalText: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 12,
+    color: '#888',
+  },
+  legalLink: {
+    fontSize: 12,
+    color: '#6C63FF',
+    textDecorationLine: 'underline',
   },
 });
