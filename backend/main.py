@@ -127,6 +127,13 @@ Important Contacts:
 - Form I-765: uscis.gov/i-765
 """
 
+F1_KEYWORDS = [
+    "opt", "cpt", "f-1", "f1", "sevis", "visa", "i-765", "uscis",
+    "stem opt", "work authorization", "international student",
+    "employment authorization", "student visa", "immigration",
+    "i-20", "dso", "practical training"
+]
+
 PROMPT_INJECTION_PATTERNS = [
     r"ignore (all |previous |prior |above |your )?instructions",
     r"disregard (all |previous |prior |above |your )?instructions",
@@ -153,21 +160,23 @@ def sanitize_input(text: str) -> str:
             text = re.sub(pattern, "[removed]", text, flags=re.IGNORECASE)
     return text
 
+def classify_news(title: str, summary: str) -> tuple:
+    """Classify news as affecting F1 students based on keywords"""
+    content = (title + " " + summary).lower()
+    affects_f1 = any(keyword in content for keyword in F1_KEYWORDS)
+    tag = "Affects you directly" if affects_f1 else "General F1 news"
+    return affects_f1, tag
+
 def calculate_year_level(program_start_date: str, program_end_date: str) -> int:
-    """Calculate year level dynamically from program start and end dates"""
     try:
         start = date.fromisoformat(str(program_start_date)[:10])
         end = date.fromisoformat(str(program_end_date)[:10])
         today = date.today()
-
         total_days = (end - start).days
         days_completed = (today - start).days
-
         if total_days <= 0:
             return 1
-
         progress = days_completed / total_days
-
         if progress < 0.25:
             return 1
         elif progress < 0.50:
@@ -180,17 +189,14 @@ def calculate_year_level(program_start_date: str, program_end_date: str) -> int:
         return 1
 
 def calculate_program_progress(program_start_date: str, program_end_date: str) -> dict:
-    """Calculate how far through their program a student is"""
     try:
         start = date.fromisoformat(str(program_start_date)[:10])
         end = date.fromisoformat(str(program_end_date)[:10])
         today = date.today()
-
         total_days = (end - start).days
         days_completed = max(0, (today - start).days)
         days_remaining = max(0, (end - today).days)
         percentage = min(100, round((days_completed / total_days) * 100)) if total_days > 0 else 0
-
         return {
             "total_days": total_days,
             "days_completed": days_completed,
@@ -244,11 +250,9 @@ async def generate_morning_message(student: dict) -> str:
     opt_window_opens = days_until_end - 90
     day_of_week = today.strftime("%A")
     week_number = today.isocalendar()[1]
-
     year_level = student.get("year_level", 1)
     if student.get("program_start_date") and student.get("program_end_date"):
         year_level = calculate_year_level(student["program_start_date"], student["program_end_date"])
-
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(year_level, "Student")
 
@@ -379,11 +383,9 @@ async def personalize_news_for_student(news_title: str, news_body: str, news_lin
     program_end = date.fromisoformat(str(student.get("program_end_date", "2028-01-01"))[:10])
     days_until_end = (program_end - today).days
     opt_window = days_until_end - 90
-
     year_level = student.get("year_level", 1)
     if student.get("program_start_date") and student.get("program_end_date"):
         year_level = calculate_year_level(student["program_start_date"], student["program_end_date"])
-
     year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(year_level, "Student")
     safe_title = sanitize_input(news_title)
@@ -430,12 +432,13 @@ async def process_and_notify():
     summarized_news = []
     for item in news_items:
         summary = await summarize_news_item(item["title"], item["summary"], item["link"])
-        summarized_news.append({"title": item["title"], "body": summary, "link": item["link"]})
+        affects_f1, tag = classify_news(item["title"], item["summary"])
+        summarized_news.append({"title": item["title"], "body": summary, "link": item["link"], "affects_f1": affects_f1, "tag": tag})
         supabase_admin.table("news").insert({
             "title": item["title"],
             "body": summary,
-            "affects_f1": True,
-            "tag": "USCIS Update",
+            "affects_f1": affects_f1,
+            "tag": tag,
             "link": item["link"]
         }).execute()
 
@@ -446,6 +449,8 @@ async def process_and_notify():
 
     for user in users.data:
         for news in summarized_news:
+            if not news["affects_f1"]:
+                continue
             personalized = await personalize_news_for_student(news["title"], news["body"], news["link"], user)
             if personalized:
                 await send_push_notification(user["push_token"], "Arriv0 Immigration Update", personalized)
@@ -703,7 +708,6 @@ def get_timeline(request: Request, year_level: int, authorization: Optional[str]
 @app.get("/status")
 @limiter.limit("30/minute")
 def get_status(request: Request, authorization: Optional[str] = Header(None)):
-    """Status now fetches from DB and calculates dynamically from program dates"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
@@ -716,49 +720,15 @@ def get_status(request: Request, authorization: Optional[str] = Header(None)):
     progress = profile.get("program_progress", {})
 
     if year_level < 4:
-        return {
-            "status": "on_track",
-            "color": "green",
-            "message": f"You are on track. Your OPT window opens in {opt_window_opens} days.",
-            "action_needed": False,
-            "program_progress": progress
-        }
+        return {"status": "on_track", "color": "green", "message": f"You are on track. Your OPT window opens in {opt_window_opens} days.", "action_needed": False, "program_progress": progress}
     elif opt_window_opens > 90:
-        return {
-            "status": "on_track",
-            "color": "green",
-            "message": f"You are on track. Your OPT window opens in {opt_window_opens} days. No action needed today.",
-            "action_needed": False,
-            "program_progress": progress
-        }
+        return {"status": "on_track", "color": "green", "message": f"You are on track. Your OPT window opens in {opt_window_opens} days. No action needed today.", "action_needed": False, "program_progress": progress}
     elif opt_window_opens > 30:
-        return {
-            "status": "prepare",
-            "color": "yellow",
-            "message": f"Your OPT window opens in {opt_window_opens} days. Start preparing your documents now.",
-            "action_needed": True,
-            "action": "Review your OPT checklist",
-            "program_progress": progress
-        }
+        return {"status": "prepare", "color": "yellow", "message": f"Your OPT window opens in {opt_window_opens} days. Start preparing your documents now.", "action_needed": True, "action": "Review your OPT checklist", "program_progress": progress}
     elif opt_window_opens > 0:
-        return {
-            "status": "urgent",
-            "color": "red",
-            "message": f"Urgent. Your OPT window is open and closes in {opt_window_opens} days. Apply now.",
-            "action_needed": True,
-            "action": "Start Form I-765 immediately",
-            "link": "https://www.uscis.gov/i-765",
-            "program_progress": progress
-        }
+        return {"status": "urgent", "color": "red", "message": f"Urgent. Your OPT window is open and closes in {opt_window_opens} days. Apply now.", "action_needed": True, "action": "Start Form I-765 immediately", "link": "https://www.uscis.gov/i-765", "program_progress": progress}
     else:
-        return {
-            "status": "critical",
-            "color": "red",
-            "message": "Your OPT window may have closed. Contact your DSO immediately.",
-            "action_needed": True,
-            "action": "Contact DSO now",
-            "program_progress": progress
-        }
+        return {"status": "critical", "color": "red", "message": "Your OPT window may have closed. Contact your DSO immediately.", "action_needed": True, "action": "Contact DSO now", "program_progress": progress}
 
 @app.get("/news")
 @limiter.limit("30/minute")
@@ -778,7 +748,7 @@ def get_news(request: Request, authorization: Optional[str] = Header(None)):
         {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": False, "tag": "General F1 news", "link": None},
         {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.uscis.gov/i-765"}
     ]
-    return {"news": news, "updated": "August 12 2026"}
+    return {"news": news, "updated": "August 15 2026"}
 
 @app.get("/milestones/{year_level}")
 @limiter.limit("30/minute")
