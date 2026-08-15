@@ -49,6 +49,10 @@ export default function LoginScreen() {
       <Link href="/signup" style={styles.link}>
         <ThemedText>Don't have an account? Sign up</ThemedText>
       </Link>
+
+      <Link href="/reset-password" style={styles.link}>
+        <ThemedText>Forgot your password?</ThemedText>
+      </Link>
     </ThemedView>
   );
 }
