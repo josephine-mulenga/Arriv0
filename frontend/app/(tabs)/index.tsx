@@ -91,6 +91,10 @@ export default function HomeScreen() {
     <TouchableOpacity style={styles.chatButton} onPress={() => router.push('/chat')}>
       <ThemedText style={styles.chatButtonText}>💬 Ask Arrivo a question</ThemedText>
     </TouchableOpacity>
+
+    <TouchableOpacity onPress={() => router.push('/notification-settings')} style={styles.settingsLink}>
+      <ThemedText style={styles.settingsLinkText}>⚙️ Notification settings</ThemedText>
+    </TouchableOpacity>
   </ParallaxScrollView>
 );
 }
@@ -151,5 +155,12 @@ statusContainer: {
   chatButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  settingsLink: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  settingsLinkText: {
+    color: '#888',
   },
 });
