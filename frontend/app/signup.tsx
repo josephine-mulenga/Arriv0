@@ -1,28 +1,28 @@
 import { useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, Linking } from 'react-native';
-import { Link, router } from 'expo-router';
+import { router, Link } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/AuthContext';
 
 export default function SignupScreen() {
-  const { signup, loading, error } = useAuth();
+  const { signup, login, loading, error } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [school, setSchool] = useState('');
   const [visaType, setVisaType] = useState('F1');
-  const [yearLevel, setYearLevel] = useState('Freshman');
   const [programStartDate, setProgramStartDate] = useState('');
   const [programEndDate, setProgramEndDate] = useState('');
 
-  const yearLevelMap = { Freshman: 1, Sophomore: 2, Junior: 3, Senior: 4 };
+  
 
 const handleSignup = async () => {
   try {
-    await signup(email, password, name, school, visaType, yearLevelMap[yearLevel], programEndDate);
+    await signup(email, password, name, school, visaType, programStartDate, programEndDate);
+    await login(email, password);
     router.replace('/(tabs)');
   } catch (err) {
     // error is already captured by useAuth's error state
@@ -33,18 +33,8 @@ const handleSignup = async () => {
     <ThemedView style={styles.container}>
       <ThemedText type="title">Create your account</ThemedText>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Full name"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="School"
-        value={school}
-        onChangeText={setSchool}
-      />
+      <TextInput style={styles.input} placeholder="Full name" value={name} onChangeText={setName} />
+      <TextInput style={styles.input} placeholder="School" value={school} onChangeText={setSchool} />
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -96,47 +86,17 @@ const handleSignup = async () => {
           Terms of Service
         </ThemedText>
       </ThemedText>
-      
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-  },
-  button: {
-    backgroundColor: '#6C63FF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  errorText: {
-    color: 'red',
-  },
-  legalText: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 12,
-    color: '#888',
-  },
-  legalLink: {
-    fontSize: 12,
-    color: '#6C63FF',
-    textDecorationLine: 'underline',
-  },
+  container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  button: { backgroundColor: '#6C63FF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 8 },
+  buttonText: { color: '#fff', fontWeight: '600' },
+  errorText: { color: 'red' },
+  link: { marginTop: 12, alignSelf: 'center' },
+  legalText: { fontSize: 12, textAlign: 'center', marginTop: 12, color: '#888' },
+  legalLink: { fontSize: 12, color: '#6C63FF', textDecorationLine: 'underline' },
 });
