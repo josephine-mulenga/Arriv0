@@ -1,6 +1,18 @@
+import { triggerLogout } from './authEvents';
+
 const BASE_URL = 'https://arriv0-production.up.railway.app';
 
-export const signup = async (email, password, name, school, visaType, yearLevel, programEndDate) => {
+const handleResponse = async (response) => {
+  if (response.status === 401) {
+    triggerLogout();
+    throw new Error('Session expired. Please log in again.');
+  }
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || 'Request failed');
+  return data;
+};
+
+export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate) => {
   const response = await fetch(`${BASE_URL}/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -10,7 +22,7 @@ export const signup = async (email, password, name, school, visaType, yearLevel,
       name,
       school,
       visa_type: visaType,
-      year_level: yearLevel,
+      program_start_date: programStartDate,
       program_end_date: programEndDate
     })
   });
@@ -44,54 +56,42 @@ export const getUserProfile = async (userId, token) => {
   const response = await fetch(`${BASE_URL}/user/${userId}`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to fetch profile');
-  return data;
+  return handleResponse(response);
 };
 
 export const getTimeline = async (yearLevel, token) => {
   const response = await fetch(`${BASE_URL}/timeline/${yearLevel}`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to fetch timeline');
-  return data;
+  return handleResponse(response);
 };
 
-export const getStatus = async (programEndDate, yearLevel, token) => {
-  const response = await fetch(`${BASE_URL}/status?program_end_date=${programEndDate}&year_level=${yearLevel}`, {
+export const getStatus = async (token) => {
+  const response = await fetch(`${BASE_URL}/status`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to fetch status');
-  return data;
+  return handleResponse(response);
 };
 
 export const getNews = async (token) => {
   const response = await fetch(`${BASE_URL}/news`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to fetch news');
-  return data;
+  return handleResponse(response);
 };
 
 export const getMilestones = async (yearLevel, token) => {
   const response = await fetch(`${BASE_URL}/milestones/${yearLevel}`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to fetch milestones');
-  return data;
+  return handleResponse(response);
 };
 
 export const getAIStatus = async (token) => {
   const response = await fetch(`${BASE_URL}/ai-status`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to get AI status');
-  return data;
+  return handleResponse(response);
 };
 
 export const chat = async (question, token) => {
@@ -103,9 +103,7 @@ export const chat = async (question, token) => {
     },
     body: JSON.stringify({ question })
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Chat failed');
-  return data;
+  return handleResponse(response);
 };
 
 export const savePushToken = async (userId, pushToken, token) => {
@@ -113,9 +111,7 @@ export const savePushToken = async (userId, pushToken, token) => {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to save token');
-  return data;
+  return handleResponse(response);
 };
 
 export const updateNotificationSettings = async (userId, notificationTime, timezone, token) => {
@@ -131,7 +127,5 @@ export const updateNotificationSettings = async (userId, notificationTime, timez
       timezone: timezone
     })
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to update settings');
-  return data;
+  return handleResponse(response);
 };
