@@ -2,19 +2,40 @@ import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, TouchableOpacity } from 'react-native';
 import { getAIStatus, getUserProfile, getStatus } from '@/api';
 import { useAuth } from '@/AuthContext';
-import { Image } from 'expo-image';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { router } from 'expo-router';
-import { HelloWave } from '@/components/hello-wave';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ArrivoLogo } from '@/components/arrivo-logo';
 
 export default function HomeScreen() {
   const { user, token } = useAuth();
   const [statusData, setStatusData] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [progressData, setProgressData] = useState(null);
+
+  const glow = useSharedValue(0);
+
+  useEffect(() => {
+    glow.value = withRepeat(
+      withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, []);
+
+  const glowStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + glow.value * 0.06 }],
+  }));
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -38,7 +59,6 @@ export default function HomeScreen() {
     const fetchProgress = async () => {
       try {
         const data = await getStatus(token);
-        console.log('Progress data:', data);
         setProgressData(data.program_progress);
       } catch (err) {
         console.log('Error fetching progress:', err.message);
@@ -57,17 +77,39 @@ export default function HomeScreen() {
 
   return (
     <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+      headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
       headerImage={
-        <Image source={require('@/assets/images/partial-react-logo.png')} style={styles.reactLogo} />
+        <View style={{ width: '100%', height: '100%' }}>
+          <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+            <Defs>
+              <LinearGradient id="homeHeaderGradient" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor="#A9C9FF" />
+                <Stop offset="0.5" stopColor="#C3B9FF" />
+                <Stop offset="1" stopColor="#DCC4FA" />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width="400" height="250" fill="url(#homeHeaderGradient)" />
+            <Circle cx="330" cy="60" r="3" fill="#FFFFFF" opacity="0.8" />
+            <Circle cx="60" cy="90" r="2.5" fill="#FFFFFF" opacity="0.6" />
+            <Circle cx="200" cy="40" r="2" fill="#FFFFFF" opacity="0.7" />
+          </Svg>
+          <View style={styles.logoHeaderWrap} pointerEvents="none">
+            <Animated.View style={glowStyle}>
+              <ArrivoLogo size={80} />
+            </Animated.View>
+          </View>
+        </View>
       }>
+
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome{profileData ? `, ${profileData.name}` : ''}!</ThemedText>
-        <HelloWave />
+        <ThemedText style={styles.welcomeTitle}>
+          Welcome{profileData ? `, ${profileData.name}` : ''}!
+        </ThemedText>
+        <ThemedText style={styles.wave}>👋</ThemedText>
       </ThemedView>
 
       <ThemedView style={styles.statusContainer}>
-        <ThemedText type="subtitle">Today's Status</ThemedText>
+        <ThemedText style={styles.sectionTitle}>Today's Status</ThemedText>
         <ThemedText>{statusData ? statusData.ai_message : 'Loading...'}</ThemedText>
       </ThemedView>
 
@@ -79,7 +121,7 @@ export default function HomeScreen() {
               cx="75"
               cy="75"
               r="60"
-              stroke="purple"
+              stroke="#6C63FF"
               strokeWidth="10"
               fill="none"
               strokeDasharray={`${2 * Math.PI * 60}`}
@@ -88,7 +130,7 @@ export default function HomeScreen() {
               transform="rotate(-90 75 75)"
             />
           </Svg>
-          <ThemedText type="title">{daysRemaining !== null ? daysRemaining : '--'}</ThemedText>
+          <ThemedText style={styles.ringNumber}>{daysRemaining !== null ? daysRemaining : '--'}</ThemedText>
           <ThemedText>days left</ThemedText>
         </View>
       </ThemedView>
@@ -105,29 +147,49 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  titleContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16 },
-  statusContainer: { gap: 8, marginBottom: 16, paddingHorizontal: 16 },
-  stepContainer: { gap: 8, marginBottom: 8 },
-  reactLogo: { height: 178, width: 290, bottom: 0, left: 0, position: 'absolute' },
+  logoHeaderWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  welcomeTitle: {
+    fontSize: 26,
+    fontFamily: 'Fredoka_700Bold',
+    color: '#1A1A2E',
+  },
+  wave: {
+    fontSize: 24,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontFamily: 'Fredoka_600SemiBold',
+    marginBottom: 2,
+  },
+  statusContainer: {
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  ringNumber: {
+    fontSize: 28,
+    fontFamily: 'Fredoka_700Bold',
+  },
   ringContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
     paddingVertical: 24,
     paddingHorizontal: 16,
-    backgroundColor: '#dcdcdc',
-    borderRadius: 16,
+    backgroundColor: '#F0EEFF',
+    borderRadius: 20,
     marginHorizontal: 16,
   },
-  newsContainer: {
-    gap: 8,
-    marginBottom: 24,
-    padding: 16,
-    backgroundColor: '#F5F5F7',
-    borderRadius: 16,
-    marginHorizontal: 16,
-  },
-  newsTag: { color: 'purple', fontWeight: '600' },
   chatButton: {
     backgroundColor: '#6C63FF',
     marginHorizontal: 16,
@@ -136,7 +198,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
   },
-  chatButtonText: { color: '#FFFFFF', fontWeight: '600' },
-  settingsLink: { alignItems: 'center', marginBottom: 16 },
-  settingsLinkText: { color: '#888' },
+  chatButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Fredoka_600SemiBold',
+  },
+  settingsLink: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  settingsLinkText: {
+    color: '#888',
+  },
 });
