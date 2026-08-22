@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { login as apiLogin, signup as apiSignup } from './api';
+import { setLogoutHandler } from './authEvents';
 
 const AuthContext = createContext(null);
 
@@ -53,11 +54,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signup = async (email, password, name, school, visaType, yearLevel, programEndDate) => {
+  const signup = async (email, password, name, school, visaType, programStartDate, programEndDate) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await apiSignup(email, password, name, school, visaType, yearLevel, programEndDate);
+      const data = await apiSignup(email, password, name, school, visaType, programStartDate, programEndDate);
       return data;
     } catch (err) {
       setError(err.message);
@@ -72,6 +73,8 @@ export const AuthProvider = ({ children }) => {
     setAuthToken(null);
     await AsyncStorage.multiRemove(['authToken', 'userId', 'userEmail']);
   };
+
+  setLogoutHandler(logout);
 
   return (
     <AuthContext.Provider value={{ user, token, loading, initializing, error, login, signup, logout }}>
