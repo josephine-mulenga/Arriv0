@@ -3,7 +3,7 @@ import Svg, { Circle, Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
 
 import { ArrivoLogo } from '@/components/arrivo-logo';
 
-export function GradientHeaderBackground({ logoSize = 50 }) {
+export function GradientHeaderBackground({ logoSize = 200 }) {
   return (
     <View style={{ width: '100%', height: '100%' }}>
       <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">

@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { useState, useRef} from 'react';
+import { StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { GradientHeaderBackground } from '@/components/gradient-header-background';
 import { useAuth } from '@/AuthContext';
 import { chat } from '@/api';
 
@@ -39,11 +40,16 @@ export default function ChatScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+
+      <View style={{ height: 100 }}>
+        <GradientHeaderBackground />
+      </View>
+
       <ThemedView style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <ThemedText style={styles.backButton}>← Back</ThemedText>
         </TouchableOpacity>
-        <ThemedText type="title">Ask Arrivo</ThemedText>
+        <ThemedText style={styles.headerTitle}>Ask Arrivo</ThemedText>
       </ThemedView>
 
       <ScrollView
@@ -96,6 +102,11 @@ const styles = StyleSheet.create({
   backButton: {
     color: '#6C63FF',
     fontWeight: '600',
+  },
+  headerTitle: {
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 22,
+    color: '#1A1A2E',
   },
   messagesContainer: {
     flex: 1,
