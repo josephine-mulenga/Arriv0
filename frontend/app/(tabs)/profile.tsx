@@ -7,6 +7,7 @@ import { useAuth } from '@/AuthContext';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { GradientHeaderBackground } from '@/components/gradient-header-background';
 
 export default function ProfileScreen() {
   const { user, token, logout } = useAuth();
@@ -34,10 +35,10 @@ export default function ProfileScreen() {
 
   return (
     <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={<ThemedView style={{ height: 250 }} />}>
+      headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
+      headerImage={<GradientHeaderBackground logoSize={50} />}>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">My Profile</ThemedText>
+        <ThemedText style={styles.screenTitle}>My Profile</ThemedText>
       </ThemedView>
 
       {profileData ? (
@@ -82,12 +83,17 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   titleContainer: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 16 },
+  screenTitle: {
+    fontSize: 26,
+    fontFamily: 'Fredoka_700Bold',
+    color: '#1A1A2E',
+  },
   infoCard: {
     marginHorizontal: 16,
     marginBottom: 16,
     padding: 16,
-    backgroundColor: '#F5F5F7',
-    borderRadius: 16,
+    backgroundColor: '#F0EEFF',
+    borderRadius: 20,
     gap: 12,
   },
   row: {
@@ -96,20 +102,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   label: {
-    fontWeight: '600',
-    color: '#888',
+    fontFamily: 'Fredoka_600SemiBold',
+    color: '#6C63FF',
   },
   settingsButton: {
     marginHorizontal: 16,
     marginBottom: 12,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: '#F5F5F7',
+    backgroundColor: '#F0EEFF',
     alignItems: 'center',
   },
   settingsButtonText: {
     color: '#6C63FF',
-    fontWeight: '600',
+    fontFamily: 'Fredoka_600SemiBold',
   },
   logoutButton: {
     marginHorizontal: 16,
@@ -121,6 +127,6 @@ const styles = StyleSheet.create({
   },
   logoutButtonText: {
     color: '#D32F2F',
-    fontWeight: '600',
+    fontFamily: 'Fredoka_600SemiBold',
   },
 });

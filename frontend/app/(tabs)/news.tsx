@@ -5,6 +5,7 @@ import { useAuth } from '@/AuthContext';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { GradientHeaderBackground } from '@/components/gradient-header-background';
 
 export default function NewsScreen() {
   const { token } = useAuth();
@@ -19,18 +20,15 @@ export default function NewsScreen() {
         console.log('Error fetching news:', err.message);
       }
     };
-
-    if (token) {
-      fetchNews();
-    }
+    if (token) fetchNews();
   }, [token]);
 
   return (
     <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={<ThemedView style={{ height: 250 }} />}>
+      headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
+      headerImage={<GradientHeaderBackground logoSize={50} />}>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">News</ThemedText>
+        <ThemedText style={styles.screenTitle}>News</ThemedText>
       </ThemedView>
 
       {realNewsItems ? (
@@ -38,7 +36,7 @@ export default function NewsScreen() {
           <ThemedView
             key={item.id}
             style={[styles.newsCard, item.affects_f1 ? styles.relevantCard : styles.generalCard]}>
-            <ThemedText type="subtitle">{item.title}</ThemedText>
+            <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
             <ThemedText style={item.affects_f1 ? styles.tagDirect : styles.tagGeneral}>
               {item.tag}
             </ThemedText>
@@ -53,8 +51,28 @@ export default function NewsScreen() {
 }
 
 const styles = StyleSheet.create({
-  titleContainer: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 16 },
-  newsCard: { gap: 8, marginHorizontal: 16, marginBottom: 16, padding: 16, borderRadius: 16 },
+  titleContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  screenTitle: {
+    fontSize: 26,
+    fontFamily: 'Fredoka_700Bold',
+    color: '#1A1A2E',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontFamily: 'Fredoka_600SemiBold',
+  },
+  newsCard: {
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 20,
+  },
   relevantCard: { backgroundColor: '#F0EEFF' },
   generalCard: { backgroundColor: '#F5F5F7' },
   tagDirect: { color: '#6C63FF', fontWeight: '600' },
