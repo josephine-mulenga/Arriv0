@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, Link } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { GradientHeaderBackground } from '@/components/gradient-header-background';
 import { useAuth } from '@/AuthContext';
 
 export default function LoginScreen() {
@@ -23,36 +24,42 @@ export default function LoginScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Log in</ThemedText>
+      <View style={{ height: 100 }}>
+        <GradientHeaderBackground />
+      </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+      <ThemedView style={styles.content}>
+        <ThemedText style={styles.title}>Log in</ThemedText>
 
-      {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-        <ThemedText style={styles.buttonText}>{loading ? 'Logging in...' : 'Log in'}</ThemedText>
-      </TouchableOpacity>
+        {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
 
-      <Link href="/signup" style={styles.link}>
-        <ThemedText>Don't have an account? Sign up</ThemedText>
-      </Link>
+        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+          <ThemedText style={styles.buttonText}>{loading ? 'Logging in...' : 'Log in'}</ThemedText>
+        </TouchableOpacity>
 
-      <Link href="/reset-password" style={styles.link}>
-        <ThemedText>Forgot your password?</ThemedText>
-      </Link>
+        <Link href="/signup" style={styles.link}>
+          <ThemedText>Don't have an account? Sign up</ThemedText>
+        </Link>
+
+        <Link href="/reset-password" style={styles.link}>
+          <ThemedText>Forgot your password?</ThemedText>
+        </Link>
+      </ThemedView>
     </ThemedView>
   );
 }
@@ -60,9 +67,18 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  content: {
+    flex: 1,
     justifyContent: 'center',
     padding: 24,
     gap: 12,
+  },
+  title: {
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 28,
+    color: '#1A1A2E',
+    marginBottom: 8,
   },
   input: {
     borderWidth: 1,

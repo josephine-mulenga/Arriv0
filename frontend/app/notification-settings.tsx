@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { GradientHeaderBackground } from '@/components/gradient-header-background';
 import { useAuth } from '@/AuthContext';
 import { updateNotificationSettings } from '@/api';
 
@@ -34,41 +35,47 @@ export default function NotificationSettingsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <TouchableOpacity onPress={() => router.back()}>
-        <ThemedText style={styles.backButton}>← Back</ThemedText>
-      </TouchableOpacity>
+      <View style={{ height: 100 }}>
+        <GradientHeaderBackground />
+      </View>
 
-      <ThemedText type="title">Notification settings</ThemedText>
-      <ThemedText>Choose when you'd like to receive your daily status update.</ThemedText>
+      <ThemedView style={styles.content}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <ThemedText style={styles.backButton}>← Back</ThemedText>
+        </TouchableOpacity>
 
-      <ThemedText style={styles.label}>Time (24hr, HH:MM)</ThemedText>
-      <TextInput
-        style={styles.input}
-        placeholder="09:00"
-        value={notificationTime}
-        onChangeText={setNotificationTime}
-      />
+        <ThemedText style={styles.title}>Notification settings</ThemedText>
+        <ThemedText>Choose when you'd like to receive your daily status update.</ThemedText>
 
-      <ThemedText style={styles.label}>Timezone</ThemedText>
-      <ThemedView style={styles.timezoneRow}>
-        {timezones.map((tz) => (
-          <TouchableOpacity
-            key={tz}
-            onPress={() => setTimezone(tz)}
-            style={[styles.tzButton, timezone === tz && styles.tzButtonActive]}>
-            <ThemedText style={timezone === tz && styles.tzTextActive}>
-              {tz.split('/')[1].replace('_', ' ')}
-            </ThemedText>
-          </TouchableOpacity>
-        ))}
+        <ThemedText style={styles.label}>Time (24hr, HH:MM)</ThemedText>
+        <TextInput
+          style={styles.input}
+          placeholder="09:00"
+          value={notificationTime}
+          onChangeText={setNotificationTime}
+        />
+
+        <ThemedText style={styles.label}>Timezone</ThemedText>
+        <ThemedView style={styles.timezoneRow}>
+          {timezones.map((tz) => (
+            <TouchableOpacity
+              key={tz}
+              onPress={() => setTimezone(tz)}
+              style={[styles.tzButton, timezone === tz && styles.tzButtonActive]}>
+              <ThemedText style={timezone === tz && styles.tzTextActive}>
+                {tz.split('/')[1].replace('_', ' ')}
+              </ThemedText>
+            </TouchableOpacity>
+          ))}
+        </ThemedView>
+
+        {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
+        {saved && <ThemedText style={styles.successText}>Saved!</ThemedText>}
+
+        <TouchableOpacity style={styles.button} onPress={handleSave} disabled={loading}>
+          <ThemedText style={styles.buttonText}>{loading ? 'Saving...' : 'Save'}</ThemedText>
+        </TouchableOpacity>
       </ThemedView>
-
-      {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
-      {saved && <ThemedText style={styles.successText}>Saved!</ThemedText>}
-
-      <TouchableOpacity style={styles.button} onPress={handleSave} disabled={loading}>
-        <ThemedText style={styles.buttonText}>{loading ? 'Saving...' : 'Save'}</ThemedText>
-      </TouchableOpacity>
     </ThemedView>
   );
 }
@@ -76,14 +83,21 @@ export default function NotificationSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  content: {
+    flex: 1,
     padding: 24,
-    paddingTop: 50,
     gap: 12,
   },
   backButton: {
     color: '#6C63FF',
     fontWeight: '600',
     marginBottom: 8,
+  },
+  title: {
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 24,
+    color: '#1A1A2E',
   },
   label: {
     fontWeight: '600',
