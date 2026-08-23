@@ -54,11 +54,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signup = async (email, password, name, school, visaType, programStartDate, programEndDate) => {
+  const signup = async (
+    email,
+    password,
+    name,
+    school,
+    visaType,
+    programStartDate,
+    programEndDate,
+    major,
+    hasSsn,
+    hasBankAccount,
+    cptMonthsUsed
+  ) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await apiSignup(email, password, name, school, visaType, programStartDate, programEndDate);
+      const data = await apiSignup(
+        email,
+        password,
+        name,
+        school,
+        visaType,
+        programStartDate,
+        programEndDate,
+        major,
+        hasSsn,
+        hasBankAccount,
+        cptMonthsUsed
+      );
       return data;
     } catch (err) {
       setError(err.message);
