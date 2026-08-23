@@ -538,6 +538,10 @@ class SignupRequest(BaseModel):
             raise ValueError('Password must contain at least one uppercase letter')
         if not any(c.isdigit() for c in v):
             raise ValueError('Password must contain at least one number')
+        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in v):
+            raise ValueError('Password must contain at least one special character')
+        if ' ' in v:
+            raise ValueError('Password must not contain spaces')
         return v
 
     @validator('name')
@@ -748,7 +752,6 @@ def get_user_profile(request: Request, user_id: str, authorization: Optional[str
 @app.patch("/user/{user_id}")
 @limiter.limit("10/minute")
 def update_user_profile(request: Request, user_id: str, data: UpdateProfileRequest, authorization: Optional[str] = Header(None)):
-    """Update any profile field including name, school, visa type, program dates, major, SSN, bank, CPT, avatar"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     if verified.user.id != user_id:
