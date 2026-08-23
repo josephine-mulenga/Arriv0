@@ -622,11 +622,34 @@ class NotificationSettingsRequest(BaseModel):
         return v
 
 class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+    school: Optional[str] = None
+    visa_type: Optional[str] = None
+    program_start_date: Optional[str] = None
+    program_end_date: Optional[str] = None
     major: Optional[str] = None
     has_ssn: Optional[bool] = None
     has_bank_account: Optional[bool] = None
     cpt_months_used: Optional[int] = None
     avatar_url: Optional[str] = None
+
+    @validator('name')
+    def name_must_be_valid(cls, v):
+        if v and len(v) > 100:
+            raise ValueError('Name must be under 100 characters')
+        return v.strip() if v else v
+
+    @validator('school')
+    def school_must_be_valid(cls, v):
+        if v and len(v) > 200:
+            raise ValueError('School name must be under 200 characters')
+        return v.strip() if v else v
+
+    @validator('visa_type')
+    def visa_type_must_be_valid(cls, v):
+        if v and v not in ['F1', 'J1', 'Other']:
+            raise ValueError('Visa type must be F1, J1, or Other')
+        return v
 
     @validator('cpt_months_used')
     def cpt_months_must_be_valid(cls, v):
@@ -725,7 +748,7 @@ def get_user_profile(request: Request, user_id: str, authorization: Optional[str
 @app.patch("/user/{user_id}")
 @limiter.limit("10/minute")
 def update_user_profile(request: Request, user_id: str, data: UpdateProfileRequest, authorization: Optional[str] = Header(None)):
-    """Update profile fields — major, SSN status, bank account, CPT months, avatar"""
+    """Update any profile field including name, school, visa type, program dates, major, SSN, bank, CPT, avatar"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     if verified.user.id != user_id:
@@ -735,6 +758,11 @@ def update_user_profile(request: Request, user_id: str, data: UpdateProfileReque
         updates = {k: v for k, v in data.dict().items() if v is not None}
         if not updates:
             raise HTTPException(status_code=400, detail="No fields to update.")
+        if "program_start_date" in updates or "program_end_date" in updates:
+            profile = get_profile_from_db(user_id, correlation_id)
+            start = updates.get("program_start_date", str(profile.get("program_start_date", ""))[:10])
+            end = updates.get("program_end_date", str(profile.get("program_end_date", ""))[:10])
+            updates["year_level"] = calculate_year_level(start, end)
         supabase_admin.table("users").update(updates).eq("id", user_id).execute()
         return {"message": "Profile updated successfully."}
     except HTTPException:
@@ -767,7 +795,6 @@ def update_notification_settings(request: Request, data: NotificationSettingsReq
 
 @app.get("/timezones")
 def get_timezones():
-    """Return all supported US timezones for the frontend dropdown"""
     us_timezones = [
         {"label": "Eastern Time (ET)", "value": "America/New_York"},
         {"label": "Central Time (CT)", "value": "America/Chicago"},
