@@ -12,7 +12,7 @@ const handleResponse = async (response) => {
   return data;
 };
 
-export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate) => {
+export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate, major, hasSsn, hasBankAccount, cptMonthsUsed) => {
   const response = await fetch(`${BASE_URL}/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,7 +23,11 @@ export const signup = async (email, password, name, school, visaType, programSta
       school,
       visa_type: visaType,
       program_start_date: programStartDate,
-      program_end_date: programEndDate
+      program_end_date: programEndDate,
+      major: major,
+      has_ssn: hasSsn,
+      has_bank_account: hasBankAccount,
+      cpt_months_used: cptMonthsUsed
     })
   });
   const data = await response.json();

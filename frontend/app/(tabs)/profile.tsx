@@ -1,4 +1,4 @@
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 
@@ -8,6 +8,21 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { GradientHeaderBackground } from '@/components/gradient-header-background';
+
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function Avatar({ name }) {
+  return (
+    <View style={styles.avatar}>
+      <ThemedText style={styles.avatarText}>{getInitials(name)}</ThemedText>
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const { user, token, logout } = useAuth();
@@ -42,28 +57,41 @@ export default function ProfileScreen() {
       </ThemedView>
 
       {profileData ? (
-        <ThemedView style={styles.infoCard}>
-          <ThemedView style={styles.row}>
-            <ThemedText style={styles.label}>Name</ThemedText>
-            <ThemedText>{profileData.name}</ThemedText>
+        <>
+          <ThemedView style={styles.avatarSection}>
+            <Avatar name={profileData.name} />
+            <ThemedText style={styles.avatarName}>{profileData.name}</ThemedText>
           </ThemedView>
-          <ThemedView style={styles.row}>
-            <ThemedText style={styles.label}>School</ThemedText>
-            <ThemedText>{profileData.school}</ThemedText>
+
+          <ThemedView style={styles.infoCard}>
+            <ThemedView style={styles.row}>
+              <ThemedText style={styles.label}>Name</ThemedText>
+              <ThemedText>{profileData.name}</ThemedText>
+            </ThemedView>
+            <ThemedView style={styles.row}>
+              <ThemedText style={styles.label}>School</ThemedText>
+              <ThemedText>{profileData.school}</ThemedText>
+            </ThemedView>
+            <ThemedView style={styles.row}>
+              <ThemedText style={styles.label}>Visa Type</ThemedText>
+              <ThemedText>{profileData.visa_type}</ThemedText>
+            </ThemedView>
+            <ThemedView style={styles.row}>
+              <ThemedText style={styles.label}>Program Start</ThemedText>
+              <ThemedText>{profileData.program_start_date}</ThemedText>
+            </ThemedView>
+            <ThemedView style={styles.row}>
+              <ThemedText style={styles.label}>Program End</ThemedText>
+              <ThemedText>{profileData.program_end_date}</ThemedText>
+            </ThemedView>
           </ThemedView>
-          <ThemedView style={styles.row}>
-            <ThemedText style={styles.label}>Visa Type</ThemedText>
-            <ThemedText>{profileData.visa_type}</ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.row}>
-            <ThemedText style={styles.label}>Program Start</ThemedText>
-            <ThemedText>{profileData.program_start_date}</ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.row}>
-            <ThemedText style={styles.label}>Program End</ThemedText>
-            <ThemedText>{profileData.program_end_date}</ThemedText>
-          </ThemedView>
-        </ThemedView>
+
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => router.push('/edit-profile')}>
+            <ThemedText style={styles.editButtonText}>✏️ Edit Profile</ThemedText>
+          </TouchableOpacity>
+        </>
       ) : (
         <ThemedText style={{ paddingHorizontal: 16 }}>Loading...</ThemedText>
       )}
@@ -88,6 +116,30 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_700Bold',
     color: '#1A1A2E',
   },
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#6C63FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 24,
+  },
+  avatarName: {
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 16,
+    color: '#1A1A2E',
+  },
   infoCard: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -104,6 +156,18 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: 'Fredoka_600SemiBold',
     color: '#6C63FF',
+  },
+  editButton: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#F0EEFF',
+    alignItems: 'center',
+  },
+  editButtonText: {
+    color: '#6C63FF',
+    fontFamily: 'Fredoka_600SemiBold',
   },
   settingsButton: {
     marginHorizontal: 16,

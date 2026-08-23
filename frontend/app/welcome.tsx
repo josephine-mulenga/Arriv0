@@ -21,18 +21,6 @@ import { CitySkylineIllustration } from '@/components/city-skyline-illustration'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-function FeatureCard({ icon, title, subtitle, style, delay }) {
-  return (
-    <Animated.View entering={FadeIn.delay(delay).duration(600)} style={[styles.featureCard, style]}>
-      <ThemedText style={styles.featureIcon}>{icon}</ThemedText>
-      <View>
-        <ThemedText style={styles.featureTitle}>{title}</ThemedText>
-        <ThemedText style={styles.featureSubtitle}>{subtitle}</ThemedText>
-      </View>
-    </Animated.View>
-  );
-}
-
 export default function WelcomeScreen() {
   const glow = useSharedValue(0);
   const planeFloat = useSharedValue(0);
@@ -100,12 +88,6 @@ export default function WelcomeScreen() {
       <Animated.View style={[styles.plane, planeStyle]}>
         <TripIllustration size={140} />
       </Animated.View>
-
-      {/* floating feature cards */}
-      <FeatureCard icon="🎓" title="F-1 Student" subtitle="Stay Compliant" style={styles.cardTopLeft} delay={1800} />
-      <FeatureCard icon="🔔" title="Get Important" subtitle="Updates" style={styles.cardTopRight} delay={1950} />
-      <FeatureCard icon="📅" title="Track OPT" subtitle="Deadlines" style={styles.cardMidLeft} delay={2100} />
-      <FeatureCard icon="✅" title="Achieve Your" subtitle="Goals" style={styles.cardMidRight} delay={2250} />
 
       {/* main content, stacks top to bottom */}
       <View style={styles.content}>
@@ -224,45 +206,5 @@ const styles = StyleSheet.create({
   },
   studentWrap: {
     marginTop: 4,
-  },
-  featureCard: {
-    position: 'absolute',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    maxWidth: 148,
-  },
-  featureIcon: {
-    fontSize: 20,
-  },
-  featureTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1A1A2E',
-  },
-  featureSubtitle: {
-    fontSize: 11,
-    color: '#6C63FF',
-    fontWeight: '600',
-  },
-  cardTopLeft: {
-    top: 95,
-    left: 12,
-  },
-  cardTopRight: {
-    top: 150,
-    right: 12,
-  },
-  cardMidLeft: {
-    top: 230,
-    left: 12,
-  },
-  cardMidRight: {
-    top: 285,
-    right: 12,
   },
 });
