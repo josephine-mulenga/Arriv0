@@ -216,6 +216,153 @@ Student profile:
 
     return context
 
+def build_timeline(profile: dict) -> dict:
+    """Build personalized timeline based on student's actual profile"""
+    year_level = profile.get("year_level", 1)
+    has_ssn = profile.get("has_ssn", False)
+    has_bank_account = profile.get("has_bank_account", False)
+    cpt_months_used = profile.get("cpt_months_used", 0)
+    has_done_cpt = cpt_months_used > 0
+
+    today = date.today()
+    program_start = profile.get("program_start_date")
+    reported_to_dso = False
+    if program_start:
+        start_date = date.fromisoformat(str(program_start)[:10])
+        days_since_start = (today - start_date).days
+        reported_to_dso = days_since_start > 10
+
+    timelines = {
+        1: {
+            "year": "Freshman",
+            "status": "You are settling in. Focus on your first 30 days.",
+            "steps": [
+                {"task": "Report to DSO within 10 days of arrival", "done": reported_to_dso},
+                {"task": "Get I-20 signed by DSO", "done": reported_to_dso},
+                {"task": "Apply for Social Security Number", "done": has_ssn, "link": "https://www.ssa.gov/ssnumber/"},
+                {"task": "Open a bank account", "done": has_bank_account, "link": "https://www.chase.com/personal/checking/college-checking"},
+                {"task": "Understand your on-campus work rights", "done": year_level >= 1, "link": "https://studyinthestates.dhs.gov/students/work"}
+            ]
+        },
+        2: {
+            "year": "Sophomore",
+            "status": "You are eligible for CPT. Use it wisely to protect your OPT." if cpt_months_used < 12 else "Warning — you have used significant CPT. Protect your OPT eligibility.",
+            "steps": [
+                {"task": "Completed one full academic year", "done": year_level >= 2},
+                {"task": "Find a CPT eligible internship", "done": has_done_cpt, "link": "https://www.handshake.com"},
+                {"task": "Get CPT authorization from DSO", "done": has_done_cpt, "link": "https://studyinthestates.dhs.gov/students/work/curricular-practical-training"},
+                {"task": "Track CPT hours — stay under 12 months full time", "done": False, "warning": cpt_months_used >= 9}
+            ]
+        },
+        3: {
+            "year": "Junior",
+            "status": "OPT is approaching. Start preparing now.",
+            "steps": [
+                {"task": "Understand CPT vs OPT differences", "done": year_level >= 3},
+                {"task": "Create your USCIS account now", "done": False, "link": "https://myaccount.uscis.gov"},
+                {"task": "Check if your major qualifies for STEM OPT", "done": False, "link": "https://www.ice.gov/sevis/stemlist"},
+                {"task": "Start networking with OPT friendly employers", "done": False, "link": "https://www.linkedin.com/jobs"}
+            ]
+        },
+        4: {
+            "year": "Senior",
+            "status": "Your OPT window is approaching. Submit as early as possible.",
+            "steps": [
+                {"task": "Confirm program end date with DSO", "done": True},
+                {"task": "Request OPT recommendation from DSO", "done": False},
+                {"task": "Complete Form I-765 on USCIS", "done": False, "link": "https://www.uscis.gov/i-765"},
+                {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home"},
+                {"task": "Submit and track your case", "done": False, "link": "https://egov.uscis.gov/casestatus/landing.do"}
+            ]
+        }
+    }
+
+    return timelines.get(year_level, timelines[1])
+
+def build_milestones(profile: dict) -> list:
+    """Build personalized milestones based on student's actual profile"""
+    year_level = profile.get("year_level", 1)
+    has_ssn = profile.get("has_ssn", False)
+    has_bank_account = profile.get("has_bank_account", False)
+    cpt_months_used = profile.get("cpt_months_used", 0)
+    has_done_cpt = cpt_months_used > 0
+
+    today = date.today()
+    program_start = profile.get("program_start_date")
+    reported_to_dso = False
+    if program_start:
+        start_date = date.fromisoformat(str(program_start)[:10])
+        days_since_start = (today - start_date).days
+        reported_to_dso = days_since_start > 10
+
+    milestones = [
+        {
+            "id": 1,
+            "icon": "🛬",
+            "title": "Arrived and reported to DSO",
+            "description": "Your F1 journey officially started. SEVIS record active.",
+            "status": "done" if reported_to_dso else "next"
+        },
+        {
+            "id": 2,
+            "icon": "🏦",
+            "title": "Opened a US bank account",
+            "description": "You can now receive payments and build credit history.",
+            "status": "done" if has_bank_account else ("next" if reported_to_dso else "locked")
+        },
+        {
+            "id": 3,
+            "icon": "🪪",
+            "title": "Applied for Social Security Number",
+            "description": "Required for working in the US and building credit history.",
+            "status": "done" if has_ssn else ("next" if has_bank_account else "locked")
+        },
+        {
+            "id": 4,
+            "icon": "💼",
+            "title": "First CPT internship authorized",
+            "description": "You gained real US work experience. This goes on your resume.",
+            "status": "done" if has_done_cpt else ("next" if year_level >= 2 else "locked")
+        },
+        {
+            "id": 5,
+            "icon": "📋",
+            "title": "DSO OPT recommendation received",
+            "description": "Your DSO has approved your OPT application request.",
+            "status": "done" if year_level >= 4 else ("next" if year_level == 3 else "locked")
+        },
+        {
+            "id": 6,
+            "icon": "📄",
+            "title": "Form I-765 submitted",
+            "description": "Your OPT application is in USCIS hands.",
+            "status": "next" if year_level == 4 else "locked"
+        },
+        {
+            "id": 7,
+            "icon": "💳",
+            "title": "EAD card received",
+            "description": "Your Employment Authorization Document arrived by mail.",
+            "status": "locked"
+        },
+        {
+            "id": 8,
+            "icon": "🎯",
+            "title": "First OPT job offer accepted",
+            "description": "The moment everything you worked for becomes real.",
+            "status": "locked"
+        },
+        {
+            "id": 9,
+            "icon": "🚀",
+            "title": "STEM OPT extension approved",
+            "description": "24 more months of work authorization secured.",
+            "status": "locked"
+        }
+    ]
+
+    return milestones
+
 def calculate_year_level(program_start_date: str, program_end_date: str) -> int:
     try:
         start = date.fromisoformat(str(program_start_date)[:10])
@@ -812,58 +959,16 @@ def get_timezones():
     ]
     return {"timezones": us_timezones}
 
-@app.get("/timeline/{year_level}")
+@app.get("/timeline")
 @limiter.limit("30/minute")
-def get_timeline(request: Request, year_level: int, authorization: Optional[str] = Header(None)):
+def get_timeline(request: Request, authorization: Optional[str] = Header(None)):
+    """Timeline now fetches profile from DB and returns personalized checklist"""
     correlation_id = getattr(request.state, "correlation_id", None)
-    verify_token(authorization, correlation_id)
-    timelines = {
-        1: {
-            "year": "Freshman",
-            "status": "You are settling in. Focus on your first 30 days.",
-            "steps": [
-                {"task": "Report to DSO within 10 days of arrival", "done": True},
-                {"task": "Get I-20 signed by DSO", "done": True},
-                {"task": "Apply for Social Security Number", "done": False, "link": "https://www.ssa.gov/ssnumber/"},
-                {"task": "Open a bank account", "done": False, "link": "https://www.chase.com/personal/checking/college-checking"},
-                {"task": "Understand your on-campus work rights", "done": False, "link": "https://studyinthestates.dhs.gov/students/work"}
-            ]
-        },
-        2: {
-            "year": "Sophomore",
-            "status": "You are eligible for CPT. Use it wisely to protect your OPT.",
-            "steps": [
-                {"task": "Completed one full academic year", "done": True},
-                {"task": "Find a CPT eligible internship", "done": False, "link": "https://www.handshake.com"},
-                {"task": "Get CPT authorization from DSO", "done": False, "link": "https://studyinthestates.dhs.gov/students/work/curricular-practical-training"},
-                {"task": "Track CPT hours — stay under 12 months full time", "done": False}
-            ]
-        },
-        3: {
-            "year": "Junior",
-            "status": "OPT is 14 months away. Start preparing now.",
-            "steps": [
-                {"task": "Understand CPT vs OPT differences", "done": True},
-                {"task": "Create your USCIS account now", "done": False, "link": "https://myaccount.uscis.gov"},
-                {"task": "Check if your major qualifies for STEM OPT", "done": False, "link": "https://www.ice.gov/sevis/stemlist"},
-                {"task": "Start networking with OPT friendly employers", "done": False, "link": "https://www.linkedin.com/jobs"}
-            ]
-        },
-        4: {
-            "year": "Senior",
-            "status": "Your OPT window is approaching. Submit as early as possible.",
-            "steps": [
-                {"task": "Confirm program end date with DSO", "done": True},
-                {"task": "Request OPT recommendation from DSO", "done": True},
-                {"task": "Complete Form I-765 on USCIS", "done": False, "link": "https://www.uscis.gov/i-765"},
-                {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home"},
-                {"task": "Submit and track your case", "done": False, "link": "https://egov.uscis.gov/casestatus/landing.do"}
-            ]
-        }
-    }
-    if year_level not in timelines:
-        return {"error": "Invalid year level. Please enter 1, 2, 3, or 4."}
-    return timelines[year_level]
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    profile = get_profile_from_db(user_id, correlation_id)
+    timeline = build_timeline(profile)
+    return timeline
 
 @app.get("/status")
 @limiter.limit("30/minute")
@@ -902,29 +1007,24 @@ def get_news(request: Request, authorization: Optional[str] = Header(None)):
     except Exception as e:
         logger.error(f"News fetch error: {type(e).__name__} correlation_id={correlation_id}")
 
+    today_str = date.today().strftime("%B %d %Y")
     news = [
         {"title": "USCIS OPT processing times now 3 to 4 months", "body": "New data shows average processing has increased. Submit your application on the first day your window opens to avoid gaps in work authorization.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.uscis.gov/tools/processing-times", "image_url": ""},
         {"title": "STEM OPT extension rules remain unchanged", "body": "Computer Science and Cybersecurity both qualify. You are eligible for 24 additional months of work authorization after standard OPT.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.ice.gov/sevis/stemlist", "image_url": ""},
         {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": False, "tag": "General F1 news", "link": None, "image_url": ""},
         {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.uscis.gov/i-765", "image_url": ""}
     ]
-    return {"news": news, "updated": "August 23 2026"}
+    return {"news": news, "updated": today_str}
 
-@app.get("/milestones/{year_level}")
+@app.get("/milestones")
 @limiter.limit("30/minute")
-def get_milestones(request: Request, year_level: int, authorization: Optional[str] = Header(None)):
+def get_milestones(request: Request, authorization: Optional[str] = Header(None)):
+    """Milestones now fetches profile from DB and returns personalized status"""
     correlation_id = getattr(request.state, "correlation_id", None)
-    verify_token(authorization, correlation_id)
-    all_milestones = [
-        {"id": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.", "status": "done" if year_level >= 1 else "locked"},
-        {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if year_level >= 1 else "locked"},
-        {"id": 3, "icon": "💼", "title": "First CPT internship authorized", "description": "You gained real US work experience. This goes on your resume.", "status": "done" if year_level >= 2 else "next" if year_level == 2 else "locked"},
-        {"id": 4, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if year_level >= 4 else "next" if year_level == 3 else "locked"},
-        {"id": 5, "icon": "📄", "title": "Form I-765 submitted", "description": "Your OPT application is in USCIS hands.", "status": "next" if year_level == 4 else "locked"},
-        {"id": 6, "icon": "💳", "title": "EAD card received", "description": "Your Employment Authorization Document arrived by mail.", "status": "locked"},
-        {"id": 7, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you worked for becomes real.", "status": "locked"},
-        {"id": 8, "icon": "🚀", "title": "STEM OPT extension approved", "description": "24 more months of work authorization secured.", "status": "locked"}
-    ]
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    profile = get_profile_from_db(user_id, correlation_id)
+    all_milestones = build_milestones(profile)
     completed = len([m for m in all_milestones if m["status"] == "done"])
     total = len(all_milestones)
     return {"milestones": all_milestones, "completed": completed, "total": total, "percentage": round((completed / total) * 100)}
