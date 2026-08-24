@@ -51,8 +51,8 @@ def test_unauthenticated_access():
 
     protected_endpoints = [
         f"{BASE_URL}/news",
-        f"{BASE_URL}/timeline/2",
-        f"{BASE_URL}/milestones/2",
+        f"{BASE_URL}/timeline",
+        f"{BASE_URL}/milestones",
         f"{BASE_URL}/user/any-id",
     ]
 
