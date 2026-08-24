@@ -44,7 +44,10 @@ scheduler = AsyncIOScheduler()
 app = FastAPI(
     title="Arriv0 API",
     description="Backend for Arriv0 — From Landing to Staying",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None
 )
 
 app.state.limiter = limiter
@@ -160,9 +163,7 @@ def sanitize_input(text: str) -> str:
     return text
 
 def classify_news(title: str, summary: str) -> tuple:
-    """Classify news into specific F1 categories for filter tabs"""
     content = (title + " " + summary).lower()
-
     if any(kw in content for kw in ["stem opt", "stem extension", "stem degree", "24 month"]):
         return True, "STEM OPT"
     elif any(kw in content for kw in ["opt ", "optional practical training", "i-765", "ead card", "work authorization", "post-completion"]):
@@ -228,11 +229,9 @@ Student profile:
     return context
 
 def fmt_date(d: date) -> str:
-    """Format date as Mon DD, YYYY"""
     return d.strftime("%b %d, %Y")
 
 def build_timeline(profile: dict) -> dict:
-    """Build personalized timeline with real date ranges based on program dates"""
     year_level = profile.get("year_level", 1)
     has_ssn = profile.get("has_ssn", False)
     has_bank_account = profile.get("has_bank_account", False)
@@ -255,7 +254,6 @@ def build_timeline(profile: dict) -> dict:
     if program_end:
         end_date = date.fromisoformat(str(program_end)[:10])
 
-    # Key milestone dates calculated from real program dates
     year_1_end = start_date + timedelta(days=365)
     year_2_end = start_date + timedelta(days=365 * 2)
     year_3_end = start_date + timedelta(days=365 * 3)
@@ -269,126 +267,42 @@ def build_timeline(profile: dict) -> dict:
             "year": "Freshman",
             "status": "You are settling in. Focus on your first 30 days.",
             "steps": [
-                {
-                    "task": "Report to DSO within 10 days of arrival",
-                    "done": reported_to_dso,
-                    "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=10))}"
-                },
-                {
-                    "task": "Get I-20 signed by DSO",
-                    "done": reported_to_dso,
-                    "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=14))}"
-                },
-                {
-                    "task": "Apply for Social Security Number",
-                    "done": has_ssn,
-                    "link": "https://www.ssa.gov/ssnumber/",
-                    "date_range": f"{fmt_date(start_date + timedelta(days=14))} — {fmt_date(start_date + timedelta(days=60))}"
-                },
-                {
-                    "task": "Open a bank account",
-                    "done": has_bank_account,
-                    "link": "https://www.chase.com/personal/checking/college-checking",
-                    "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"
-                },
-                {
-                    "task": "Understand your on-campus work rights",
-                    "done": year_level >= 1,
-                    "link": "https://studyinthestates.dhs.gov/students/work",
-                    "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"
-                }
+                {"task": "Report to DSO within 10 days of arrival", "done": reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=10))}"},
+                {"task": "Get I-20 signed by DSO", "done": reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=14))}"},
+                {"task": "Apply for Social Security Number", "done": has_ssn, "link": "https://www.ssa.gov/ssnumber/", "date_range": f"{fmt_date(start_date + timedelta(days=14))} — {fmt_date(start_date + timedelta(days=60))}"},
+                {"task": "Open a bank account", "done": has_bank_account, "link": "https://www.chase.com/personal/checking/college-checking", "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"},
+                {"task": "Understand your on-campus work rights", "done": year_level >= 1, "link": "https://studyinthestates.dhs.gov/students/work", "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"}
             ]
         },
         2: {
             "year": "Sophomore",
             "status": "You are eligible for CPT. Use it wisely to protect your OPT." if cpt_months_used < 12 else "Warning — you have used significant CPT. Protect your OPT eligibility.",
             "steps": [
-                {
-                    "task": "Completed one full academic year",
-                    "done": year_level >= 2,
-                    "date_range": f"{fmt_date(start_date)} — {fmt_date(year_1_end)}"
-                },
-                {
-                    "task": "Find a CPT eligible internship",
-                    "done": has_done_cpt,
-                    "link": "https://www.handshake.com",
-                    "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"
-                },
-                {
-                    "task": "Get CPT authorization from DSO",
-                    "done": has_done_cpt,
-                    "link": "https://studyinthestates.dhs.gov/students/work/curricular-practical-training",
-                    "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"
-                },
-                {
-                    "task": f"Track CPT hours — {cpt_months_used} of 12 months used",
-                    "done": False,
-                    "warning": cpt_months_used >= 9,
-                    "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"
-                }
+                {"task": "Completed one full academic year", "done": year_level >= 2, "date_range": f"{fmt_date(start_date)} — {fmt_date(year_1_end)}"},
+                {"task": "Find a CPT eligible internship", "done": has_done_cpt, "link": "https://www.handshake.com", "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"},
+                {"task": "Get CPT authorization from DSO", "done": has_done_cpt, "link": "https://studyinthestates.dhs.gov/students/work/curricular-practical-training", "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"},
+                {"task": f"Track CPT hours — {cpt_months_used} of 12 months used", "done": False, "warning": cpt_months_used >= 9, "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"}
             ]
         },
         3: {
             "year": "Junior",
             "status": "OPT is approaching. Start preparing now.",
             "steps": [
-                {
-                    "task": "Understand CPT vs OPT differences",
-                    "done": year_level >= 3,
-                    "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"
-                },
-                {
-                    "task": "Create your USCIS account now",
-                    "done": False,
-                    "link": "https://myaccount.uscis.gov",
-                    "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"
-                },
-                {
-                    "task": "Check if your major qualifies for STEM OPT",
-                    "done": False,
-                    "link": "https://www.ice.gov/sevis/stemlist",
-                    "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"
-                },
-                {
-                    "task": "Start networking with OPT friendly employers",
-                    "done": False,
-                    "link": "https://www.linkedin.com/jobs",
-                    "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"
-                }
+                {"task": "Understand CPT vs OPT differences", "done": year_level >= 3, "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
+                {"task": "Create your USCIS account now", "done": False, "link": "https://myaccount.uscis.gov", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
+                {"task": "Check if your major qualifies for STEM OPT", "done": False, "link": "https://www.ice.gov/sevis/stemlist", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
+                {"task": "Start networking with OPT friendly employers", "done": False, "link": "https://www.linkedin.com/jobs", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"}
             ]
         },
         4: {
             "year": "Senior",
             "status": "Your OPT window is approaching. Submit as early as possible.",
             "steps": [
-                {
-                    "task": "Confirm program end date with DSO",
-                    "done": True,
-                    "date_range": f"{fmt_date(year_3_end)} — {fmt_date(opt_window_start)}"
-                },
-                {
-                    "task": "Request OPT recommendation from DSO",
-                    "done": False,
-                    "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"
-                },
-                {
-                    "task": "Complete Form I-765 on USCIS",
-                    "done": False,
-                    "link": "https://www.uscis.gov/i-765",
-                    "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"
-                },
-                {
-                    "task": "Pay $520 USCIS filing fee",
-                    "done": False,
-                    "link": "https://pay.gov/public/home",
-                    "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"
-                },
-                {
-                    "task": "Submit and track your case",
-                    "done": False,
-                    "link": "https://egov.uscis.gov/casestatus/landing.do",
-                    "date_range": f"{fmt_date(opt_apply_by)} — {fmt_date(opt_window_end)}"
-                }
+                {"task": "Confirm program end date with DSO", "done": True, "date_range": f"{fmt_date(year_3_end)} — {fmt_date(opt_window_start)}"},
+                {"task": "Request OPT recommendation from DSO", "done": False, "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
+                {"task": "Complete Form I-765 on USCIS", "done": False, "link": "https://www.uscis.gov/i-765", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
+                {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
+                {"task": "Submit and track your case", "done": False, "link": "https://egov.uscis.gov/casestatus/landing.do", "date_range": f"{fmt_date(opt_apply_by)} — {fmt_date(opt_window_end)}"}
             ]
         }
     }
@@ -400,7 +314,6 @@ def build_timeline(profile: dict) -> dict:
     return timeline
 
 def build_milestones(profile: dict) -> list:
-    """Build personalized milestones based on student's actual profile"""
     year_level = profile.get("year_level", 1)
     has_ssn = profile.get("has_ssn", False)
     has_bank_account = profile.get("has_bank_account", False)
@@ -415,73 +328,17 @@ def build_milestones(profile: dict) -> list:
         days_since_start = (today - start_date).days
         reported_to_dso = days_since_start > 10
 
-    milestones = [
-        {
-            "id": 1,
-            "icon": "🛬",
-            "title": "Arrived and reported to DSO",
-            "description": "Your F1 journey officially started. SEVIS record active.",
-            "status": "done" if reported_to_dso else "next"
-        },
-        {
-            "id": 2,
-            "icon": "🏦",
-            "title": "Opened a US bank account",
-            "description": "You can now receive payments and build credit history.",
-            "status": "done" if has_bank_account else ("next" if reported_to_dso else "locked")
-        },
-        {
-            "id": 3,
-            "icon": "🪪",
-            "title": "Applied for Social Security Number",
-            "description": "Required for working in the US and building credit history.",
-            "status": "done" if has_ssn else ("next" if has_bank_account else "locked")
-        },
-        {
-            "id": 4,
-            "icon": "💼",
-            "title": "First CPT internship authorized",
-            "description": "You gained real US work experience. This goes on your resume.",
-            "status": "done" if has_done_cpt else ("next" if year_level >= 2 else "locked")
-        },
-        {
-            "id": 5,
-            "icon": "📋",
-            "title": "DSO OPT recommendation received",
-            "description": "Your DSO has approved your OPT application request.",
-            "status": "done" if year_level >= 4 else ("next" if year_level == 3 else "locked")
-        },
-        {
-            "id": 6,
-            "icon": "📄",
-            "title": "Form I-765 submitted",
-            "description": "Your OPT application is in USCIS hands.",
-            "status": "next" if year_level == 4 else "locked"
-        },
-        {
-            "id": 7,
-            "icon": "💳",
-            "title": "EAD card received",
-            "description": "Your Employment Authorization Document arrived by mail.",
-            "status": "locked"
-        },
-        {
-            "id": 8,
-            "icon": "🎯",
-            "title": "First OPT job offer accepted",
-            "description": "The moment everything you worked for becomes real.",
-            "status": "locked"
-        },
-        {
-            "id": 9,
-            "icon": "🚀",
-            "title": "STEM OPT extension approved",
-            "description": "24 more months of work authorization secured.",
-            "status": "locked"
-        }
+    return [
+        {"id": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.", "status": "done" if reported_to_dso else "next"},
+        {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if has_bank_account else ("next" if reported_to_dso else "locked")},
+        {"id": 3, "icon": "🪪", "title": "Applied for Social Security Number", "description": "Required for working in the US and building credit history.", "status": "done" if has_ssn else ("next" if has_bank_account else "locked")},
+        {"id": 4, "icon": "💼", "title": "First CPT internship authorized", "description": "You gained real US work experience. This goes on your resume.", "status": "done" if has_done_cpt else ("next" if year_level >= 2 else "locked")},
+        {"id": 5, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if year_level >= 4 else ("next" if year_level == 3 else "locked")},
+        {"id": 6, "icon": "📄", "title": "Form I-765 submitted", "description": "Your OPT application is in USCIS hands.", "status": "next" if year_level == 4 else "locked"},
+        {"id": 7, "icon": "💳", "title": "EAD card received", "description": "Your Employment Authorization Document arrived by mail.", "status": "locked"},
+        {"id": 8, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you worked for becomes real.", "status": "locked"},
+        {"id": 9, "icon": "🚀", "title": "STEM OPT extension approved", "description": "24 more months of work authorization secured.", "status": "locked"}
     ]
-
-    return milestones
 
 def calculate_year_level(program_start_date: str, program_end_date: str) -> int:
     try:
@@ -1086,8 +943,7 @@ def get_timeline(request: Request, authorization: Optional[str] = Header(None)):
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
     profile = get_profile_from_db(user_id, correlation_id)
-    timeline = build_timeline(profile)
-    return timeline
+    return build_timeline(profile)
 
 @app.get("/status")
 @limiter.limit("30/minute")
