@@ -8,7 +8,7 @@ from starlette.requests import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
 from openai import OpenAI
@@ -160,10 +160,21 @@ def sanitize_input(text: str) -> str:
     return text
 
 def classify_news(title: str, summary: str) -> tuple:
+    """Classify news into specific F1 categories for filter tabs"""
     content = (title + " " + summary).lower()
-    affects_f1 = any(keyword in content for keyword in F1_KEYWORDS)
-    tag = "Affects you directly" if affects_f1 else "General F1 news"
-    return affects_f1, tag
+
+    if any(kw in content for kw in ["stem opt", "stem extension", "stem degree", "24 month"]):
+        return True, "STEM OPT"
+    elif any(kw in content for kw in ["opt ", "optional practical training", "i-765", "ead card", "work authorization", "post-completion"]):
+        return True, "OPT"
+    elif any(kw in content for kw in ["cpt", "curricular practical training", "internship authorization"]):
+        return True, "CPT"
+    elif any(kw in content for kw in ["f-1", "f1 visa", "f1 student", "sevis", "i-20", "student visa", "duration of status"]):
+        return True, "F1 Visa"
+    elif any(kw in content for kw in ["uscis", "immigration", "visa", "dso", "i-94", "green card", "h-1b"]):
+        return True, "General F1 news"
+    else:
+        return False, "General news"
 
 def get_recent_news_context() -> str:
     try:
@@ -216,8 +227,12 @@ Student profile:
 
     return context
 
+def fmt_date(d: date) -> str:
+    """Format date as Mon DD, YYYY"""
+    return d.strftime("%b %d, %Y")
+
 def build_timeline(profile: dict) -> dict:
-    """Build personalized timeline based on student's actual profile"""
+    """Build personalized timeline with real date ranges based on program dates"""
     year_level = profile.get("year_level", 1)
     has_ssn = profile.get("has_ssn", False)
     has_bank_account = profile.get("has_bank_account", False)
@@ -226,58 +241,163 @@ def build_timeline(profile: dict) -> dict:
 
     today = date.today()
     program_start = profile.get("program_start_date")
+    program_end = profile.get("program_end_date")
+
     reported_to_dso = False
+    start_date = today
+    end_date = today + timedelta(days=365 * 4)
+
     if program_start:
         start_date = date.fromisoformat(str(program_start)[:10])
         days_since_start = (today - start_date).days
         reported_to_dso = days_since_start > 10
+
+    if program_end:
+        end_date = date.fromisoformat(str(program_end)[:10])
+
+    # Key milestone dates calculated from real program dates
+    year_1_end = start_date + timedelta(days=365)
+    year_2_end = start_date + timedelta(days=365 * 2)
+    year_3_end = start_date + timedelta(days=365 * 3)
+    opt_window_start = end_date - timedelta(days=90)
+    opt_window_end = end_date + timedelta(days=60)
+    opt_apply_by = end_date - timedelta(days=60)
+    grace_period_end = end_date + timedelta(days=60)
 
     timelines = {
         1: {
             "year": "Freshman",
             "status": "You are settling in. Focus on your first 30 days.",
             "steps": [
-                {"task": "Report to DSO within 10 days of arrival", "done": reported_to_dso},
-                {"task": "Get I-20 signed by DSO", "done": reported_to_dso},
-                {"task": "Apply for Social Security Number", "done": has_ssn, "link": "https://www.ssa.gov/ssnumber/"},
-                {"task": "Open a bank account", "done": has_bank_account, "link": "https://www.chase.com/personal/checking/college-checking"},
-                {"task": "Understand your on-campus work rights", "done": year_level >= 1, "link": "https://studyinthestates.dhs.gov/students/work"}
+                {
+                    "task": "Report to DSO within 10 days of arrival",
+                    "done": reported_to_dso,
+                    "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=10))}"
+                },
+                {
+                    "task": "Get I-20 signed by DSO",
+                    "done": reported_to_dso,
+                    "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=14))}"
+                },
+                {
+                    "task": "Apply for Social Security Number",
+                    "done": has_ssn,
+                    "link": "https://www.ssa.gov/ssnumber/",
+                    "date_range": f"{fmt_date(start_date + timedelta(days=14))} — {fmt_date(start_date + timedelta(days=60))}"
+                },
+                {
+                    "task": "Open a bank account",
+                    "done": has_bank_account,
+                    "link": "https://www.chase.com/personal/checking/college-checking",
+                    "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"
+                },
+                {
+                    "task": "Understand your on-campus work rights",
+                    "done": year_level >= 1,
+                    "link": "https://studyinthestates.dhs.gov/students/work",
+                    "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"
+                }
             ]
         },
         2: {
             "year": "Sophomore",
             "status": "You are eligible for CPT. Use it wisely to protect your OPT." if cpt_months_used < 12 else "Warning — you have used significant CPT. Protect your OPT eligibility.",
             "steps": [
-                {"task": "Completed one full academic year", "done": year_level >= 2},
-                {"task": "Find a CPT eligible internship", "done": has_done_cpt, "link": "https://www.handshake.com"},
-                {"task": "Get CPT authorization from DSO", "done": has_done_cpt, "link": "https://studyinthestates.dhs.gov/students/work/curricular-practical-training"},
-                {"task": "Track CPT hours — stay under 12 months full time", "done": False, "warning": cpt_months_used >= 9}
+                {
+                    "task": "Completed one full academic year",
+                    "done": year_level >= 2,
+                    "date_range": f"{fmt_date(start_date)} — {fmt_date(year_1_end)}"
+                },
+                {
+                    "task": "Find a CPT eligible internship",
+                    "done": has_done_cpt,
+                    "link": "https://www.handshake.com",
+                    "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"
+                },
+                {
+                    "task": "Get CPT authorization from DSO",
+                    "done": has_done_cpt,
+                    "link": "https://studyinthestates.dhs.gov/students/work/curricular-practical-training",
+                    "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"
+                },
+                {
+                    "task": f"Track CPT hours — {cpt_months_used} of 12 months used",
+                    "done": False,
+                    "warning": cpt_months_used >= 9,
+                    "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"
+                }
             ]
         },
         3: {
             "year": "Junior",
             "status": "OPT is approaching. Start preparing now.",
             "steps": [
-                {"task": "Understand CPT vs OPT differences", "done": year_level >= 3},
-                {"task": "Create your USCIS account now", "done": False, "link": "https://myaccount.uscis.gov"},
-                {"task": "Check if your major qualifies for STEM OPT", "done": False, "link": "https://www.ice.gov/sevis/stemlist"},
-                {"task": "Start networking with OPT friendly employers", "done": False, "link": "https://www.linkedin.com/jobs"}
+                {
+                    "task": "Understand CPT vs OPT differences",
+                    "done": year_level >= 3,
+                    "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"
+                },
+                {
+                    "task": "Create your USCIS account now",
+                    "done": False,
+                    "link": "https://myaccount.uscis.gov",
+                    "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"
+                },
+                {
+                    "task": "Check if your major qualifies for STEM OPT",
+                    "done": False,
+                    "link": "https://www.ice.gov/sevis/stemlist",
+                    "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"
+                },
+                {
+                    "task": "Start networking with OPT friendly employers",
+                    "done": False,
+                    "link": "https://www.linkedin.com/jobs",
+                    "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"
+                }
             ]
         },
         4: {
             "year": "Senior",
             "status": "Your OPT window is approaching. Submit as early as possible.",
             "steps": [
-                {"task": "Confirm program end date with DSO", "done": True},
-                {"task": "Request OPT recommendation from DSO", "done": False},
-                {"task": "Complete Form I-765 on USCIS", "done": False, "link": "https://www.uscis.gov/i-765"},
-                {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home"},
-                {"task": "Submit and track your case", "done": False, "link": "https://egov.uscis.gov/casestatus/landing.do"}
+                {
+                    "task": "Confirm program end date with DSO",
+                    "done": True,
+                    "date_range": f"{fmt_date(year_3_end)} — {fmt_date(opt_window_start)}"
+                },
+                {
+                    "task": "Request OPT recommendation from DSO",
+                    "done": False,
+                    "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"
+                },
+                {
+                    "task": "Complete Form I-765 on USCIS",
+                    "done": False,
+                    "link": "https://www.uscis.gov/i-765",
+                    "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"
+                },
+                {
+                    "task": "Pay $520 USCIS filing fee",
+                    "done": False,
+                    "link": "https://pay.gov/public/home",
+                    "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"
+                },
+                {
+                    "task": "Submit and track your case",
+                    "done": False,
+                    "link": "https://egov.uscis.gov/casestatus/landing.do",
+                    "date_range": f"{fmt_date(opt_apply_by)} — {fmt_date(opt_window_end)}"
+                }
             ]
         }
     }
 
-    return timelines.get(year_level, timelines[1])
+    timeline = timelines.get(year_level, timelines[1])
+    timeline["opt_window_start"] = fmt_date(opt_window_start)
+    timeline["opt_window_end"] = fmt_date(opt_window_end)
+    timeline["grace_period_end"] = fmt_date(grace_period_end)
+    return timeline
 
 def build_milestones(profile: dict) -> list:
     """Build personalized milestones based on student's actual profile"""
@@ -962,7 +1082,6 @@ def get_timezones():
 @app.get("/timeline")
 @limiter.limit("30/minute")
 def get_timeline(request: Request, authorization: Optional[str] = Header(None)):
-    """Timeline now fetches profile from DB and returns personalized checklist"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
@@ -1009,17 +1128,16 @@ def get_news(request: Request, authorization: Optional[str] = Header(None)):
 
     today_str = date.today().strftime("%B %d %Y")
     news = [
-        {"title": "USCIS OPT processing times now 3 to 4 months", "body": "New data shows average processing has increased. Submit your application on the first day your window opens to avoid gaps in work authorization.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.uscis.gov/tools/processing-times", "image_url": ""},
-        {"title": "STEM OPT extension rules remain unchanged", "body": "Computer Science and Cybersecurity both qualify. You are eligible for 24 additional months of work authorization after standard OPT.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.ice.gov/sevis/stemlist", "image_url": ""},
-        {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": False, "tag": "General F1 news", "link": None, "image_url": ""},
-        {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "Affects you directly", "link": "https://www.uscis.gov/i-765", "image_url": ""}
+        {"title": "USCIS OPT processing times now 3 to 4 months", "body": "New data shows average processing has increased. Submit your application on the first day your window opens to avoid gaps in work authorization.", "affects_f1": True, "tag": "OPT", "link": "https://www.uscis.gov/tools/processing-times", "image_url": ""},
+        {"title": "STEM OPT extension rules remain unchanged", "body": "Computer Science and Cybersecurity both qualify. You are eligible for 24 additional months of work authorization after standard OPT.", "affects_f1": True, "tag": "STEM OPT", "link": "https://www.ice.gov/sevis/stemlist", "image_url": ""},
+        {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": True, "tag": "F1 Visa", "link": None, "image_url": ""},
+        {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "OPT", "link": "https://www.uscis.gov/i-765", "image_url": ""}
     ]
     return {"news": news, "updated": today_str}
 
 @app.get("/milestones")
 @limiter.limit("30/minute")
 def get_milestones(request: Request, authorization: Optional[str] = Header(None)):
-    """Milestones now fetches profile from DB and returns personalized status"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
