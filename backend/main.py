@@ -872,6 +872,7 @@ class NotificationSettingsRequest(BaseModel):
         return v
 
 class UpdateProfileRequest(BaseModel):
+    email: Optional[EmailStr] = None
     name: Optional[str] = None
     school: Optional[str] = None
     visa_type: Optional[str] = None
@@ -1037,15 +1038,29 @@ def update_user_profile(request: Request, user_id: str, data: UpdateProfileReque
         log_security_event("ACCESS_DENIED", f"User attempted to update profile of {user_id[:8]}***", correlation_id)
         raise HTTPException(status_code=403, detail="Access denied.")
     try:
-        updates = {k: v for k, v in data.dict().items() if v is not None}
-        if not updates:
+        updates = {k: v for k, v in data.dict().items() if v is not None and k != "email"}
+        if not updates and not data.email:
             raise HTTPException(status_code=400, detail="No fields to update.")
-        if "program_start_date" in updates or "program_end_date" in updates:
-            profile = get_profile_from_db(user_id, correlation_id)
-            start = updates.get("program_start_date", str(profile.get("program_start_date", ""))[:10])
-            end = updates.get("program_end_date", str(profile.get("program_end_date", ""))[:10])
-            updates["year_level"] = calculate_year_level(start, end)
-        supabase_admin.table("users").update(updates).eq("id", user_id).execute()
+
+        if data.email:
+            try:
+                supabase_admin.auth.admin.update_user_by_id(
+                    user_id,
+                    {"email": data.email}
+                )
+                log_security_event("EMAIL_UPDATED", f"Email updated for user {user_id[:8]}***", correlation_id)
+            except Exception as e:
+                logger.error(f"Email update error: {type(e).__name__} correlation_id={correlation_id}")
+                raise HTTPException(status_code=400, detail="Failed to update email. It may already be in use.")
+
+        if updates:
+            if "program_start_date" in updates or "program_end_date" in updates:
+                profile = get_profile_from_db(user_id, correlation_id)
+                start = updates.get("program_start_date", str(profile.get("program_start_date", ""))[:10])
+                end = updates.get("program_end_date", str(profile.get("program_end_date", ""))[:10])
+                updates["year_level"] = calculate_year_level(start, end)
+            supabase_admin.table("users").update(updates).eq("id", user_id).execute()
+
         return {"message": "Profile updated successfully."}
     except HTTPException:
         raise

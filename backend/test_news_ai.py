@@ -2,7 +2,7 @@ import requests
 
 BASE_URL = "http://127.0.0.1:8000"
 
-TEST_EMAIL = "prince2@arriv0test.com"
+TEST_EMAIL = "prince@arriv0test.com"
 TEST_PASSWORD = "Test1234!"
 
 login_response = requests.post(f"{BASE_URL}/login", json={
