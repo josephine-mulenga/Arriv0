@@ -910,6 +910,13 @@ class DocumentUpdateRequest(BaseModel):
     collected: bool
     notes: Optional[str] = None
 
+class BookmarkRequest(BaseModel):
+    news_title: str
+    news_body: str
+    news_link: Optional[str] = None
+    news_tag: Optional[str] = None
+    news_image_url: Optional[str] = None
+
 @app.on_event("startup")
 async def startup_event():
     scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
@@ -1160,6 +1167,60 @@ def search_dso(request: Request, school: str, authorization: Optional[str] = Hea
         "fallback_link": "https://studyinthestates.dhs.gov/school-search",
         "google_search": f"https://www.google.com/search?q={school.replace(' ', '+')}+international+student+services+DSO+contact"
     }
+
+@app.post("/bookmarks")
+@limiter.limit("30/minute")
+def add_bookmark(request: Request, data: BookmarkRequest, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        existing = supabase_admin.table("bookmarks").select("id").eq("user_id", user_id).eq("news_title", data.news_title).execute()
+        if existing.data:
+            return {"message": "Already bookmarked.", "already_exists": True}
+        supabase_admin.table("bookmarks").insert({
+            "user_id": user_id,
+            "news_title": data.news_title,
+            "news_body": data.news_body,
+            "news_link": data.news_link,
+            "news_tag": data.news_tag,
+            "news_image_url": data.news_image_url
+        }).execute()
+        return {"message": "News article bookmarked successfully.", "already_exists": False}
+    except Exception as e:
+        logger.error(f"Bookmark add error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to bookmark article.")
+
+@app.get("/bookmarks")
+@limiter.limit("30/minute")
+def get_bookmarks(request: Request, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        response = supabase_admin.table("bookmarks").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        return {"bookmarks": response.data or [], "count": len(response.data or [])}
+    except Exception as e:
+        logger.error(f"Bookmarks fetch error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to fetch bookmarks.")
+
+@app.delete("/bookmarks/{bookmark_id}")
+@limiter.limit("30/minute")
+def delete_bookmark(request: Request, bookmark_id: str, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        existing = supabase_admin.table("bookmarks").select("user_id").eq("id", bookmark_id).execute()
+        if not existing.data or existing.data[0]["user_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Access denied.")
+        supabase_admin.table("bookmarks").delete().eq("id", bookmark_id).execute()
+        return {"message": "Bookmark removed successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bookmark delete error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to remove bookmark.")
 
 @app.get("/timeline")
 @limiter.limit("30/minute")
