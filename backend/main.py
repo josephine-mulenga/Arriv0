@@ -1448,6 +1448,101 @@ async def trigger_news_fetch(request: Request, background_tasks: BackgroundTasks
     background_tasks.add_task(process_and_notify)
     return {"message": "News fetch and notification job started in background"}
 
+@app.get("/onboarding-score")
+@limiter.limit("30/minute")
+def get_onboarding_score(request: Request, authorization: Optional[str] = Header(None)):
+    """Calculate how set up the student is based on their profile and documents"""
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    profile = get_profile_from_db(user_id, correlation_id)
+
+    score = 0
+    items = []
+
+    score += 10
+    items.append({"task": "Created your Arriv0 account", "done": True, "points": 10})
+
+    has_major = bool(profile.get("major"))
+    if has_major:
+        score += 10
+    items.append({"task": "Added your major", "done": has_major, "points": 10})
+
+    has_ssn = profile.get("has_ssn", False)
+    if has_ssn:
+        score += 15
+    items.append({"task": "Applied for Social Security Number", "done": has_ssn, "points": 15})
+
+    has_bank = profile.get("has_bank_account", False)
+    if has_bank:
+        score += 15
+    items.append({"task": "Opened a US bank account", "done": has_bank, "points": 15})
+
+    has_push = bool(profile.get("push_token"))
+    if has_push:
+        score += 10
+    items.append({"task": "Enabled push notifications", "done": has_push, "points": 10})
+
+    has_notification_time = bool(profile.get("notification_time"))
+    if has_notification_time:
+        score += 5
+    items.append({"task": "Set your daily notification time", "done": has_notification_time, "points": 5})
+
+    try:
+        docs_response = supabase_admin.table("documents").select("collected").eq("user_id", user_id).execute()
+        docs = docs_response.data or []
+        if docs:
+            collected_count = len([d for d in docs if d["collected"]])
+            total_docs = len(docs)
+            doc_score = round((collected_count / total_docs) * 20)
+            score += doc_score
+            items.append({"task": f"Collected documents ({collected_count} of {total_docs})", "done": collected_count == total_docs, "points": doc_score, "max_points": 20})
+        else:
+            items.append({"task": "Collect your important documents", "done": False, "points": 0, "max_points": 20})
+    except Exception:
+        items.append({"task": "Collect your important documents", "done": False, "points": 0, "max_points": 20})
+
+    has_avatar = bool(profile.get("avatar_url"))
+    if has_avatar:
+        score += 5
+    items.append({"task": "Added a profile picture", "done": has_avatar, "points": 5})
+
+    has_dates = bool(profile.get("program_start_date")) and bool(profile.get("program_end_date"))
+    if has_dates:
+        score += 10
+    items.append({"task": "Set your program start and end dates", "done": has_dates, "points": 10})
+
+    if score >= 90:
+        level = "All set"
+        level_color = "green"
+        message = "You are fully set up. Arriv0 is working at full power for you."
+    elif score >= 70:
+        level = "Almost there"
+        level_color = "blue"
+        message = "You are almost fully set up. Complete the remaining items to get the most out of Arriv0."
+    elif score >= 50:
+        level = "Getting started"
+        level_color = "yellow"
+        message = "Good progress. A few more steps and Arriv0 will be fully personalized for you."
+    else:
+        level = "Just getting started"
+        level_color = "red"
+        message = "Let us get you set up. Complete the items below to unlock the full Arriv0 experience."
+
+    incomplete = [i for i in items if not i["done"]]
+    next_step = incomplete[0]["task"] if incomplete else None
+
+    return {
+        "score": score,
+        "max_score": 100,
+        "percentage": score,
+        "level": level,
+        "level_color": level_color,
+        "message": message,
+        "next_step": next_step,
+        "items": items
+    }
+
 @app.post("/save-token")
 @limiter.limit("10/minute")
 def save_push_token(request: Request, user_id: str, push_token: str, authorization: Optional[str] = Header(None)):

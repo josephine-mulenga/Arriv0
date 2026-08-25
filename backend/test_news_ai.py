@@ -51,3 +51,16 @@ r5 = requests.get(f"{BASE_URL}/chat/history",
     headers={"authorization": f"Bearer {token}"}
 )
 print(f"Messages after clear: {r5.json().get('count')}")
+
+# Test 6 — onboarding score
+print("\nTest 6 — Onboarding score:")
+r6 = requests.get(f"{BASE_URL}/onboarding-score",
+    headers={"authorization": f"Bearer {token}"}
+)
+data6 = r6.json()
+print(f"Score: {data6.get('score')}/100")
+print(f"Level: {data6.get('level')}")
+print(f"Next step: {data6.get('next_step')}")
+for item in data6.get("items", []):
+    status = "✅" if item["done"] else "❌"
+    print(f"  {status} {item['task']} ({item['points']} pts)")
