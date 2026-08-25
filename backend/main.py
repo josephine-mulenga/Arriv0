@@ -37,7 +37,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
 openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 security = HTTPBearer()
 scheduler = AsyncIOScheduler()
 
@@ -1363,7 +1363,7 @@ Write a short warm personalized morning message. Use the student's specific situ
         raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again.")
 
 @app.post("/chat")
-@limiter.limit("20/minute")
+@limiter.limit("10/minute")
 def chat(request: Request, data: ChatRequest, authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
@@ -1563,7 +1563,7 @@ def get_onboarding_score(request: Request, authorization: Optional[str] = Header
     }
 
 @app.post("/referral/generate")
-@limiter.limit("5/minute")
+@limiter.limit("2/minute")
 def generate_referral_code(request: Request, authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
@@ -1588,7 +1588,7 @@ def generate_referral_code(request: Request, authorization: Optional[str] = Head
         raise HTTPException(status_code=400, detail="Failed to generate referral code.")
 
 @app.post("/referral/invite")
-@limiter.limit("10/minute")
+@limiter.limit("3/minute")
 def send_referral_invite(request: Request, data: ReferralRequest, authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
