@@ -941,6 +941,34 @@ async def shutdown_event():
 def home():
     return {"message": "Arriv0 backend is running"}
 
+@app.get("/health")
+def health_check():
+    """Health check endpoint for Railway and uptime monitoring"""
+    try:
+        supabase_admin.table("users").select("id").limit(1).execute()
+        db_status = "healthy"
+    except Exception:
+        db_status = "unhealthy"
+
+    try:
+        openai_client.models.list()
+        ai_status = "healthy"
+    except Exception:
+        ai_status = "unhealthy"
+
+    overall = "healthy" if db_status == "healthy" else "degraded"
+
+    return {
+        "status": overall,
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0",
+        "services": {
+            "database": db_status,
+            "ai": ai_status,
+            "scheduler": "healthy" if scheduler.running else "unhealthy"
+        }
+    }
+
 @app.post("/signup")
 @limiter.limit("5/minute")
 def signup(request: Request, data: SignupRequest):
