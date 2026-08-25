@@ -168,6 +168,34 @@ DEFAULT_DOCUMENTS = [
     {"name": "Form I-765 Receipt Notice", "category": "Work Authorization"},
 ]
 
+DSO_DIRECTORY = [
+    {"school": "Voorhees University", "city": "Denmark, SC", "dso_office": "Office of International Student Services", "email": "internationalstudents@voorhees.edu", "phone": "+1 (803) 703-7000", "website": "https://www.voorhees.edu", "hbcu": True},
+    {"school": "Howard University", "city": "Washington, DC", "dso_office": "International Student Services Office", "email": "isso@howard.edu", "phone": "+1 (202) 806-2550", "website": "https://isso.howard.edu", "hbcu": True},
+    {"school": "Spelman College", "city": "Atlanta, GA", "dso_office": "Office of International Affairs", "email": "international@spelman.edu", "phone": "+1 (404) 270-5000", "website": "https://www.spelman.edu", "hbcu": True},
+    {"school": "Morehouse College", "city": "Atlanta, GA", "dso_office": "Office of International Programs", "email": "international@morehouse.edu", "phone": "+1 (404) 681-2800", "website": "https://www.morehouse.edu", "hbcu": True},
+    {"school": "Florida A&M University", "city": "Tallahassee, FL", "dso_office": "Office of International Education and Development", "email": "oied@famu.edu", "phone": "+1 (850) 599-3820", "website": "https://www.famu.edu", "hbcu": True},
+    {"school": "North Carolina A&T State University", "city": "Greensboro, NC", "dso_office": "International Student and Scholar Services", "email": "isss@ncat.edu", "phone": "+1 (336) 334-7928", "website": "https://www.ncat.edu", "hbcu": True},
+    {"school": "Hampton University", "city": "Hampton, VA", "dso_office": "International Student Services", "email": "international@hamptonu.edu", "phone": "+1 (757) 727-5000", "website": "https://www.hamptonu.edu", "hbcu": True},
+    {"school": "Tuskegee University", "city": "Tuskegee, AL", "dso_office": "International Student Services", "email": "international@tuskegee.edu", "phone": "+1 (334) 727-8011", "website": "https://www.tuskegee.edu", "hbcu": True},
+    {"school": "Southern University", "city": "Baton Rouge, LA", "dso_office": "Office of International Programs", "email": "international@sus.edu", "phone": "+1 (225) 771-4500", "website": "https://www.subr.edu", "hbcu": True},
+    {"school": "Delaware State University", "city": "Dover, DE", "dso_office": "International Student Services", "email": "international@desu.edu", "phone": "+1 (302) 857-6070", "website": "https://www.desu.edu", "hbcu": True},
+    {"school": "Morgan State University", "city": "Baltimore, MD", "dso_office": "International Student and Scholar Services", "email": "isss@morgan.edu", "phone": "+1 (443) 885-3238", "website": "https://www.morgan.edu", "hbcu": True},
+    {"school": "Prairie View A&M University", "city": "Prairie View, TX", "dso_office": "International Student Services", "email": "international@pvamu.edu", "phone": "+1 (936) 261-1060", "website": "https://www.pvamu.edu", "hbcu": True},
+    {"school": "Clemson University", "city": "Clemson, SC", "dso_office": "International Student Services", "email": "isso@clemson.edu", "phone": "+1 (864) 656-2357", "website": "https://www.clemson.edu/international", "hbcu": False},
+    {"school": "University of South Carolina", "city": "Columbia, SC", "dso_office": "International Student Services", "email": "intlsvc@sc.edu", "phone": "+1 (803) 777-7461", "website": "https://www.sc.edu/international", "hbcu": False},
+    {"school": "Georgia Tech", "city": "Atlanta, GA", "dso_office": "Office of International Education", "email": "oie@gatech.edu", "phone": "+1 (404) 894-7475", "website": "https://oie.gatech.edu", "hbcu": False},
+    {"school": "MIT", "city": "Cambridge, MA", "dso_office": "International Students Office", "email": "iso@mit.edu", "phone": "+1 (617) 253-3795", "website": "https://iso.mit.edu", "hbcu": False},
+    {"school": "Stanford University", "city": "Stanford, CA", "dso_office": "Bechtel International Center", "email": "bechtel-center@stanford.edu", "phone": "+1 (650) 723-1831", "website": "https://bechtel.stanford.edu", "hbcu": False},
+    {"school": "Carnegie Mellon University", "city": "Pittsburgh, PA", "dso_office": "Office of International Education", "email": "oie@andrew.cmu.edu", "phone": "+1 (412) 268-5231", "website": "https://www.cmu.edu/oie", "hbcu": False},
+    {"school": "University of Texas at Austin", "city": "Austin, TX", "dso_office": "International Student and Scholar Services", "email": "isss@austin.utexas.edu", "phone": "+1 (512) 471-2477", "website": "https://world.utexas.edu/isss", "hbcu": False},
+    {"school": "University of Michigan", "city": "Ann Arbor, MI", "dso_office": "International Center", "email": "intlctr@umich.edu", "phone": "+1 (734) 764-9310", "website": "https://internationalcenter.umich.edu", "hbcu": False},
+    {"school": "New York University", "city": "New York, NY", "dso_office": "Office of Global Services", "email": "ogs@nyu.edu", "phone": "+1 (212) 998-4720", "website": "https://www.nyu.edu/ogs", "hbcu": False},
+    {"school": "Columbia University", "city": "New York, NY", "dso_office": "International Students and Scholars Office", "email": "isso@columbia.edu", "phone": "+1 (212) 854-3587", "website": "https://isso.columbia.edu", "hbcu": False},
+    {"school": "University of California Los Angeles", "city": "Los Angeles, CA", "dso_office": "Dashew Center for International Students", "email": "internationalservices@saonet.ucla.edu", "phone": "+1 (310) 825-1681", "website": "https://www.internationalcenter.ucla.edu", "hbcu": False},
+    {"school": "University of Florida", "city": "Gainesville, FL", "dso_office": "International Student and Scholar Services", "email": "isss@ufsa.ufl.edu", "phone": "+1 (352) 392-2311", "website": "https://isss.ufl.edu", "hbcu": False},
+    {"school": "Purdue University", "city": "West Lafayette, IN", "dso_office": "International Students and Scholars", "email": "iss@purdue.edu", "phone": "+1 (765) 494-5770", "website": "https://www.purdue.edu/iss", "hbcu": False},
+]
+
 def sanitize_input(text: str) -> str:
     if not text:
         return text
@@ -235,7 +263,6 @@ def save_chat_message(user_id: str, role: str, content: str):
         logger.error(f"Failed to save chat message: {e}")
 
 def get_document_context(user_id: str) -> str:
-    """Build document status context for AI prompts"""
     try:
         response = supabase_admin.table("documents").select("name, category, collected, notes").eq("user_id", user_id).execute()
         if not response.data:
@@ -927,7 +954,6 @@ def signup(request: Request, data: SignupRequest):
             "cpt_months_used": data.cpt_months_used
         }).execute()
 
-        # Initialize default document checklist for new user
         for doc in DEFAULT_DOCUMENTS:
             supabase_admin.table("documents").insert({
                 "user_id": auth_user_id,
@@ -1049,7 +1075,6 @@ def get_timezones():
 @app.get("/documents")
 @limiter.limit("30/minute")
 def get_documents(request: Request, authorization: Optional[str] = Header(None)):
-    """Get student's document checklist"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
@@ -1078,7 +1103,6 @@ def get_documents(request: Request, authorization: Optional[str] = Header(None))
 @app.patch("/documents/{document_id}")
 @limiter.limit("30/minute")
 def update_document(request: Request, document_id: str, data: DocumentUpdateRequest, authorization: Optional[str] = Header(None)):
-    """Mark a document as collected or not collected"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
@@ -1096,6 +1120,46 @@ def update_document(request: Request, document_id: str, data: DocumentUpdateRequ
     except Exception as e:
         logger.error(f"Document update error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to update document.")
+
+@app.get("/dso-directory")
+@limiter.limit("30/minute")
+def get_dso_directory(request: Request, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
+    return {
+        "directory": DSO_DIRECTORY,
+        "total": len(DSO_DIRECTORY),
+        "hbcu_count": len([s for s in DSO_DIRECTORY if s["hbcu"]]),
+        "not_listed_message": "If your school is not listed use the official USCIS DSO finder to locate your school's international student office.",
+        "not_listed_link": "https://studyinthestates.dhs.gov/school-search",
+        "note": "Contact information is updated periodically. Always verify directly with your school's website."
+    }
+
+@app.get("/dso-search")
+@limiter.limit("10/minute")
+def search_dso(request: Request, school: str, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
+
+    school_lower = school.lower().strip()
+    matches = [s for s in DSO_DIRECTORY if school_lower in s["school"].lower()]
+
+    if matches:
+        return {
+            "found": True,
+            "results": matches,
+            "count": len(matches)
+        }
+
+    return {
+        "found": False,
+        "results": [],
+        "count": 0,
+        "message": f"We don't have {school} in our directory yet.",
+        "fallback": "Use the official USCIS School Search to find your DSO contact.",
+        "fallback_link": "https://studyinthestates.dhs.gov/school-search",
+        "google_search": f"https://www.google.com/search?q={school.replace(' ', '+')}+international+student+services+DSO+contact"
+    }
 
 @app.get("/timeline")
 @limiter.limit("30/minute")
