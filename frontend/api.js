@@ -133,3 +133,22 @@ export const updateNotificationSettings = async (userId, notificationTime, timez
   });
   return handleResponse(response);
 };
+
+export const updateProfile = async (userId, updates, token) => {
+  const response = await fetch(`${BASE_URL}/user/${userId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(updates)
+  });
+  return handleResponse(response);
+};
+
+export const getTimezones = async (token) => {
+  const response = await fetch(`${BASE_URL}/timezones`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};

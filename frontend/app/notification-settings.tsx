@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 
@@ -6,18 +6,32 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { GradientHeaderBackground } from '@/components/gradient-header-background';
 import { useAuth } from '@/AuthContext';
-import { updateNotificationSettings } from '@/api';
-
-const timezones = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles'];
+import { updateNotificationSettings, getTimezones } from '@/api';
 
 export default function NotificationSettingsScreen() {
   const { user, token } = useAuth();
 
   const [notificationTime, setNotificationTime] = useState('09:00');
   const [timezone, setTimezone] = useState('America/New_York');
+  const [timezones, setTimezones] = useState([]);
+  const [timezonesLoading, setTimezonesLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchTimezones = async () => {
+      try {
+        const tzList = await getTimezones();
+        setTimezones(tzList);
+      } catch (err) {
+        console.log('Error fetching timezones:', err.message);
+      } finally {
+        setTimezonesLoading(false);
+      }
+    };
+    fetchTimezones();
+  }, []);
 
   const handleSave = async () => {
     try {
@@ -56,18 +70,22 @@ export default function NotificationSettingsScreen() {
         />
 
         <ThemedText style={styles.label}>Timezone</ThemedText>
-        <ThemedView style={styles.timezoneRow}>
-          {timezones.map((tz) => (
-            <TouchableOpacity
-              key={tz}
-              onPress={() => setTimezone(tz)}
-              style={[styles.tzButton, timezone === tz && styles.tzButtonActive]}>
-              <ThemedText style={timezone === tz && styles.tzTextActive}>
-                {tz.split('/')[1].replace('_', ' ')}
-              </ThemedText>
-            </TouchableOpacity>
-          ))}
-        </ThemedView>
+        {timezonesLoading ? (
+          <ThemedText>Loading timezones...</ThemedText>
+        ) : (
+          <ThemedView style={styles.timezoneRow}>
+            {timezones.map((tz) => (
+              <TouchableOpacity
+                key={tz}
+                onPress={() => setTimezone(tz)}
+                style={[styles.tzButton, timezone === tz && styles.tzButtonActive]}>
+                <ThemedText style={timezone === tz && styles.tzTextActive}>
+                  {tz.includes('/') ? tz.split('/')[1].replace('_', ' ') : tz}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+          </ThemedView>
+        )}
 
         {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
         {saved && <ThemedText style={styles.successText}>Saved!</ThemedText>}
@@ -81,14 +99,8 @@ export default function NotificationSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    padding: 24,
-    gap: 12,
-  },
+  container: { flex: 1 },
+  content: { flex: 1, padding: 24, gap: 12 },
   backButton: {
     color: '#6C63FF',
     fontWeight: '600',

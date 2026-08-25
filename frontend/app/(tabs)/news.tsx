@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Image } from 'react-native';
 import { useEffect, useState } from 'react';
 import { getNews } from '@/api';
 import { useAuth } from '@/AuthContext';
@@ -36,6 +36,9 @@ export default function NewsScreen() {
           <ThemedView
             key={item.id}
             style={[styles.newsCard, item.affects_f1 ? styles.relevantCard : styles.generalCard]}>
+            {item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.newsImage} />
+            ) : null}
             <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
             <ThemedText style={item.affects_f1 ? styles.tagDirect : styles.tagGeneral}>
               {item.tag}
@@ -72,6 +75,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     padding: 16,
     borderRadius: 20,
+  },
+  newsImage: {
+    width: '100%',
+    height: 160,
+    borderRadius: 12,
+    marginBottom: 4,
   },
   relevantCard: { backgroundColor: '#F0EEFF' },
   generalCard: { backgroundColor: '#F5F5F7' },
