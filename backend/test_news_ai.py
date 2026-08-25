@@ -9,18 +9,45 @@ login_response = requests.post(f"{BASE_URL}/login", json={
     "email": TEST_EMAIL,
     "password": TEST_PASSWORD
 })
-print(f"Login response: {login_response.json()}")
 token = login_response.json().get("access_token")
+print("Login successful")
 
-if token:
-    response = requests.post(f"{BASE_URL}/chat",
-        headers={"authorization": f"Bearer {token}"},
-        json={"question": "What should I be focused on right now given where I am in my program?"}
-    )
-    print(f"\nTest 1:\n{response.json().get('answer', response.json().get('detail'))}")
+# Test 1 — chat with memory
+print("\nTest 1 — First message:")
+r1 = requests.post(f"{BASE_URL}/chat",
+    headers={"authorization": f"Bearer {token}"},
+    json={"question": "What should I know about CPT as a Computer Science student?"}
+)
+print(r1.json().get("answer", r1.json().get("detail")))
 
-    response2 = requests.post(f"{BASE_URL}/chat",
-        headers={"authorization": f"Bearer {token}"},
-        json={"question": "Do I need a social security number and a bank account?"}
-    )
-    print(f"\nTest 2:\n{response2.json().get('answer', response2.json().get('detail'))}")
+# Test 2 — follow up question to test memory
+print("\nTest 2 — Follow up (AI should remember CPT context):")
+r2 = requests.post(f"{BASE_URL}/chat",
+    headers={"authorization": f"Bearer {token}"},
+    json={"question": "How many months can I use before I lose OPT eligibility?"}
+)
+print(r2.json().get("answer", r2.json().get("detail")))
+
+# Test 3 — fetch chat history
+print("\nTest 3 — Chat history:")
+r3 = requests.get(f"{BASE_URL}/chat/history",
+    headers={"authorization": f"Bearer {token}"}
+)
+data = r3.json()
+print(f"Messages saved: {data.get('count')}")
+for msg in data.get("messages", []):
+    print(f"  [{msg['role']}]: {msg['content'][:80]}...")
+
+# Test 4 — clear history
+print("\nTest 4 — Clear chat history:")
+r4 = requests.delete(f"{BASE_URL}/chat/history",
+    headers={"authorization": f"Bearer {token}"}
+)
+print(r4.json().get("message"))
+
+# Test 5 — confirm history is empty
+print("\nTest 5 — Confirm history cleared:")
+r5 = requests.get(f"{BASE_URL}/chat/history",
+    headers={"authorization": f"Bearer {token}"}
+)
+print(f"Messages after clear: {r5.json().get('count')}")
