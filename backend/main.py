@@ -774,6 +774,7 @@ class SignupRequest(BaseModel):
     has_ssn: Optional[bool] = False
     has_bank_account: Optional[bool] = False
     cpt_months_used: Optional[int] = 0
+    referral_code: Optional[str] = None
 
     @validator('password')
     def password_must_be_strong(cls, v):
@@ -917,6 +918,9 @@ class BookmarkRequest(BaseModel):
     news_tag: Optional[str] = None
     news_image_url: Optional[str] = None
 
+class ReferralRequest(BaseModel):
+    referred_email: EmailStr
+
 @app.on_event("startup")
 async def startup_event():
     scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
@@ -958,7 +962,8 @@ def signup(request: Request, data: SignupRequest):
             "major": data.major,
             "has_ssn": data.has_ssn,
             "has_bank_account": data.has_bank_account,
-            "cpt_months_used": data.cpt_months_used
+            "cpt_months_used": data.cpt_months_used,
+            "referred_by": data.referral_code.upper() if data.referral_code else None
         }).execute()
 
         for doc in DEFAULT_DOCUMENTS:
@@ -968,6 +973,13 @@ def signup(request: Request, data: SignupRequest):
                 "category": doc["category"],
                 "collected": False
             }).execute()
+
+        if data.referral_code:
+            supabase_admin.table("referrals").update({
+                "referred_user_id": auth_user_id,
+                "status": "completed",
+                "completed_at": datetime.now().isoformat()
+            }).eq("referral_code", data.referral_code.upper()).eq("status", "pending").execute()
 
         log_security_event("SIGNUP_SUCCESS", f"New user registered at {data.school}", correlation_id)
         return {"message": f"Account created successfully. Welcome to Arriv0, {data.name}."}
@@ -1147,17 +1159,10 @@ def get_dso_directory(request: Request, authorization: Optional[str] = Header(No
 def search_dso(request: Request, school: str, authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
     verify_token(authorization, correlation_id)
-
     school_lower = school.lower().strip()
     matches = [s for s in DSO_DIRECTORY if school_lower in s["school"].lower()]
-
     if matches:
-        return {
-            "found": True,
-            "results": matches,
-            "count": len(matches)
-        }
-
+        return {"found": True, "results": matches, "count": len(matches)}
     return {
         "found": False,
         "results": [],
@@ -1451,7 +1456,6 @@ async def trigger_news_fetch(request: Request, background_tasks: BackgroundTasks
 @app.get("/onboarding-score")
 @limiter.limit("30/minute")
 def get_onboarding_score(request: Request, authorization: Optional[str] = Header(None)):
-    """Calculate how set up the student is based on their profile and documents"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
@@ -1542,6 +1546,118 @@ def get_onboarding_score(request: Request, authorization: Optional[str] = Header
         "next_step": next_step,
         "items": items
     }
+
+@app.post("/referral/generate")
+@limiter.limit("5/minute")
+def generate_referral_code(request: Request, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        profile = get_profile_from_db(user_id, correlation_id)
+        if profile.get("referral_code"):
+            return {
+                "referral_code": profile["referral_code"],
+                "message": "Your referral code is ready to share.",
+                "share_message": f"Join me on Arriv0 — the AI guide for F1 students. Use my code {profile['referral_code']} when signing up at arriv0.com"
+            }
+        code = str(uuid.uuid4())[:8].upper()
+        supabase_admin.table("users").update({"referral_code": code}).eq("id", user_id).execute()
+        return {
+            "referral_code": code,
+            "message": "Your referral code has been created.",
+            "share_message": f"Join me on Arriv0 — the AI guide for F1 students. Use my code {code} when signing up at arriv0.com"
+        }
+    except Exception as e:
+        logger.error(f"Referral code generation error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to generate referral code.")
+
+@app.post("/referral/invite")
+@limiter.limit("10/minute")
+def send_referral_invite(request: Request, data: ReferralRequest, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        profile = get_profile_from_db(user_id, correlation_id)
+        if not profile.get("referral_code"):
+            code = str(uuid.uuid4())[:8].upper()
+            supabase_admin.table("users").update({"referral_code": code}).eq("id", user_id).execute()
+        else:
+            code = profile["referral_code"]
+
+        existing = supabase_admin.table("referrals").select("id").eq("referrer_id", user_id).eq("referred_email", data.referred_email).execute()
+        if existing.data:
+            return {"message": "You have already invited this person.", "already_invited": True}
+
+        supabase_admin.table("referrals").insert({
+            "referrer_id": user_id,
+            "referred_email": data.referred_email,
+            "referral_code": code,
+            "status": "pending"
+        }).execute()
+
+        return {
+            "message": f"Invite recorded for {data.referred_email}.",
+            "already_invited": False,
+            "referral_code": code,
+            "share_message": f"Hey! I use Arriv0 to navigate my F1 visa journey. It tracks OPT deadlines, gives AI immigration advice, and sends personalized alerts. Use my code {code} when you sign up at arriv0.com"
+        }
+    except Exception as e:
+        logger.error(f"Referral invite error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to record referral invite.")
+
+@app.get("/referral/stats")
+@limiter.limit("30/minute")
+def get_referral_stats(request: Request, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        profile = get_profile_from_db(user_id, correlation_id)
+        referrals = supabase_admin.table("referrals").select("*").eq("referrer_id", user_id).execute()
+        refs = referrals.data or []
+        pending = [r for r in refs if r["status"] == "pending"]
+        completed = [r for r in refs if r["status"] == "completed"]
+        return {
+            "referral_code": profile.get("referral_code"),
+            "total_invites": len(refs),
+            "pending": len(pending),
+            "completed": len(completed),
+            "invites": refs,
+            "share_message": f"Join me on Arriv0 — the AI guide for F1 students. Use my code {profile.get('referral_code', '')} when signing up at arriv0.com" if profile.get("referral_code") else None
+        }
+    except Exception as e:
+        logger.error(f"Referral stats error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to fetch referral stats.")
+
+@app.post("/referral/verify")
+@limiter.limit("5/minute")
+def verify_referral_code(request: Request, code: str, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        referrer = supabase_admin.table("users").select("id, name, referral_code").eq("referral_code", code.upper()).execute()
+        if not referrer.data:
+            return {"valid": False, "message": "Invalid referral code."}
+        referrer_data = referrer.data[0]
+        if referrer_data["id"] == user_id:
+            return {"valid": False, "message": "You cannot use your own referral code."}
+        supabase_admin.table("users").update({"referred_by": code.upper()}).eq("id", user_id).execute()
+        supabase_admin.table("referrals").update({
+            "referred_user_id": user_id,
+            "status": "completed",
+            "completed_at": datetime.now().isoformat()
+        }).eq("referral_code", code.upper()).eq("status", "pending").execute()
+        return {
+            "valid": True,
+            "message": f"Referral code verified. You were invited by {referrer_data['name']}.",
+            "referred_by": referrer_data["name"]
+        }
+    except Exception as e:
+        logger.error(f"Referral verify error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to verify referral code.")
 
 @app.post("/save-token")
 @limiter.limit("10/minute")
