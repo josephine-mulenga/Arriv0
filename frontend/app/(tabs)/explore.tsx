@@ -8,24 +8,20 @@ import { ThemedView } from '@/components/themed-view';
 import { GradientHeaderBackground } from '@/components/gradient-header-background';
 
 export default function TimelineScreen() {
-  const yearLevelMap = { Freshman: 1, Sophomore: 2, Junior: 3, Senior: 4 };
-  const [activeTab, setActiveTab] = useState('Freshman');
   const { token } = useAuth();
   const [timelineData, setTimelineData] = useState(null);
 
   useEffect(() => {
     const fetchTimeline = async () => {
       try {
-        const data = await getTimeline(yearLevelMap[activeTab], token);
+        const data = await getTimeline(token);
         setTimelineData(data);
       } catch (err) {
         console.log('Error fetching timeline:', err.message);
       }
     };
     if (token) fetchTimeline();
-  }, [activeTab, token]);
-
-  const tabs = ['Freshman', 'Sophomore', 'Junior', 'Senior'];
+  }, [token]);
 
   return (
     <ParallaxScrollView
@@ -35,36 +31,57 @@ export default function TimelineScreen() {
         <ThemedText style={styles.screenTitle}>Timeline</ThemedText>
       </ThemedView>
 
-      <ThemedView style={styles.tabRow}>
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => setActiveTab(tab)}
-            style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}>
-            <ThemedText style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</ThemedText>
-          </TouchableOpacity>
-        ))}
-      </ThemedView>
+      {timelineData ? (
+        <>
+          <ThemedView style={styles.yearBadge}>
+            <ThemedText style={styles.yearBadgeText}>You're a {timelineData.year}</ThemedText>
+          </ThemedView>
 
-      <ThemedView style={styles.checklistContainer}>
-        <ThemedText style={styles.sectionTitle}>{activeTab} Checklist</ThemedText>
-        {timelineData && <ThemedText style={styles.statusMessage}>{timelineData.status}</ThemedText>}
+          {(timelineData.opt_window_start || timelineData.opt_window_end || timelineData.grace_period_end) && (
+            <ThemedView style={styles.optBanner}>
+              {timelineData.opt_window_start && (
+                <ThemedText style={styles.optBannerText}>
+                  OPT window opens: {timelineData.opt_window_start}
+                </ThemedText>
+              )}
+              {timelineData.opt_window_end && (
+                <ThemedText style={styles.optBannerText}>
+                  OPT application deadline: {timelineData.opt_window_end}
+                </ThemedText>
+              )}
+              {timelineData.grace_period_end && (
+                <ThemedText style={styles.optBannerText}>
+                  Grace period ends: {timelineData.grace_period_end}
+                </ThemedText>
+              )}
+            </ThemedView>
+          )}
 
-        {timelineData ? (
-          timelineData.steps.map((step, index) => (
-            <TouchableOpacity
-              key={index}
-              disabled={!step.link}
-              onPress={() => step.link && Linking.openURL(step.link)}>
-              <ThemedText style={step.done ? styles.stepDone : styles.stepPending}>
-                {step.done ? '✅' : '⬜'} {step.task}
-              </ThemedText>
-            </TouchableOpacity>
-          ))
-        ) : (
-          <ThemedText>Loading...</ThemedText>
-        )}
-      </ThemedView>
+          <ThemedView style={styles.checklistContainer}>
+            <ThemedText style={styles.sectionTitle}>Your Checklist</ThemedText>
+            {timelineData.status && (
+              <ThemedText style={styles.statusMessage}>{timelineData.status}</ThemedText>
+            )}
+
+            {timelineData.steps.map((step, index) => (
+              <TouchableOpacity
+                key={index}
+                disabled={!step.link}
+                onPress={() => step.link && Linking.openURL(step.link)}
+                style={styles.stepRow}>
+                <ThemedText style={step.done ? styles.stepDone : styles.stepPending}>
+                  {step.done ? '✅' : '⬜'} {step.task}
+                </ThemedText>
+                {step.date_range && (
+                  <ThemedText style={styles.dateRangeText}>{step.date_range}</ThemedText>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ThemedView>
+        </>
+      ) : (
+        <ThemedText style={{ paddingHorizontal: 16 }}>Loading...</ThemedText>
+      )}
     </ParallaxScrollView>
   );
 }
@@ -81,27 +98,32 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_700Bold',
     color: '#1A1A2E',
   },
-  tabRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    gap: 8,
-  },
-  tabButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: '#F0EEFF',
-  },
-  tabButtonActive: {
+  yearBadge: {
+    alignSelf: 'flex-start',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     backgroundColor: '#6C63FF',
   },
-  tabText: {
+  yearBadgeText: {
+    color: '#FFFFFF',
     fontFamily: 'Fredoka_600SemiBold',
     fontSize: 13,
   },
-  tabTextActive: {
-    color: '#FFFFFF',
+  optBanner: {
+    gap: 4,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFF4E5',
+  },
+  optBannerText: {
+    fontSize: 13,
+    color: '#8A5A00',
+    fontFamily: 'Fredoka_600SemiBold',
   },
   checklistContainer: {
     gap: 8,
@@ -118,12 +140,19 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: 8,
   },
+  stepRow: {
+    marginBottom: 10,
+  },
   stepDone: {
     color: '#4CAF50',
-    marginBottom: 4,
   },
   stepPending: {
     color: '#6C63FF',
-    marginBottom: 4,
+  },
+  dateRangeText: {
+    fontSize: 12,
+    color: '#888',
+    marginLeft: 22,
+    marginTop: 2,
   },
 });
