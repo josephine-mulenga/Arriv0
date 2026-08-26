@@ -174,7 +174,6 @@ DSO_DIRECTORY = [
     {"school": "Spelman College", "city": "Atlanta, GA", "dso_office": "Office of International Affairs", "email": "international@spelman.edu", "phone": "+1 (404) 270-5000", "website": "https://www.spelman.edu", "hbcu": True},
     {"school": "Morehouse College", "city": "Atlanta, GA", "dso_office": "Office of International Programs", "email": "international@morehouse.edu", "phone": "+1 (404) 681-2800", "website": "https://www.morehouse.edu", "hbcu": True},
     {"school": "Florida A&M University", "city": "Tallahassee, FL", "dso_office": "Office of International Education and Development", "email": "oied@famu.edu", "phone": "+1 (850) 599-3820", "website": "https://www.famu.edu", "hbcu": True},
-    {"school": "Spelman College", "city": "Atlanta, GA", "dso_office": "Office of International Affairs", "email": "international@spelman.edu", "phone": "+1 (404) 270-5000", "website": "https://www.spelman.edu", "hbcu": True},
     {"school": "North Carolina A&T State University", "city": "Greensboro, NC", "dso_office": "International Student and Scholar Services", "email": "isss@ncat.edu", "phone": "+1 (336) 334-7928", "website": "https://www.ncat.edu", "hbcu": True},
     {"school": "Hampton University", "city": "Hampton, VA", "dso_office": "International Student Services", "email": "international@hamptonu.edu", "phone": "+1 (757) 727-5000", "website": "https://www.hamptonu.edu", "hbcu": True},
     {"school": "Tuskegee University", "city": "Tuskegee, AL", "dso_office": "International Student Services", "email": "international@tuskegee.edu", "phone": "+1 (334) 727-8011", "website": "https://www.tuskegee.edu", "hbcu": True},
@@ -1098,10 +1097,7 @@ def update_user_profile(request: Request, user_id: str, data: UpdateProfileReque
 
         if data.email:
             try:
-                supabase_admin.auth.admin.update_user_by_id(
-                    user_id,
-                    {"email": data.email}
-                )
+                supabase_admin.auth.admin.update_user_by_id(user_id, {"email": data.email})
                 log_security_event("EMAIL_UPDATED", f"Email updated for user {user_id[:8]}***", correlation_id)
             except Exception as e:
                 logger.error(f"Email update error: {type(e).__name__} correlation_id={correlation_id}")
@@ -1296,6 +1292,75 @@ def delete_bookmark(request: Request, bookmark_id: str, authorization: Optional[
         logger.error(f"Bookmark delete error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to remove bookmark.")
 
+@app.get("/news/search")
+@limiter.limit("20/minute")
+def search_news(request: Request, q: str, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
+    try:
+        response = supabase_admin.table("news").select("*").or_(
+            f"title.ilike.%{q}%,body.ilike.%{q}%"
+        ).order("created_at", desc=True).limit(20).execute()
+        return {
+            "news": response.data or [],
+            "count": len(response.data or []),
+            "query": q
+        }
+    except Exception as e:
+        logger.error(f"News search error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to search news.")
+
+@app.get("/news")
+@limiter.limit("30/minute")
+def get_news(request: Request, authorization: Optional[str] = Header(None), page: int = 1, tag: Optional[str] = None):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
+    try:
+        limit = 10
+        offset = (page - 1) * limit
+        query = supabase_admin.table("news").select("*", count="exact").order("created_at", desc=True)
+        if tag and tag != "All":
+            query = query.eq("tag", tag)
+        response = query.range(offset, offset + limit - 1).execute()
+        total = response.count or 0
+        total_pages = -(-total // limit)
+        if response.data:
+            return {
+                "news": response.data,
+                "updated": response.data[0]["created_at"][:10],
+                "page": page,
+                "total": total,
+                "total_pages": total_pages,
+                "has_more": page < total_pages
+            }
+    except Exception as e:
+        logger.error(f"News fetch error: {type(e).__name__} correlation_id={correlation_id}")
+
+    today_str = date.today().strftime("%B %d %Y")
+    news = [
+        {"title": "USCIS OPT processing times now 3 to 4 months", "body": "New data shows average processing has increased. Submit your application on the first day your window opens to avoid gaps in work authorization.", "affects_f1": True, "tag": "OPT", "link": "https://www.uscis.gov/tools/processing-times", "image_url": ""},
+        {"title": "STEM OPT extension rules remain unchanged", "body": "Computer Science and Cybersecurity both qualify. You are eligible for 24 additional months of work authorization after standard OPT.", "affects_f1": True, "tag": "STEM OPT", "link": "https://www.ice.gov/sevis/stemlist", "image_url": ""},
+        {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": True, "tag": "F1 Visa", "link": None, "image_url": ""},
+        {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "OPT", "link": "https://www.uscis.gov/i-765", "image_url": ""}
+    ]
+    return {"news": news, "updated": today_str, "page": 1, "total": 4, "total_pages": 1, "has_more": False}
+
+@app.get("/news/{news_id}")
+@limiter.limit("30/minute")
+def get_single_news(request: Request, news_id: str, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
+    try:
+        response = supabase_admin.table("news").select("*").eq("id", news_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Article not found.")
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Single news fetch error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to fetch article.")
+
 @app.get("/timeline")
 @limiter.limit("30/minute")
 def get_timeline(request: Request, authorization: Optional[str] = Header(None)):
@@ -1329,27 +1394,6 @@ def get_status(request: Request, authorization: Optional[str] = Header(None)):
         return {"status": "urgent", "color": "red", "message": f"Urgent. Your OPT window is open and closes in {opt_window_opens} days. Apply now.", "action_needed": True, "action": "Start Form I-765 immediately", "link": "https://www.uscis.gov/i-765", "program_progress": progress}
     else:
         return {"status": "critical", "color": "red", "message": "Your OPT window may have closed. Contact your DSO immediately.", "action_needed": True, "action": "Contact DSO now", "program_progress": progress}
-
-@app.get("/news")
-@limiter.limit("30/minute")
-def get_news(request: Request, authorization: Optional[str] = Header(None)):
-    correlation_id = getattr(request.state, "correlation_id", None)
-    verify_token(authorization, correlation_id)
-    try:
-        response = supabase_admin.table("news").select("*").order("created_at", desc=True).limit(10).execute()
-        if response.data:
-            return {"news": response.data, "updated": response.data[0]["created_at"][:10]}
-    except Exception as e:
-        logger.error(f"News fetch error: {type(e).__name__} correlation_id={correlation_id}")
-
-    today_str = date.today().strftime("%B %d %Y")
-    news = [
-        {"title": "USCIS OPT processing times now 3 to 4 months", "body": "New data shows average processing has increased. Submit your application on the first day your window opens to avoid gaps in work authorization.", "affects_f1": True, "tag": "OPT", "link": "https://www.uscis.gov/tools/processing-times", "image_url": ""},
-        {"title": "STEM OPT extension rules remain unchanged", "body": "Computer Science and Cybersecurity both qualify. You are eligible for 24 additional months of work authorization after standard OPT.", "affects_f1": True, "tag": "STEM OPT", "link": "https://www.ice.gov/sevis/stemlist", "image_url": ""},
-        {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": True, "tag": "F1 Visa", "link": None, "image_url": ""},
-        {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "OPT", "link": "https://www.uscis.gov/i-765", "image_url": ""}
-    ]
-    return {"news": news, "updated": today_str}
 
 @app.get("/milestones")
 @limiter.limit("30/minute")
