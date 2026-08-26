@@ -209,3 +209,30 @@ export const getOnboardingScore = async (token) => {
   });
   return handleResponse(response);
 };
+
+export const forceFetchNews = async (token) => {
+  const response = await fetch(`${BASE_URL}/fetch-news`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const getDocuments = async (token) => {
+  const response = await fetch(`${BASE_URL}/documents`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const updateDocument = async (documentId, collected, notes, token) => {
+  const response = await fetch(`${BASE_URL}/documents/${documentId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ collected, notes })
+  });
+  return handleResponse(response);
+};
