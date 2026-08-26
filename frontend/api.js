@@ -1,4 +1,5 @@
 import { triggerLogout } from './authEvents';
+import { supabase } from './supabase';
 
 const BASE_URL = 'https://arriv0-production.up.railway.app';
 
@@ -249,4 +250,19 @@ export const searchDso = async (school, token) => {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return handleResponse(response);
+};
+
+export const uploadAvatar = async (userId, imageUri) => {
+  const response = await fetch(imageUri);
+  const blob = await response.blob();
+  const fileExt = imageUri.split('.').pop();
+  const filePath = `${userId}/avatar.${fileExt}`;
+  const { error } = await supabase.storage
+    .from('Avatar')
+    .upload(filePath, blob, { upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage
+    .from('Avatar')
+    .getPublicUrl(filePath);
+  return data.publicUrl;
 };

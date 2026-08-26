@@ -1,4 +1,4 @@
-import { StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { StyleSheet, Image, TouchableOpacity, Linking } from 'react-native';
 import { useEffect, useState } from 'react';
 import { getNews, addBookmark, getBookmarks, deleteBookmark } from '@/api';
 import { useAuth } from '@/AuthContext';
@@ -61,6 +61,12 @@ export default function NewsScreen() {
     }
   };
 
+  const handleOpenArticle = (item) => {
+    if (item.link) {
+      Linking.openURL(item.link);
+    }
+  };
+
   const allNews = realNewsItems ? realNewsItems.news : [];
 
   const filteredNews =
@@ -94,27 +100,36 @@ export default function NewsScreen() {
       {realNewsItems ? (
         filteredNews.length > 0 ? (
           filteredNews.map((item) => (
-            <ThemedView
+            <TouchableOpacity
               key={item.id}
-              style={[styles.newsCard, item.affects_f1 ? styles.relevantCard : styles.generalCard]}>
-              {item.image_url ? (
-                <Image source={{ uri: item.image_url }} style={styles.newsImage} />
-              ) : null}
+              activeOpacity={item.link ? 0.7 : 1}
+              onPress={() => handleOpenArticle(item)}
+              disabled={!item.link}>
+              <ThemedView
+                style={[styles.newsCard, item.affects_f1 ? styles.relevantCard : styles.generalCard]}>
+                {item.image_url ? (
+                  <Image source={{ uri: item.image_url }} style={styles.newsImage} />
+                ) : null}
 
-              <ThemedView style={styles.cardHeaderRow}>
-                <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-                <TouchableOpacity onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
-                  <ThemedText style={styles.bookmarkIcon}>
-                    {isBookmarked(item) ? '🔖' : '📑'}
-                  </ThemedText>
-                </TouchableOpacity>
+                <ThemedView style={styles.cardHeaderRow}>
+                  <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
+                  <TouchableOpacity onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
+                    <ThemedText style={styles.bookmarkIcon}>
+                      {isBookmarked(item) ? '🔖' : '📑'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                </ThemedView>
+
+                <ThemedText style={item.affects_f1 ? styles.tagDirect : styles.tagGeneral}>
+                  {item.tag}
+                </ThemedText>
+                <ThemedText>{item.body}</ThemedText>
+
+                {item.link && (
+                  <ThemedText style={styles.readMoreText}>Read full article →</ThemedText>
+                )}
               </ThemedView>
-
-              <ThemedText style={item.affects_f1 ? styles.tagDirect : styles.tagGeneral}>
-                {item.tag}
-              </ThemedText>
-              <ThemedText>{item.body}</ThemedText>
-            </ThemedView>
+            </TouchableOpacity>
           ))
         ) : (
           <ThemedText style={{ paddingHorizontal: 16 }}>
@@ -199,4 +214,10 @@ const styles = StyleSheet.create({
   generalCard: { backgroundColor: '#F5F5F7' },
   tagDirect: { color: '#6C63FF', fontWeight: '600' },
   tagGeneral: { color: '#888888', fontWeight: '600' },
+  readMoreText: {
+    color: '#6C63FF',
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 13,
+    marginTop: 4,
+  },
 });
