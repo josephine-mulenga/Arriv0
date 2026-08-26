@@ -22,22 +22,25 @@ export default function ChatScreen() {
   const scrollViewRef = useRef(null);
 
   useEffect(() => {
-    const loadHistory = async () => {
-      try {
-        const data = await getChatHistory(token);
-        const historyMessages = Array.isArray(data) ? data : data.messages || [];
-        if (historyMessages.length > 0) {
-          setMessages(historyMessages);
-          console.log('History sample:', JSON.stringify(historyMessages[0]));
-        }
-      } catch (err) {
-        console.log('Error loading chat history:', err.message);
-      } finally {
-        setHistoryLoading(false);
+  const loadHistory = async () => {
+    try {
+      const data = await getChatHistory(token);
+      const rawHistory = Array.isArray(data) ? data : data.messages || [];
+      const historyMessages = rawHistory.map((msg) => ({
+        role: msg.role,
+        text: msg.content,
+      }));
+      if (historyMessages.length > 0) {
+        setMessages(historyMessages);
       }
-    };
-    if (token) loadHistory();
-  }, [token]);
+    } catch (err) {
+      console.log('Error loading chat history:', err.message);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+  if (token) loadHistory();
+}, [token]);
 
   const handleSend = async () => {
     if (!question.trim()) return;
