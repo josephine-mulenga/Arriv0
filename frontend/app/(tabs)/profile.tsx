@@ -101,6 +101,18 @@ export default function ProfileScreen() {
 
       <TouchableOpacity
         style={styles.settingsButton}
+        onPress={() => router.push('/documents')}>
+        <ThemedText style={styles.settingsButtonText}>📄 Documents</ThemedText>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.settingsButton}
+        onPress={() => router.push('/dso-directory')}>
+        <ThemedText style={styles.settingsButtonText}>🏫 DSO Directory</ThemedText>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.settingsButton}
         onPress={() => router.push('/notification-settings')}>
         <ThemedText style={styles.settingsButtonText}>⚙️ Notification Settings</ThemedText>
       </TouchableOpacity>

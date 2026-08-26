@@ -236,3 +236,17 @@ export const updateDocument = async (documentId, collected, notes, token) => {
   });
   return handleResponse(response);
 };
+
+export const getDsoDirectory = async (token) => {
+  const response = await fetch(`${BASE_URL}/dso-directory`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const searchDso = async (school, token) => {
+  const response = await fetch(`${BASE_URL}/dso-search?school=${encodeURIComponent(school)}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
