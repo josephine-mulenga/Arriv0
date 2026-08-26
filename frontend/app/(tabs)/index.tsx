@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, TouchableOpacity } from 'react-native';
-import { getAIStatus, getUserProfile, getStatus } from '@/api';
+import { getAIStatus, getUserProfile, getStatus, getOnboardingScore } from '@/api';
 import { useAuth } from '@/AuthContext';
 import Svg, { Circle, Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { router } from 'expo-router';
@@ -22,6 +22,7 @@ export default function HomeScreen() {
   const [statusData, setStatusData] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [progressData, setProgressData] = useState(null);
+  const [onboardingData, setOnboardingData] = useState(null);
 
   const glow = useSharedValue(0);
 
@@ -65,10 +66,20 @@ export default function HomeScreen() {
       }
     };
 
+    const fetchOnboarding = async () => {
+      try {
+        const data = await getOnboardingScore(token);
+        setOnboardingData(data);
+      } catch (err) {
+        console.log('Error fetching onboarding score:', err.message);
+      }
+    };
+
     if (token && user) {
       fetchStatus();
       fetchProfile();
       fetchProgress();
+      fetchOnboarding();
     }
   }, [token, user]);
 
@@ -135,6 +146,40 @@ export default function HomeScreen() {
         </View>
       </ThemedView>
 
+      {onboardingData && (
+        <ThemedView style={styles.onboardingCard}>
+          <ThemedView style={styles.onboardingHeaderRow}>
+            <ThemedText style={styles.sectionTitle}>Your Progress</ThemedText>
+            <ThemedView
+              style={[
+                styles.levelBadge,
+                { backgroundColor: onboardingData.level_color || '#6C63FF' },
+              ]}>
+              <ThemedText style={styles.levelBadgeText}>{onboardingData.level}</ThemedText>
+            </ThemedView>
+          </ThemedView>
+
+          <ThemedView style={styles.progressBarTrack}>
+            <ThemedView
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${onboardingData.score}%`,
+                  backgroundColor: onboardingData.level_color || '#6C63FF',
+                },
+              ]}
+            />
+          </ThemedView>
+          <ThemedText style={styles.scoreText}>{onboardingData.score}% complete</ThemedText>
+
+          {onboardingData.next_step && (
+            <ThemedText style={styles.nextStepText}>
+              Next step: {onboardingData.next_step}
+            </ThemedText>
+          )}
+        </ThemedView>
+      )}
+
       <TouchableOpacity style={styles.chatButton} onPress={() => router.push('/chat')}>
         <ThemedText style={styles.chatButtonText}>💬 Ask Arrivo a question</ThemedText>
       </TouchableOpacity>
@@ -189,6 +234,50 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0EEFF',
     borderRadius: 20,
     marginHorizontal: 16,
+  },
+  onboardingCard: {
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 24,
+    padding: 16,
+    backgroundColor: '#F0EEFF',
+    borderRadius: 20,
+  },
+  onboardingHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  levelBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  levelBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Fredoka_600SemiBold',
+  },
+  progressBarTrack: {
+    height: 10,
+    backgroundColor: '#E0DDF5',
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: 10,
+    borderRadius: 5,
+  },
+  scoreText: {
+    fontSize: 13,
+    color: '#4A4A6A',
+  },
+  nextStepText: {
+    fontSize: 14,
+    fontFamily: 'Fredoka_600SemiBold',
+    color: '#6C63FF',
+    marginTop: 4,
   },
   chatButton: {
     backgroundColor: '#6C63FF',

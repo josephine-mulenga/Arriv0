@@ -1,6 +1,7 @@
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useState, useCallback } from 'react';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { getUserProfile } from '@/api';
 import { useAuth } from '@/AuthContext';
@@ -28,20 +29,22 @@ export default function ProfileScreen() {
   const { user, token, logout } = useAuth();
   const [profileData, setProfileData] = useState(null);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const data = await getUserProfile(user.id, token);
-        setProfileData(data);
-      } catch (err) {
-        console.log('Error fetching profile:', err.message);
-      }
-    };
+  useFocusEffect(
+    useCallback(() => {
+      const fetchProfile = async () => {
+        try {
+          const data = await getUserProfile(user.id, token);
+          setProfileData(data);
+        } catch (err) {
+          console.log('Error fetching profile:', err.message);
+        }
+      };
 
-    if (token && user) {
-      fetchProfile();
-    }
-  }, [token, user]);
+      if (token && user) {
+        fetchProfile();
+      }
+    }, [token, user])
+  );
 
   const handleLogout = async () => {
     await logout();
