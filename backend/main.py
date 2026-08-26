@@ -211,7 +211,7 @@ def classify_news(title: str, summary: str) -> tuple:
     content = (title + " " + summary).lower()
     if any(kw in content for kw in ["stem opt", "stem extension", "stem degree", "24 month"]):
         return True, "STEM OPT"
-    elif any(kw in content for kw in ["opt ", "optional practical training", "i-765", "ead card", "work authorization", "post-completion"]):
+    elif any(kw in content for kw in ["opt ", "optional practical training", "i-765", "ead card", "post-completion opt", "opt eligibility", "opt application"]):
         return True, "OPT"
     elif any(kw in content for kw in ["cpt", "curricular practical training", "internship authorization"]):
         return True, "CPT"
