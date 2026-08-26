@@ -174,6 +174,7 @@ DSO_DIRECTORY = [
     {"school": "Spelman College", "city": "Atlanta, GA", "dso_office": "Office of International Affairs", "email": "international@spelman.edu", "phone": "+1 (404) 270-5000", "website": "https://www.spelman.edu", "hbcu": True},
     {"school": "Morehouse College", "city": "Atlanta, GA", "dso_office": "Office of International Programs", "email": "international@morehouse.edu", "phone": "+1 (404) 681-2800", "website": "https://www.morehouse.edu", "hbcu": True},
     {"school": "Florida A&M University", "city": "Tallahassee, FL", "dso_office": "Office of International Education and Development", "email": "oied@famu.edu", "phone": "+1 (850) 599-3820", "website": "https://www.famu.edu", "hbcu": True},
+    {"school": "Spelman College", "city": "Atlanta, GA", "dso_office": "Office of International Affairs", "email": "international@spelman.edu", "phone": "+1 (404) 270-5000", "website": "https://www.spelman.edu", "hbcu": True},
     {"school": "North Carolina A&T State University", "city": "Greensboro, NC", "dso_office": "International Student and Scholar Services", "email": "isss@ncat.edu", "phone": "+1 (336) 334-7928", "website": "https://www.ncat.edu", "hbcu": True},
     {"school": "Hampton University", "city": "Hampton, VA", "dso_office": "International Student Services", "email": "international@hamptonu.edu", "phone": "+1 (757) 727-5000", "website": "https://www.hamptonu.edu", "hbcu": True},
     {"school": "Tuskegee University", "city": "Tuskegee, AL", "dso_office": "International Student Services", "email": "international@tuskegee.edu", "phone": "+1 (334) 727-8011", "website": "https://www.tuskegee.edu", "hbcu": True},
@@ -263,7 +264,6 @@ def save_chat_message(user_id: str, role: str, content: str):
         logger.error(f"Failed to save chat message: {e}")
 
 def log_api_usage(endpoint: str, model: str, user_id: str = None):
-    """Log AI API usage for cost tracking"""
     try:
         supabase_admin.table("api_usage").insert({
             "endpoint": endpoint,
@@ -631,31 +631,46 @@ async def send_opt_countdown_alerts():
 async def fetch_uscis_news():
     try:
         news_items = []
+        queries = [
+            "USCIS OPT optional practical training international student",
+            "F1 visa student immigration SEVIS work authorization",
+            "STEM OPT extension international student employment",
+            "CPT curricular practical training F1 student",
+        ]
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                "https://newsapi.org/v2/everything",
-                params={
-                    "q": "(USCIS OR \"F1 visa\" OR \"OPT\" OR \"SEVIS\" OR \"international student\" OR \"work authorization\" OR \"student visa\") AND (immigration OR visa OR student)",
-                    "language": "en",
-                    "sortBy": "publishedAt",
-                    "pageSize": 5,
-                    "apiKey": NEWS_API_KEY
-                },
-                headers={"User-Agent": "Arriv0/1.0"}
-            )
-            if response.status_code == 200:
-                articles = response.json().get("articles", [])
-                for article in articles:
-                    news_items.append({
-                        "title": article.get("title", "")[:200],
-                        "link": article.get("url", ""),
-                        "summary": article.get("description", "")[:500] or article.get("content", "")[:500],
-                        "image_url": article.get("urlToImage", "") or ""
-                    })
-                logger.info(f"Fetched {len(news_items)} news items from NewsAPI")
-            else:
-                logger.error(f"NewsAPI error: {response.status_code}")
-        return news_items[:5]
+            for query in queries:
+                response = await client.get(
+                    "https://newsapi.org/v2/everything",
+                    params={
+                        "q": query,
+                        "language": "en",
+                        "sortBy": "publishedAt",
+                        "pageSize": 3,
+                        "apiKey": NEWS_API_KEY
+                    },
+                    headers={"User-Agent": "Arriv0/1.0"}
+                )
+                if response.status_code == 200:
+                    articles = response.json().get("articles", [])
+                    for article in articles:
+                        title = article.get("title", "")
+                        if any(kw in title.lower() for kw in ["opt", "cpt", "f-1", "f1", "sevis", "uscis", "visa", "immigration", "international student", "work authorization"]):
+                            news_items.append({
+                                "title": title[:200],
+                                "link": article.get("url", ""),
+                                "summary": article.get("description", "")[:500] or article.get("content", "")[:500],
+                                "image_url": article.get("urlToImage", "") or ""
+                            })
+                else:
+                    logger.error(f"NewsAPI error: {response.status_code}")
+        seen = set()
+        unique_items = []
+        for item in news_items:
+            if item["title"] not in seen:
+                seen.add(item["title"])
+                unique_items.append(item)
+        logger.info(f"Fetched {len(unique_items)} relevant news items")
+        return unique_items[:5]
     except httpx.TimeoutException:
         logger.error("NewsAPI request timed out after 10 seconds")
         return []
@@ -748,14 +763,15 @@ async def process_and_notify():
             "tag": tag,
             "image_url": item.get("image_url", "")
         })
-        supabase_admin.table("news").insert({
-            "title": item["title"],
-            "body": summary,
-            "affects_f1": affects_f1,
-            "tag": tag,
-            "link": item["link"],
-            "image_url": item.get("image_url", "")
-        }).execute()
+        if affects_f1:
+            supabase_admin.table("news").insert({
+                "title": item["title"],
+                "body": summary,
+                "affects_f1": affects_f1,
+                "tag": tag,
+                "link": item["link"],
+                "image_url": item.get("image_url", "")
+            }).execute()
 
     users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
     if not users.data:
@@ -1717,7 +1733,6 @@ def verify_referral_code(request: Request, code: str, authorization: Optional[st
 @app.get("/admin/usage")
 @limiter.limit("10/minute")
 def get_usage_stats(request: Request, authorization: Optional[str] = Header(None)):
-    """View API usage stats for cost monitoring"""
     correlation_id = getattr(request.state, "correlation_id", None)
     verify_token(authorization, correlation_id)
     try:
