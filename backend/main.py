@@ -262,6 +262,17 @@ def save_chat_message(user_id: str, role: str, content: str):
     except Exception as e:
         logger.error(f"Failed to save chat message: {e}")
 
+def log_api_usage(endpoint: str, model: str, user_id: str = None):
+    """Log AI API usage for cost tracking"""
+    try:
+        supabase_admin.table("api_usage").insert({
+            "endpoint": endpoint,
+            "model": model,
+            "user_id": user_id
+        }).execute()
+    except Exception as e:
+        logger.error(f"Failed to log API usage: {e}")
+
 def get_document_context(user_id: str) -> str:
     try:
         response = supabase_admin.table("documents").select("name, category, collected, notes").eq("user_id", user_id).execute()
@@ -624,7 +635,7 @@ async def fetch_uscis_news():
             response = await client.get(
                 "https://newsapi.org/v2/everything",
                 params={
-                    "q": "USCIS OR OPT OR F1 visa OR immigration student",
+                    "q": "(USCIS OR \"F1 visa\" OR \"OPT\" OR \"SEVIS\" OR \"international student\" OR \"work authorization\" OR \"student visa\") AND (immigration OR visa OR student)",
                     "language": "en",
                     "sortBy": "publishedAt",
                     "pageSize": 5,
@@ -943,7 +954,6 @@ def home():
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint for Railway and uptime monitoring"""
     try:
         supabase_admin.table("users").select("id").limit(1).execute()
         db_status = "healthy"
@@ -1379,6 +1389,7 @@ Write a short warm personalized morning message. Use the student's specific situ
             temperature=0.9
         )
         message = response.choices[0].message.content
+        log_api_usage("/ai-status", "gpt-4o-mini", user_id)
         return {
             "ai_message": message,
             "days_until_opt": opt_window_opens,
@@ -1452,6 +1463,7 @@ Answer rules:
 
         save_chat_message(user_id, "user", safe_question)
         save_chat_message(user_id, "assistant", answer)
+        log_api_usage("/chat", "gpt-4o", user_id)
 
         return {
             "answer": answer,
@@ -1701,6 +1713,33 @@ def verify_referral_code(request: Request, code: str, authorization: Optional[st
     except Exception as e:
         logger.error(f"Referral verify error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to verify referral code.")
+
+@app.get("/admin/usage")
+@limiter.limit("10/minute")
+def get_usage_stats(request: Request, authorization: Optional[str] = Header(None)):
+    """View API usage stats for cost monitoring"""
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
+    try:
+        response = supabase_admin.table("api_usage").select("endpoint, model, created_at").order("created_at", desc=True).limit(100).execute()
+        records = response.data or []
+        total = len(records)
+        by_model = {}
+        by_endpoint = {}
+        for r in records:
+            model = r["model"]
+            endpoint = r["endpoint"]
+            by_model[model] = by_model.get(model, 0) + 1
+            by_endpoint[endpoint] = by_endpoint.get(endpoint, 0) + 1
+        return {
+            "total_calls_last_100": total,
+            "by_model": by_model,
+            "by_endpoint": by_endpoint,
+            "recent": records[:10]
+        }
+    except Exception as e:
+        logger.error(f"Usage stats error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to fetch usage stats.")
 
 @app.post("/save-token")
 @limiter.limit("10/minute")
