@@ -1,9 +1,10 @@
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, Image, Alert, Modal } from 'react-native';
 import { useState, useCallback } from 'react';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 
-import { getUserProfile } from '@/api';
+import { getUserProfile, uploadAvatar, updateProfile } from '@/api';
 import { useAuth } from '@/AuthContext';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
@@ -17,17 +18,28 @@ function getInitials(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function Avatar({ name }) {
+function Avatar({ name, avatarUrl, uploading, onPress }) {
   return (
-    <View style={styles.avatar}>
-      <ThemedText style={styles.avatarText}>{getInitials(name)}</ThemedText>
-    </View>
+    <TouchableOpacity onPress={onPress} disabled={uploading} style={styles.avatarTouchable}>
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+      ) : (
+        <View style={styles.avatar}>
+          <ThemedText style={styles.avatarText}>{getInitials(name)}</ThemedText>
+        </View>
+      )}
+      <View style={styles.editBadge}>
+        <ThemedText style={styles.editBadgeText}>{uploading ? '...' : '✏️'}</ThemedText>
+      </View>
+    </TouchableOpacity>
   );
 }
 
 export default function ProfileScreen() {
   const { user, token, logout } = useAuth();
   const [profileData, setProfileData] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -51,6 +63,57 @@ export default function ProfileScreen() {
     router.replace('/login');
   };
 
+  const doUpload = async (imageUri) => {
+    setUploading(true);
+    try {
+      const publicUrl = await uploadAvatar(user.id, imageUri);
+      await updateProfile(user.id, { avatar_url: publicUrl }, token);
+      setProfileData((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
+    } catch (err) {
+      console.log('Error uploading avatar:', err.message);
+      Alert.alert('Upload failed', 'Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Permission to access photos is required.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    if (!result.canceled) {
+      doUpload(result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Permission to use the camera is required.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    if (!result.canceled) {
+      doUpload(result.assets[0].uri);
+    }
+  };
+
+  const handleAvatarPress = () => {
+    setPickerVisible(true);
+  };
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
@@ -62,7 +125,12 @@ export default function ProfileScreen() {
       {profileData ? (
         <>
           <ThemedView style={styles.avatarSection}>
-            <Avatar name={profileData.name} />
+            <Avatar
+              name={profileData.name}
+              avatarUrl={profileData.avatar_url}
+              uploading={uploading}
+              onPress={handleAvatarPress}
+            />
             <ThemedText style={styles.avatarName}>{profileData.name}</ThemedText>
           </ThemedView>
 
@@ -120,6 +188,43 @@ export default function ProfileScreen() {
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <ThemedText style={styles.logoutButtonText}>Log Out</ThemedText>
       </TouchableOpacity>
+
+      <Modal
+        visible={pickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerVisible(false)}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setPickerVisible(false)}>
+          <View style={styles.modalContent}>
+            <ThemedText style={styles.modalTitle}>Update photo</ThemedText>
+
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => {
+                setPickerVisible(false);
+                takePhoto();
+              }}>
+              <ThemedText style={styles.modalOptionText}>📷 Take Photo</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => {
+                setPickerVisible(false);
+                pickFromLibrary();
+              }}>
+              <ThemedText style={styles.modalOptionText}>🖼️ Choose from Library</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalOption} onPress={() => setPickerVisible(false)}>
+              <ThemedText style={[styles.modalOptionText, { color: '#D32F2F' }]}>Cancel</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ParallaxScrollView>
   );
 }
@@ -136,6 +241,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     backgroundColor: 'transparent',
   },
+  avatarTouchable: {
+    marginBottom: 8,
+  },
   avatar: {
     width: 72,
     height: 72,
@@ -143,12 +251,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#6C63FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
   },
   avatarText: {
     color: '#FFFFFF',
     fontFamily: 'Fredoka_700Bold',
     fontSize: 24,
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0DDF5',
+  },
+  editBadgeText: {
+    fontSize: 12,
   },
   avatarName: {
     fontFamily: 'Fredoka_600SemiBold',
@@ -207,5 +335,34 @@ const styles = StyleSheet.create({
   logoutButtonText: {
     color: '#D32F2F',
     fontFamily: 'Fredoka_600SemiBold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    paddingBottom: 32,
+  },
+  modalTitle: {
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 12,
+    color: '#888',
+  },
+  modalOption: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EEFF',
+    alignItems: 'center',
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: '#1A1A2E',
   },
 });
