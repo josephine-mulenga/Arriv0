@@ -1,4 +1,4 @@
-import { useState, useRef} from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { router } from 'expo-router';
 
@@ -6,16 +6,38 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { GradientHeaderBackground } from '@/components/gradient-header-background';
 import { useAuth } from '@/AuthContext';
-import { chat } from '@/api';
+import { chat, getChatHistory, clearChatHistory } from '@/api';
+
+const DEFAULT_GREETING = {
+  role: 'assistant',
+  text: "Hi! I'm here to help with anything about your F1 status, OPT, CPT, or navigating life in the US. What's on your mind?",
+};
 
 export default function ChatScreen() {
   const { token } = useAuth();
-  const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Hi! I'm here to help with anything about your F1 status, OPT, CPT, or navigating life in the US. What's on your mind?" },
-  ]);
+  const [messages, setMessages] = useState([DEFAULT_GREETING]);
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const scrollViewRef = useRef(null);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const data = await getChatHistory(token);
+        const historyMessages = Array.isArray(data) ? data : data.messages || [];
+        if (historyMessages.length > 0) {
+          setMessages(historyMessages);
+          console.log('History sample:', JSON.stringify(historyMessages[0]));
+        }
+      } catch (err) {
+        console.log('Error loading chat history:', err.message);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+    if (token) loadHistory();
+  }, [token]);
 
   const handleSend = async () => {
     if (!question.trim()) return;
@@ -36,6 +58,15 @@ export default function ChatScreen() {
     }
   };
 
+  const handleClearHistory = async () => {
+    try {
+      await clearChatHistory(token);
+      setMessages([DEFAULT_GREETING]);
+    } catch (err) {
+      console.log('Error clearing chat history:', err.message);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -50,21 +81,28 @@ export default function ChatScreen() {
           <ThemedText style={styles.backButton}>← Back</ThemedText>
         </TouchableOpacity>
         <ThemedText style={styles.headerTitle}>Ask Arrivo</ThemedText>
+        <TouchableOpacity onPress={handleClearHistory} style={styles.clearButton}>
+          <ThemedText style={styles.clearButtonText}>Clear</ThemedText>
+        </TouchableOpacity>
       </ThemedView>
 
       <ScrollView
         ref={scrollViewRef}
         style={styles.messagesContainer}
         onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}>
-        {messages.map((msg, index) => (
-          <ThemedView
-            key={index}
-            style={[styles.messageBubble, msg.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
-            <ThemedText style={msg.role === 'user' ? styles.userText : styles.assistantText}>
-              {msg.text}
-            </ThemedText>
-          </ThemedView>
-        ))}
+        {historyLoading ? (
+          <ThemedText style={styles.loadingText}>Loading conversation...</ThemedText>
+        ) : (
+          messages.map((msg, index) => (
+            <ThemedView
+              key={index}
+              style={[styles.messageBubble, msg.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
+              <ThemedText style={msg.role === 'user' ? styles.userText : styles.assistantText}>
+                {msg.text}
+              </ThemedText>
+            </ThemedView>
+          ))
+        )}
         {loading && (
           <ThemedView style={[styles.messageBubble, styles.assistantBubble]}>
             <ThemedText style={styles.assistantText}>Typing...</ThemedText>
@@ -95,6 +133,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 16,
     padding: 16,
     paddingTop: 50,
@@ -107,6 +146,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_700Bold',
     fontSize: 22,
     color: '#1A1A2E',
+    flex: 1,
+    textAlign: 'center',
+  },
+  clearButton: {
+    padding: 4,
+  },
+  clearButtonText: {
+    color: '#D32F2F',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  loadingText: {
+    textAlign: 'center',
+    marginTop: 24,
+    color: '#888',
   },
   messagesContainer: {
     flex: 1,

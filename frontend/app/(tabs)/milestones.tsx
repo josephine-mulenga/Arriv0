@@ -14,7 +14,7 @@ export default function MilestonesScreen() {
   useEffect(() => {
     const fetchMilestones = async () => {
       try {
-        const data = await getMilestones(1, token);
+        const data = await getMilestones(token);
         setMilestonesData(data);
       } catch (err) {
         console.log('Error fetching milestones:', err.message);

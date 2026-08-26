@@ -63,12 +63,14 @@ export const getUserProfile = async (userId, token) => {
   return handleResponse(response);
 };
 
-export const getTimeline = async (yearLevel, token) => {
-  const response = await fetch(`${BASE_URL}/timeline/${yearLevel}`, {
+export const getTimeline = async (token) => {
+  const response = await fetch(`${BASE_URL}/timeline`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return handleResponse(response);
 };
+
+
 
 export const getStatus = async (token) => {
   const response = await fetch(`${BASE_URL}/status`, {
@@ -84,8 +86,8 @@ export const getNews = async (token) => {
   return handleResponse(response);
 };
 
-export const getMilestones = async (yearLevel, token) => {
-  const response = await fetch(`${BASE_URL}/milestones/${yearLevel}`, {
+export const getMilestones = async (token) => {
+  const response = await fetch(`${BASE_URL}/milestones`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return handleResponse(response);
@@ -148,6 +150,61 @@ export const updateProfile = async (userId, updates, token) => {
 
 export const getTimezones = async (token) => {
   const response = await fetch(`${BASE_URL}/timezones`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const addBookmark = async (article, token) => {
+  const response = await fetch(`${BASE_URL}/bookmarks`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      news_title: article.title,
+      news_body: article.body,
+      news_link: article.link,
+      news_tag: article.tag,
+      news_image_url: article.image_url
+    })
+  });
+  return handleResponse(response);
+};
+
+export const getBookmarks = async (token) => {
+  const response = await fetch(`${BASE_URL}/bookmarks`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const deleteBookmark = async (bookmarkId, token) => {
+  const response = await fetch(`${BASE_URL}/bookmarks/${bookmarkId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const getChatHistory = async (token) => {
+  const response = await fetch(`${BASE_URL}/chat/history`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const clearChatHistory = async (token) => {
+  const response = await fetch(`${BASE_URL}/chat/history`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const getOnboardingScore = async (token) => {
+  const response = await fetch(`${BASE_URL}/onboarding-score`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return handleResponse(response);
