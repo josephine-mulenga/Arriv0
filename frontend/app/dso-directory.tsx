@@ -15,39 +15,39 @@ export default function DsoDirectoryScreen() {
   const [fallbackLink, setFallbackLink] = useState(null);
 
   const fetchDirectory = async () => {
-    try {
-      const data = await getDsoDirectory(token);
-      setSchools(Array.isArray(data) ? data : data.schools || []);
-    } catch (err) {
-      console.log('Error fetching DSO directory:', err.message);
-    }
-  };
+  try {
+    const data = await getDsoDirectory(token);
+    setSchools(data.directory || []);
+  } catch (err) {
+    console.log('Error fetching DSO directory:', err.message);
+  }
+};
 
   useEffect(() => {
     if (token) fetchDirectory();
   }, [token]);
 
   const handleSearch = async () => {
-    if (!query.trim()) {
-      fetchDirectory();
-      setFallbackLink(null);
-      return;
-    }
-    setSearching(true);
+  if (!query.trim()) {
+    fetchDirectory();
     setFallbackLink(null);
-    try {
-      const data = await searchDso(query, token);
-      const results = Array.isArray(data) ? data : data.schools || [];
-      setSchools(results);
-      if (results.length === 0 && data.uscis_fallback_link) {
-        setFallbackLink(data.uscis_fallback_link);
-      }
-    } catch (err) {
-      console.log('Error searching DSO:', err.message);
-    } finally {
-      setSearching(false);
+    return;
+  }
+  setSearching(true);
+  setFallbackLink(null);
+  try {
+    const data = await searchDso(query, token);
+    const results = data.results || [];
+    setSchools(results);
+    if (results.length === 0 && data.uscis_fallback_link) {
+      setFallbackLink(data.uscis_fallback_link);
     }
-  };
+  } catch (err) {
+    console.log('Error searching DSO:', err.message);
+  } finally {
+    setSearching(false);
+  }
+};
 
   return (
     <ParallaxScrollView
@@ -74,10 +74,10 @@ export default function DsoDirectoryScreen() {
         schools.length > 0 ? (
           schools.map((school, index) => (
             <ThemedView key={school.id || index} style={styles.schoolCard}>
-              <ThemedText style={styles.schoolName}>{school.name}</ThemedText>
-              {school.dso_name && (
-                <ThemedText style={styles.dsoName}>DSO: {school.dso_name}</ThemedText>
-              )}
+              <ThemedText style={styles.schoolName}>{school.school}</ThemedText>
+            {school.dso_office && (
+            <ThemedText style={styles.dsoName}>DSO: {school.dso_office}</ThemedText>
+            )}
 
               <ThemedView style={styles.actionRow}>
                 {school.phone && (
