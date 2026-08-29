@@ -1,0 +1,10 @@
+[33m3db596a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix news fetch — tighter queries, only store F1 relevant articles, deduplicate results
+[33mcf785ad[m tighten NewsAPI query to return F1 specific articles
+[33mc832464[m Add getDocuments/updateDocument to api.js, remove temp news refresh button, install expo-image-picker
+[33m7766a36[m Fix Timeline endpoint call, fix chat history content field mapping, add onboarding score to Home
+[33m7f914a8[m updated a index ,milestones,news, profile screens
+[33md5726dd[m expand security tests to 20 — covers documents, bookmarks, onboarding score, referral, health check
+[33mdb56911[m add README with full endpoint documentation and setup instructions
+[33m333647b[m add health check endpoint — database, AI, and scheduler status monitoring
+[33m2758ae4[m tighten rate limits — chat 10/min, referral 2-3/min, global 200/min default
+[33md9e4c43[m add email update via Supabase Auth admin — PATCH /user now supports email changes
