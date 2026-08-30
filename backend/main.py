@@ -7,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from supabase import create_client, Client
+from supabase_auth.errors import AuthApiError
 from dotenv import load_dotenv
 from datetime import date, datetime, timedelta
 from pydantic import BaseModel, EmailStr, validator
@@ -1040,6 +1041,12 @@ def signup(request: Request, data: SignupRequest):
 
         log_security_event("SIGNUP_SUCCESS", f"New user registered at {data.school}", correlation_id)
         return {"message": f"Account created successfully. Welcome to Arriv0, {data.name}."}
+    except AuthApiError as e:
+        if e.code in ("email_exists", "user_already_exists") or "already registered" in e.message.lower():
+            logger.error(f"Signup error: duplicate email correlation_id={correlation_id}")
+            raise HTTPException(status_code=409, detail="An account with this email already exists. Try logging in instead.")
+        logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
     except Exception as e:
         logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
