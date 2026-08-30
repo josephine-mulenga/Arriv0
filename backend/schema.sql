@@ -51,3 +51,17 @@ CREATE POLICY "Only service role can insert news"
 ON news
 FOR INSERT
 WITH CHECK (true);
+
+-- Migration: Complete Your Profile fields (2026-08-30)
+-- Run this against the live Supabase project — this file predates several
+-- columns already on the live `users` table (has_ssn, has_bank_account,
+-- cpt_months_used, major, avatar_url), so it's a reference for new columns
+-- going forward rather than a from-scratch source of truth.
+-- These back the milestone/timeline screens asking real questions instead
+-- of guessing OPT-recommendation/I-765 status from year_level, and adding
+-- citizenship/visa-validity fields the app doesn't currently collect at all.
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS has_opt_recommendation boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS has_i765_submitted boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS citizenship_country text,
+  ADD COLUMN IF NOT EXISTS visa_expiry_date date;

@@ -331,12 +331,14 @@ Student profile:
 def fmt_date(d: date) -> str:
     return d.strftime("%b %d, %Y")
 
-def build_timeline(profile: dict) -> dict:
+def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
     year_level = profile.get("year_level", 1)
     has_ssn = profile.get("has_ssn", False)
     has_bank_account = profile.get("has_bank_account", False)
     cpt_months_used = profile.get("cpt_months_used", 0)
     has_done_cpt = cpt_months_used > 0
+    has_opt_recommendation = profile.get("has_opt_recommendation", False)
+    has_i765_submitted = profile.get("has_i765_submitted", False)
 
     today = date.today()
     program_start = profile.get("program_start_date")
@@ -379,7 +381,7 @@ def build_timeline(profile: dict) -> dict:
             "status": "You are eligible for CPT. Use it wisely to protect your OPT." if cpt_months_used < 12 else "Warning — you have used significant CPT. Protect your OPT eligibility.",
             "steps": [
                 {"task": "Completed one full academic year", "done": year_level >= 2, "date_range": f"{fmt_date(start_date)} — {fmt_date(year_1_end)}"},
-                {"task": "Find a CPT eligible internship", "done": has_done_cpt, "link": "https://www.handshake.com", "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"},
+                {"task": "Find a CPT eligible internship", "done": has_done_cpt, "link": "https://www.linkedin.com/jobs/", "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"},
                 {"task": "Get CPT authorization from DSO", "done": has_done_cpt, "link": "https://studyinthestates.dhs.gov/students/work/curricular-practical-training", "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"},
                 {"task": f"Track CPT hours — {cpt_months_used} of 12 months used", "done": False, "warning": cpt_months_used >= 9, "date_range": f"{fmt_date(year_1_end)} — {fmt_date(year_2_end)}"}
             ]
@@ -399,18 +401,21 @@ def build_timeline(profile: dict) -> dict:
             "status": "Your OPT window is approaching. Submit as early as possible.",
             "steps": [
                 {"task": "Confirm program end date with DSO", "done": True, "date_range": f"{fmt_date(year_3_end)} — {fmt_date(opt_window_start)}"},
-                {"task": "Request OPT recommendation from DSO", "done": False, "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
-                {"task": "Complete Form I-765 on USCIS", "done": False, "link": "https://www.uscis.gov/i-765", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
+                {"task": "Request OPT recommendation from DSO", "done": has_opt_recommendation, "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
+                {"task": "Complete Form I-765 on USCIS", "done": has_i765_submitted, "link": "https://www.uscis.gov/i-765", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
                 {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
                 {"task": "Submit and track your case", "done": False, "link": "https://egov.uscis.gov/casestatus/landing.do", "date_range": f"{fmt_date(opt_apply_by)} — {fmt_date(opt_window_end)}"}
             ]
         }
     }
 
-    timeline = timelines.get(year_level, timelines[1])
+    effective_year = requested_year if requested_year in timelines else year_level
+    timeline = timelines.get(effective_year, timelines[1])
     timeline["opt_window_start"] = fmt_date(opt_window_start)
     timeline["opt_window_end"] = fmt_date(opt_window_end)
     timeline["grace_period_end"] = fmt_date(grace_period_end)
+    timeline["current_year_level"] = year_level
+    timeline["viewing_year_level"] = effective_year
     return timeline
 
 def build_milestones(profile: dict) -> list:
@@ -419,6 +424,12 @@ def build_milestones(profile: dict) -> list:
     has_bank_account = profile.get("has_bank_account", False)
     cpt_months_used = profile.get("cpt_months_used", 0)
     has_done_cpt = cpt_months_used > 0
+    # These two have no real signal until the student answers them directly
+    # (on the Complete Your Profile screen) — falling back to a year-level
+    # guess here previously marked them done/locked based on assumption
+    # rather than an actual answer.
+    has_opt_recommendation = profile.get("has_opt_recommendation", False)
+    has_i765_submitted = profile.get("has_i765_submitted", False)
 
     today = date.today()
     program_start = profile.get("program_start_date")
@@ -433,9 +444,9 @@ def build_milestones(profile: dict) -> list:
         {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if has_bank_account else ("next" if reported_to_dso else "locked")},
         {"id": 3, "icon": "🪪", "title": "Applied for Social Security Number", "description": "Required for working in the US and building credit history.", "status": "done" if has_ssn else ("next" if has_bank_account else "locked")},
         {"id": 4, "icon": "💼", "title": "First CPT internship authorized", "description": "You gained real US work experience. This goes on your resume.", "status": "done" if has_done_cpt else ("next" if year_level >= 2 else "locked")},
-        {"id": 5, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if year_level >= 4 else ("next" if year_level == 3 else "locked")},
-        {"id": 6, "icon": "📄", "title": "Form I-765 submitted", "description": "Your OPT application is in USCIS hands.", "status": "next" if year_level == 4 else "locked"},
-        {"id": 7, "icon": "💳", "title": "EAD card received", "description": "Your Employment Authorization Document arrived by mail.", "status": "locked"},
+        {"id": 5, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if has_opt_recommendation else ("next" if year_level >= 3 else "locked")},
+        {"id": 6, "icon": "📄", "title": "Form I-765 submitted", "description": "Your OPT application is in USCIS hands.", "status": "done" if has_i765_submitted else ("next" if has_opt_recommendation else "locked")},
+        {"id": 7, "icon": "💳", "title": "EAD card received", "description": "Your Employment Authorization Document arrived by mail.", "status": "next" if has_i765_submitted else "locked"},
         {"id": 8, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you worked for becomes real.", "status": "locked"},
         {"id": 9, "icon": "🚀", "title": "STEM OPT extension approved", "description": "24 more months of work authorization secured.", "status": "locked"}
     ]
@@ -913,6 +924,10 @@ class UpdateProfileRequest(BaseModel):
     has_bank_account: Optional[bool] = None
     cpt_months_used: Optional[int] = None
     avatar_url: Optional[str] = None
+    has_opt_recommendation: Optional[bool] = None
+    has_i765_submitted: Optional[bool] = None
+    citizenship_country: Optional[str] = None
+    visa_expiry_date: Optional[str] = None
 
     @validator('name')
     def name_must_be_valid(cls, v):
@@ -1040,7 +1055,14 @@ def signup(request: Request, data: SignupRequest):
             }).eq("referral_code", data.referral_code.upper()).eq("status", "pending").execute()
 
         log_security_event("SIGNUP_SUCCESS", f"New user registered at {data.school}", correlation_id)
-        return {"message": f"Account created successfully. Welcome to Arriv0, {data.name}."}
+        # response.session is None when the Supabase project requires email
+        # confirmation before a session is issued — the frontend uses this to
+        # decide whether to send the user straight in or to a "check your
+        # email" screen.
+        return {
+            "message": f"Account created successfully. Welcome to Arriv0, {data.name}.",
+            "email_confirmation_required": response.session is None,
+        }
     except AuthApiError as e:
         if e.code in ("email_exists", "user_already_exists") or "already registered" in e.message.lower():
             logger.error(f"Signup error: duplicate email correlation_id={correlation_id}")
@@ -1066,9 +1088,25 @@ def login(request: Request, data: LoginRequest):
             "access_token": response.session.access_token,
             "user_id": response.user.id
         }
+    except AuthApiError as e:
+        log_security_event("LOGIN_FAILED", f"Failed login attempt email={data.email[:3]}***", correlation_id)
+        if e.code == "email_not_confirmed":
+            raise HTTPException(status_code=403, detail="Please confirm your email before logging in — check your inbox for the link we sent.")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     except Exception as e:
         log_security_event("LOGIN_FAILED", f"Failed login attempt email={data.email[:3]}***", correlation_id)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+@app.post("/resend-confirmation")
+@limiter.limit("3/minute")
+def resend_confirmation(request: Request, data: PasswordResetRequest):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    try:
+        supabase.auth.resend({"type": "signup", "email": data.email})
+    except Exception as e:
+        logger.error(f"Resend confirmation error: {type(e).__name__} correlation_id={correlation_id}")
+    # Always return success — never reveal whether an email is registered.
+    return {"message": "If that email needs confirming, we've sent a new link."}
 
 @app.post("/reset-password")
 @limiter.limit("3/minute")
@@ -1373,12 +1411,12 @@ def get_single_news(request: Request, news_id: str, authorization: Optional[str]
 
 @app.get("/timeline")
 @limiter.limit("30/minute")
-def get_timeline(request: Request, authorization: Optional[str] = Header(None)):
+def get_timeline(request: Request, authorization: Optional[str] = Header(None), year: Optional[int] = None):
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
     profile = get_profile_from_db(user_id, correlation_id)
-    return build_timeline(profile)
+    return build_timeline(profile, requested_year=year)
 
 @app.get("/status")
 @limiter.limit("30/minute")
