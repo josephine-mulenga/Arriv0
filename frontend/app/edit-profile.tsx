@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View, ScrollView, Modal, FlatList, Switch } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+  Modal,
+  FlatList,
+} from 'react-native';
 import { router } from 'expo-router';
+import { CaretLeftIcon, CaretDownIcon } from 'phosphor-react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { getUserProfile, updateProfile } from '@/api';
 
@@ -17,7 +27,11 @@ const months = [
 const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 15 }, (_, i) => String(currentYear - 5 + i));
-const visaTypes = ['F1', 'J1', 'M1'];
+const visaTypes = [
+  { label: 'F-1', value: 'F1' },
+  { label: 'J-1', value: 'J1' },
+  { label: 'M-1', value: 'M1' },
+];
 
 function splitDate(dateStr) {
   if (!dateStr) return { month: '', day: '', year: '' };
@@ -31,36 +45,36 @@ function Dropdown({ label, options, value, onSelect, getLabel = (o) => o, getVal
 
   return (
     <>
-      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(true)}>
-        <ThemedText style={value ? styles.dropdownTextFilled : styles.dropdownTextPlaceholder}>
+      <Pressable style={styles.dropdown} onPress={() => setOpen(true)}>
+        <Text style={value ? styles.dropdownTextFilled : styles.dropdownTextPlaceholder}>
           {selected ? getLabel(selected) : label}
-        </ThemedText>
-      </TouchableOpacity>
+        </Text>
+        <CaretDownIcon size={15} color={Palette.inkFaint} />
+      </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpen(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setOpen(false)}>
           <View style={styles.modalContent}>
-            <ThemedText style={styles.modalTitle}>{label}</ThemedText>
+            <Text style={styles.modalTitle}>{label}</Text>
             <FlatList
               data={options}
               keyExtractor={(item) => getValue(item)}
               style={{ maxHeight: 300 }}
               renderItem={({ item }) => (
-                <TouchableOpacity
+                <Pressable
                   style={styles.modalOption}
                   onPress={() => {
                     onSelect(getValue(item));
                     setOpen(false);
                   }}>
-                  <ThemedText
-                    style={getValue(item) === value ? styles.modalOptionTextSelected : styles.modalOptionText}>
+                  <Text style={getValue(item) === value ? styles.modalOptionTextSelected : styles.modalOptionText}>
                     {getLabel(item)}
-                  </ThemedText>
-                </TouchableOpacity>
+                  </Text>
+                </Pressable>
               )}
             />
           </View>
-        </TouchableOpacity>
+        </Pressable>
       </Modal>
     </>
   );
@@ -69,7 +83,7 @@ function Dropdown({ label, options, value, onSelect, getLabel = (o) => o, getVal
 function DateDropdownGroup({ label, month, day, year, onChangeMonth, onChangeDay, onChangeYear }) {
   return (
     <View style={styles.dateGroup}>
-      <ThemedText style={styles.fieldLabel}>{label}</ThemedText>
+      <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.dateRow}>
         <View style={{ flex: 1.4 }}>
           <Dropdown
@@ -133,7 +147,7 @@ export default function EditProfileScreen() {
         setEndMonth(end.month);
         setEndDay(end.day);
         setEndYear(end.year);
-      } catch (err) {
+      } catch {
         setError('Could not load your profile. Please try again.');
       } finally {
         setLoading(false);
@@ -174,35 +188,46 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={{ height: 100 }}>
-        <GradientHeaderBackground />
+    <View style={styles.root}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} hitSlop={8}>
+          <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
+        </Pressable>
+        <Text style={styles.title}>Edit Profile</Text>
+        <View style={{ width: 20 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled">
-        <TouchableOpacity onPress={() => router.back()}>
-          <ThemedText style={styles.backButton}>← Back</ThemedText>
-        </TouchableOpacity>
-
-        <ThemedText style={styles.title}>Edit Profile</ThemedText>
-
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {loading ? (
-          <ThemedText>Loading your profile...</ThemedText>
+          <Text style={styles.bodyText}>Loading your profile...</Text>
         ) : (
           <>
-            <ThemedText style={styles.fieldLabel}>Full name</ThemedText>
-            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Full name" />
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Full name</Text>
+              <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Full name" placeholderTextColor={Palette.inkPlaceholder} />
+            </View>
 
-            <ThemedText style={styles.fieldLabel}>School</ThemedText>
-            <TextInput style={styles.input} value={school} onChangeText={setSchool} placeholder="School" />
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>School</Text>
+              <TextInput style={styles.input} value={school} onChangeText={setSchool} placeholder="School" placeholderTextColor={Palette.inkPlaceholder} />
+            </View>
 
-            <ThemedText style={styles.fieldLabel}>Major</ThemedText>
-            <TextInput style={styles.input} value={major} onChangeText={setMajor} placeholder="Major (optional)" />
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Major</Text>
+              <TextInput style={styles.input} value={major} onChangeText={setMajor} placeholder="Major (optional)" placeholderTextColor={Palette.inkPlaceholder} />
+            </View>
 
-            <ThemedText style={styles.fieldLabel}>Visa Type</ThemedText>
-            <Dropdown label="Visa Type" options={visaTypes} value={visaType} onSelect={setVisaType} />
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Visa Type</Text>
+              <Dropdown
+                label="Visa Type"
+                options={visaTypes}
+                value={visaType}
+                onSelect={setVisaType}
+                getLabel={(o) => o.label}
+                getValue={(o) => o.value}
+              />
+            </View>
 
             <DateDropdownGroup
               label="Program start date"
@@ -224,97 +249,119 @@ export default function EditProfileScreen() {
               onChangeYear={setEndYear}
             />
 
-            <ThemedView style={styles.switchRow}>
-              <ThemedText style={styles.fieldLabel}>I have a US bank account</ThemedText>
+            <View style={styles.switchRow}>
+              <Text style={styles.fieldLabel}>I have a US bank account</Text>
               <Switch
                 value={hasBankAccount}
                 onValueChange={setHasBankAccount}
-                trackColor={{ false: '#ccc', true: '#6C63FF' }}
+                trackColor={{ false: Palette.borderInput, true: Palette.purple }}
               />
-            </ThemedView>
+            </View>
 
-            {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
-            {saved && <ThemedText style={styles.successText}>Saved!</ThemedText>}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {saved ? <Text style={styles.successText}>Saved!</Text> : null}
 
-            <TouchableOpacity
-              style={[styles.button, (!canSave || saving) && styles.buttonDisabled]}
+            <PrimaryButton
+              label={saving ? 'Saving...' : 'Save Changes'}
               onPress={handleSave}
-              disabled={!canSave || saving}>
-              <ThemedText style={styles.buttonText}>{saving ? 'Saving...' : 'Save Changes'}</ThemedText>
-            </TouchableOpacity>
+              disabled={!canSave || saving}
+              style={styles.submitButton}
+            />
           </>
         )}
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 24, gap: 12, paddingBottom: 40 },
-  backButton: {
-    color: '#6C63FF',
-    fontWeight: '600',
-    marginBottom: 8,
+  root: {
+    flex: 1,
+    backgroundColor: Palette.white,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 62,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
   title: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 26,
-    color: '#1A1A2E',
-    marginBottom: 4,
+    fontFamily: Type.headingBold,
+    fontSize: 20,
+    color: Palette.ink,
+  },
+  content: { padding: 26, paddingTop: 0, gap: 14, paddingBottom: 40 },
+  fieldGroup: { gap: 7 },
+  bodyText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.inkMuted,
   },
   fieldLabel: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 13,
-    color: '#6C63FF',
-    marginBottom: -6,
+    fontFamily: Type.bodyBold,
+    fontSize: 12.5,
+    color: Palette.inkMuted,
   },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  input: {
+    borderWidth: 1,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    paddingHorizontal: 14,
+    height: 48,
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.ink,
+  },
   dateGroup: { gap: 6 },
   dateRow: { flexDirection: 'row', gap: 8 },
   dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    height: 48,
+    paddingHorizontal: 14,
   },
-  dropdownTextFilled: { color: '#1A1A2E' },
-  dropdownTextPlaceholder: { color: '#999' },
+  dropdownTextFilled: { fontFamily: Type.bodyRegular, fontSize: 14, color: Palette.ink },
+  dropdownTextPlaceholder: { fontFamily: Type.bodyRegular, fontSize: 14, color: Palette.inkPlaceholder },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: Palette.scrim,
     justifyContent: 'center',
     padding: 24,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Palette.white,
+    borderRadius: Radius.cardLarge,
     padding: 16,
   },
   modalTitle: {
-    fontFamily: 'Fredoka_600SemiBold',
+    fontFamily: Type.headingSemiBold,
     fontSize: 16,
     marginBottom: 8,
-    color: '#1A1A2E',
+    color: Palette.ink,
   },
   modalOption: {
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0EEFF',
+    borderBottomColor: Palette.dividerLight,
   },
-  modalOptionText: { color: '#1A1A2E' },
-  modalOptionTextSelected: { color: '#6C63FF', fontFamily: 'Fredoka_600SemiBold' },
+  modalOptionText: { fontFamily: Type.bodyRegular, color: Palette.ink },
+  modalOptionTextSelected: { fontFamily: Type.bodyBold, color: Palette.purple },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'transparent',
     marginTop: 8,
   },
-  button: { backgroundColor: '#6C63FF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-  buttonDisabled: { backgroundColor: '#C4C0F5' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  errorText: { color: 'red' },
-  successText: { color: 'green' },
+  submitButton: { marginTop: 8 },
+  errorText: { fontFamily: Type.bodyRegular, color: Palette.danger, fontSize: 13 },
+  successText: { fontFamily: Type.bodyRegular, color: Palette.green, fontSize: 13 },
 });

@@ -1,58 +1,44 @@
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
+import { PathIcon, BriefcaseIcon, BellIcon, SparkleIcon, type Icon } from 'phosphor-react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { ArrivoLogo } from '@/components/arrivo-logo';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { IconTile } from '@/components/ui/icon-tile';
+import { Palette, Type } from '@/constants/theme';
 
-const features = [
-  { icon: '📅', text: 'Personalized timeline for your F1 journey' },
-  { icon: '💼', text: 'Track CPT & OPT deadlines' },
-  { icon: '📰', text: 'Get important immigration updates' },
-  { icon: '🤖', text: 'AI guidance tailored to your situation' },
+const features: { icon: Icon; text: string }[] = [
+  { icon: PathIcon, text: 'Personalized timeline for your F-1 journey' },
+  { icon: BriefcaseIcon, text: 'Track CPT & OPT deadlines' },
+  { icon: BellIcon, text: 'Get important immigration updates' },
+  { icon: SparkleIcon, text: 'AI guidance tailored to your situation' },
 ];
 
 export default function IntroScreen() {
   return (
     <View style={styles.root}>
-      <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} viewBox="0 0 400 850" preserveAspectRatio="xMidYMid slice">
-        <Defs>
-          <LinearGradient id="introGradient" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#A9C9FF" />
-            <Stop offset="0.4" stopColor="#C3B9FF" />
-            <Stop offset="0.75" stopColor="#DCC4FA" />
-            <Stop offset="1" stopColor="#F2E6FF" />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="400" height="850" fill="url(#introGradient)" />
-        <Circle cx="340" cy="120" r="3" fill="#FFFFFF" opacity="0.8" />
-        <Circle cx="50" cy="180" r="2.5" fill="#FFFFFF" opacity="0.6" />
-        <Circle cx="280" cy="60" r="2" fill="#FFFFFF" opacity="0.7" />
-      </Svg>
+      <Text style={styles.title}>Everything you need,{'\n'}in one place.</Text>
 
-      <ThemedView style={styles.container}>
-        <ArrivoLogo size={64} />
+      <View style={styles.featureList}>
+        {features.map((item, index) => (
+          <View key={index} style={styles.featureRow}>
+            <IconTile icon={item.icon} tint={Palette.purpleTint} color={Palette.purple} iconSize={21} />
+            <Text style={styles.featureText}>{item.text}</Text>
+          </View>
+        ))}
+      </View>
 
-        <ThemedText style={styles.title}>Everything you need, in one place.</ThemedText>
+      <View style={styles.spacer} />
 
-        <ThemedView style={styles.featureList}>
-          {features.map((item, index) => (
-            <ThemedView key={index} style={styles.featureRow}>
-              <ThemedText style={styles.icon}>{item.icon}</ThemedText>
-              <ThemedText style={styles.featureText}>{item.text}</ThemedText>
-            </ThemedView>
-          ))}
-        </ThemedView>
+      <PrimaryButton label="Next" onPress={() => router.push('/signup')} />
+      <Pressable onPress={() => router.push('/signup')} style={styles.skip}>
+        <Text style={styles.skipText}>Skip</Text>
+      </Pressable>
 
-        <TouchableOpacity style={styles.button} onPress={() => router.push('/signup')}>
-          <ThemedText style={styles.buttonText}>Next  →</ThemedText>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => router.push('/signup')} style={styles.link}>
-          <ThemedText style={styles.linkText}>Skip</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
+      <View style={styles.dots}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={[styles.dot, i === 0 ? styles.dotActive : styles.dotInactive]} />
+        ))}
+      </View>
     </View>
   );
 }
@@ -60,59 +46,61 @@ export default function IntroScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-    backgroundColor: 'transparent',
+    backgroundColor: Palette.white,
+    paddingTop: 90,
+    paddingHorizontal: 26,
+    paddingBottom: 30,
   },
   title: {
+    fontFamily: Type.headingBold,
     fontSize: 26,
-    fontFamily: 'Fredoka_700Bold',
-    color: '#1A1A2E',
-    marginTop: 20,
-    marginBottom: 20,
+    lineHeight: 34,
+    letterSpacing: -0.26,
+    color: Palette.ink,
   },
   featureList: {
-    gap: 20,
-    marginBottom: 32,
-    backgroundColor: 'transparent',
+    marginTop: 40,
+    gap: 14,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    padding: 12,
-    borderRadius: 14,
-  },
-  icon: {
-    fontSize: 24,
+    gap: 14,
   },
   featureText: {
     flex: 1,
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 15,
-    color: '#1A1A2E',
+    fontFamily: Type.bodyRegular,
+    fontSize: 14.5,
+    lineHeight: 21,
+    color: Palette.ink,
   },
-  button: {
-    backgroundColor: '#6C63FF',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
+  spacer: {
+    flex: 1,
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontFamily: 'Fredoka_600SemiBold',
+  skip: {
+    marginTop: 16,
   },
-  link: {
-    alignItems: 'center',
-    marginTop: 12,
+  skipText: {
+    textAlign: 'center',
+    fontFamily: Type.headingSemiBold,
+    fontSize: 14.5,
+    color: Palette.purple,
   },
-  linkText: {
-    color: '#6C63FF',
-    fontFamily: 'Fredoka_600SemiBold',
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 20,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dotActive: {
+    backgroundColor: Palette.purple,
+  },
+  dotInactive: {
+    backgroundColor: '#DEDBF3',
   },
 });

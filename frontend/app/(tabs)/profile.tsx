@@ -1,76 +1,66 @@
-import { StyleSheet, TouchableOpacity, View, Image, Alert, Modal } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  PencilSimpleIcon,
+  CaretRightIcon,
+  FolderSimpleIcon,
+  BellIcon,
+  CloudSlashIcon,
+  CameraIcon,
+  ImageIcon,
+} from 'phosphor-react-native';
 
 import { getUserProfile, uploadAvatar, updateProfile } from '@/api';
 import { useAuth } from '@/AuthContext';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { Palette, Spacing, Type } from '@/constants/theme';
 
-function getInitials(name) {
+interface ProfileData {
+  name?: string;
+  school?: string;
+  visa_type?: string;
+  year_level?: number;
+  program_end_date?: string;
+  avatar_url?: string;
+}
+
+const yearLevelNames: Record<number, string> = {
+  1: 'Freshman',
+  2: 'Sophomore',
+  3: 'Junior',
+  4: 'Senior',
+};
+
+function getInitials(name?: string): string {
   if (!name) return '?';
   const parts = name.trim().split(' ');
-  if (parts.length === 1) return parts[0][0].toUpperCase();
+  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function Avatar({ name, avatarUrl, uploading, onPress }) {
-  return (
-    <TouchableOpacity onPress={onPress} disabled={uploading} style={styles.avatarTouchable}>
-      {avatarUrl ? (
-        <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-      ) : (
-        <View style={styles.avatar}>
-          <ThemedText style={styles.avatarText}>{getInitials(name)}</ThemedText>
-        </View>
-      )}
-      <View style={styles.editBadge}>
-        <ThemedText style={styles.editBadgeText}>{uploading ? '...' : '✏️'}</ThemedText>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 export default function ProfileScreen() {
-  const { user, token, logout } = useAuth();
-  const [profileData, setProfileData] = useState(null);
+  const { user, token } = useAuth();
+  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      const fetchProfile = async () => {
-        try {
-          const data = await getUserProfile(user.id, token);
-          setProfileData(data);
-        } catch (err) {
-          console.log('Error fetching profile:', err.message);
-        }
-      };
-
-      if (token && user) {
-        fetchProfile();
-      }
+      if (!token || !user) return;
+      getUserProfile(user.id, token).then(setProfile).catch(() => {});
     }, [token, user])
   );
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
-  };
-
-  const doUpload = async (imageUri) => {
+  const doUpload = async (imageUri: string) => {
+    if (!user || !token) return;
     setUploading(true);
     try {
       const publicUrl = await uploadAvatar(user.id, imageUri);
       await updateProfile(user.id, { avatar_url: publicUrl }, token);
-      setProfileData((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
-    } catch (err) {
-      console.log('Error uploading avatar:', err.message);
+      setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
+    } catch {
       Alert.alert('Upload failed', 'Please try again.');
     } finally {
       setUploading(false);
@@ -89,9 +79,7 @@ export default function ProfileScreen() {
       aspect: [1, 1],
       quality: 0.5,
     });
-    if (!result.canceled) {
-      doUpload(result.assets[0].uri);
-    }
+    if (!result.canceled) doUpload(result.assets[0].uri);
   };
 
   const takePhoto = async () => {
@@ -100,269 +88,253 @@ export default function ProfileScreen() {
       Alert.alert('Permission needed', 'Permission to use the camera is required.');
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
-    if (!result.canceled) {
-      doUpload(result.assets[0].uri);
-    }
-  };
-
-  const handleAvatarPress = () => {
-    setPickerVisible(true);
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+    if (!result.canceled) doUpload(result.assets[0].uri);
   };
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
-      headerImage={<GradientHeaderBackground logoSize={50} />}>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText style={styles.screenTitle}>My Profile</ThemedText>
-      </ThemedView>
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>My Profile</Text>
 
-      {profileData ? (
-        <>
-          <ThemedView style={styles.avatarSection}>
-            <Avatar
-              name={profileData.name}
-              avatarUrl={profileData.avatar_url}
-              uploading={uploading}
-              onPress={handleAvatarPress}
-            />
-            <ThemedText style={styles.avatarName}>{profileData.name}</ThemedText>
-          </ThemedView>
+        <View style={styles.identityRow}>
+          <Pressable onPress={() => setPickerVisible(true)} disabled={uploading}>
+            {profile?.avatar_url ? (
+              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarInitials}>{getInitials(profile?.name)}</Text>
+              </View>
+            )}
+          </Pressable>
+          <View>
+            <Text style={styles.name}>{profile?.name ?? '...'}</Text>
+            <Text style={styles.email}>{user?.email ?? ''}</Text>
+          </View>
+        </View>
 
-          <ThemedView style={styles.infoCard}>
-            <ThemedView style={styles.row}>
-              <ThemedText style={styles.label}>Name</ThemedText>
-              <ThemedText>{profileData.name}</ThemedText>
-            </ThemedView>
-            <ThemedView style={styles.row}>
-              <ThemedText style={styles.label}>School</ThemedText>
-              <ThemedText>{profileData.school}</ThemedText>
-            </ThemedView>
-            <ThemedView style={styles.row}>
-              <ThemedText style={styles.label}>Visa Type</ThemedText>
-              <ThemedText>{profileData.visa_type}</ThemedText>
-            </ThemedView>
-            <ThemedView style={styles.row}>
-              <ThemedText style={styles.label}>Program Start</ThemedText>
-              <ThemedText>{profileData.program_start_date}</ThemedText>
-            </ThemedView>
-            <ThemedView style={styles.row}>
-              <ThemedText style={styles.label}>Program End</ThemedText>
-              <ThemedText>{profileData.program_end_date}</ThemedText>
-            </ThemedView>
-          </ThemedView>
+        <Text style={styles.groupLabel}>My Information</Text>
+        <View style={styles.group}>
+          <InfoRow label="School" value={profile?.school} />
+          <InfoRow label="Visa Type" value={profile?.visa_type} />
+          <InfoRow
+            label="Year Level"
+            value={profile?.year_level ? yearLevelNames[profile.year_level] : undefined}
+          />
+          <InfoRow label="Program End Date" value={profile?.program_end_date} isLast />
+        </View>
 
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => router.push('/edit-profile')}>
-            <ThemedText style={styles.editButtonText}>✏️ Edit Profile</ThemedText>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <ThemedText style={{ paddingHorizontal: 16 }}>Loading...</ThemedText>
-      )}
+        <Text style={styles.groupLabel}>Account</Text>
+        <View style={styles.group}>
+          <ActionRow icon={PencilSimpleIcon} label="Edit Profile" onPress={() => router.push('/edit-profile')} />
+          <ActionRow icon={FolderSimpleIcon} label="Documents" onPress={() => router.push('/documents')} />
+          <ActionRow
+            icon={BellIcon}
+            label="Notification Settings"
+            onPress={() => router.push('/notification-settings')}
+          />
+          <ActionRow
+            icon={CloudSlashIcon}
+            label="Offline timeline"
+            onPress={() => router.push('/(tabs)/timeline')}
+            isLast
+          />
+        </View>
+      </ScrollView>
 
-      <TouchableOpacity
-        style={styles.settingsButton}
-        onPress={() => router.push('/documents')}>
-        <ThemedText style={styles.settingsButtonText}>📄 Documents</ThemedText>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsButton}
-        onPress={() => router.push('/dso-directory')}>
-        <ThemedText style={styles.settingsButtonText}>🏫 DSO Directory</ThemedText>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsButton}
-        onPress={() => router.push('/notification-settings')}>
-        <ThemedText style={styles.settingsButtonText}>⚙️ Notification Settings</ThemedText>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <ThemedText style={styles.logoutButtonText}>Log Out</ThemedText>
-      </TouchableOpacity>
-
-      <Modal
-        visible={pickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPickerVisible(false)}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setPickerVisible(false)}>
+      <Modal visible={pickerVisible} transparent animationType="fade" onRequestClose={() => setPickerVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setPickerVisible(false)}>
           <View style={styles.modalContent}>
-            <ThemedText style={styles.modalTitle}>Update photo</ThemedText>
-
-            <TouchableOpacity
+            <Text style={styles.modalTitle}>Update photo</Text>
+            <Pressable
               style={styles.modalOption}
               onPress={() => {
                 setPickerVisible(false);
                 takePhoto();
               }}>
-              <ThemedText style={styles.modalOptionText}>📷 Take Photo</ThemedText>
-            </TouchableOpacity>
-
-            <TouchableOpacity
+              <CameraIcon size={18} color={Palette.ink} />
+              <Text style={styles.modalOptionText}>Take Photo</Text>
+            </Pressable>
+            <Pressable
               style={styles.modalOption}
               onPress={() => {
                 setPickerVisible(false);
                 pickFromLibrary();
               }}>
-              <ThemedText style={styles.modalOptionText}>🖼️ Choose from Library</ThemedText>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalOption} onPress={() => setPickerVisible(false)}>
-              <ThemedText style={[styles.modalOptionText, { color: '#D32F2F' }]}>Cancel</ThemedText>
-            </TouchableOpacity>
+              <ImageIcon size={18} color={Palette.ink} />
+              <Text style={styles.modalOptionText}>Choose from Library</Text>
+            </Pressable>
+            <Pressable style={styles.modalOption} onPress={() => setPickerVisible(false)}>
+              <Text style={[styles.modalOptionText, { color: Palette.danger }]}>Cancel</Text>
+            </Pressable>
           </View>
-        </TouchableOpacity>
+        </Pressable>
       </Modal>
-    </ParallaxScrollView>
+    </View>
+  );
+}
+
+function InfoRow({ label, value, isLast }: { label: string; value?: string; isLast?: boolean }) {
+  return (
+    <Pressable
+      style={[styles.row, !isLast && styles.rowDivider]}
+      onPress={() => router.push('/edit-profile')}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <View style={styles.rowRight}>
+        <Text style={styles.rowValue}>{value ?? '—'}</Text>
+        <CaretRightIcon size={15} color={Palette.chevron} />
+      </View>
+    </Pressable>
+  );
+}
+
+function ActionRow({
+  icon: IconComponent,
+  label,
+  onPress,
+  isLast,
+}: {
+  icon: typeof PencilSimpleIcon;
+  label: string;
+  onPress: () => void;
+  isLast?: boolean;
+}) {
+  return (
+    <Pressable style={[styles.row, !isLast && styles.rowDivider]} onPress={onPress}>
+      <View style={styles.actionLeft}>
+        <IconComponent size={18} color={Palette.purple} />
+        <Text style={styles.rowLabel}>{label}</Text>
+      </View>
+      <CaretRightIcon size={15} color={Palette.chevron} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 16 },
-  screenTitle: {
-    fontSize: 26,
-    fontFamily: 'Fredoka_700Bold',
-    color: '#1A1A2E',
+  root: {
+    flex: 1,
+    backgroundColor: Palette.white,
   },
-  avatarSection: {
+  content: {
+    paddingTop: 62,
+    paddingHorizontal: Spacing.screenPadding,
+    paddingBottom: 108,
+  },
+  title: {
+    fontFamily: Type.headingBold,
+    fontSize: 22,
+    color: Palette.ink,
+    marginBottom: 20,
+  },
+  identityRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    backgroundColor: 'transparent',
-  },
-  avatarTouchable: {
-    marginBottom: 8,
+    gap: 12,
+    marginBottom: Spacing.sectionGap,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#6C63FF',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Palette.purpleTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
-  avatarText: {
-    color: '#FFFFFF',
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 24,
+  avatarInitials: {
+    fontFamily: Type.headingBold,
+    fontSize: 18,
+    color: Palette.purple,
   },
-  editBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E0DDF5',
-  },
-  editBadgeText: {
-    fontSize: 12,
-  },
-  avatarName: {
-    fontFamily: 'Fredoka_600SemiBold',
+  name: {
+    fontFamily: Type.headingSemiBold,
     fontSize: 16,
-    color: '#1A1A2E',
+    color: Palette.ink,
   },
-  infoCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F0EEFF',
-    borderRadius: 20,
-    gap: 12,
+  email: {
+    marginTop: 2,
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    color: Palette.inkPlaceholder,
+  },
+  groupLabel: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 15,
+    color: Palette.ink,
+    marginBottom: Spacing.cardGap,
+  },
+  group: {
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: 16,
+    paddingHorizontal: 15,
+    marginBottom: Spacing.sectionGap,
   },
   row: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'transparent',
+    paddingVertical: 14,
   },
-  label: {
-    fontFamily: 'Fredoka_600SemiBold',
-    color: '#6C63FF',
+  rowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.dividerLight,
   },
-  editButton: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: '#F0EEFF',
+  rowLabel: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13.5,
+    color: Palette.inkMuted,
+  },
+  rowRight: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
   },
-  editButtonText: {
-    color: '#6C63FF',
-    fontFamily: 'Fredoka_600SemiBold',
+  rowValue: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 14,
+    color: Palette.ink,
   },
-  settingsButton: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: '#F0EEFF',
+  actionLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  settingsButtonText: {
-    color: '#6C63FF',
-    fontFamily: 'Fredoka_600SemiBold',
-  },
-  logoutButton: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: '#FFEBEE',
-    alignItems: 'center',
-  },
-  logoutButtonText: {
-    color: '#D32F2F',
-    fontFamily: 'Fredoka_600SemiBold',
+    gap: 12,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: Palette.scrim,
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: Palette.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 16,
     paddingBottom: 32,
   },
   modalTitle: {
-    fontFamily: 'Fredoka_600SemiBold',
+    fontFamily: Type.headingSemiBold,
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 12,
-    color: '#888',
+    color: Palette.inkMuted,
   },
   modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    justifyContent: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0EEFF',
-    alignItems: 'center',
+    borderBottomColor: Palette.dividerLight,
   },
   modalOptionText: {
+    fontFamily: Type.bodyRegular,
     fontSize: 16,
-    color: '#1A1A2E',
+    color: Palette.ink,
   },
 });

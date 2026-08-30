@@ -1,11 +1,11 @@
-import { StyleSheet, TextInput, TouchableOpacity, Linking } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Linking } from 'react-native';
 import { useEffect, useState } from 'react';
+import { router } from 'expo-router';
+import { CaretLeftIcon, PhoneIcon, EnvelopeSimpleIcon, GlobeIcon } from 'phosphor-react-native';
+
 import { getDsoDirectory, searchDso } from '@/api';
 import { useAuth } from '@/AuthContext';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { Palette, Radius, Type } from '@/constants/theme';
 
 export default function DsoDirectoryScreen() {
   const { token } = useAuth();
@@ -15,189 +15,206 @@ export default function DsoDirectoryScreen() {
   const [fallbackLink, setFallbackLink] = useState(null);
 
   const fetchDirectory = async () => {
-  try {
-    const data = await getDsoDirectory(token);
-    setSchools(data.directory || []);
-  } catch (err) {
-    console.log('Error fetching DSO directory:', err.message);
-  }
-};
+    try {
+      const data = await getDsoDirectory(token);
+      setSchools(data.directory || []);
+    } catch {
+      // keep whatever was last loaded
+    }
+  };
 
   useEffect(() => {
     if (token) fetchDirectory();
   }, [token]);
 
   const handleSearch = async () => {
-  if (!query.trim()) {
-    fetchDirectory();
-    setFallbackLink(null);
-    return;
-  }
-  setSearching(true);
-  setFallbackLink(null);
-  try {
-    const data = await searchDso(query, token);
-    const results = data.results || [];
-    setSchools(results);
-    if (results.length === 0 && data.uscis_fallback_link) {
-      setFallbackLink(data.uscis_fallback_link);
+    if (!query.trim()) {
+      fetchDirectory();
+      setFallbackLink(null);
+      return;
     }
-  } catch (err) {
-    console.log('Error searching DSO:', err.message);
-  } finally {
-    setSearching(false);
-  }
-};
+    setSearching(true);
+    setFallbackLink(null);
+    try {
+      const data = await searchDso(query, token);
+      const results = data.results || [];
+      setSchools(results);
+      if (results.length === 0 && data.uscis_fallback_link) {
+        setFallbackLink(data.uscis_fallback_link);
+      }
+    } catch {
+      // keep the current list on failure
+    } finally {
+      setSearching(false);
+    }
+  };
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
-      headerImage={<GradientHeaderBackground logoSize={50} />}>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText style={styles.screenTitle}>DSO Directory</ThemedText>
-      </ThemedView>
+    <View style={styles.root}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} hitSlop={8}>
+          <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
+        </Pressable>
+        <Text style={styles.title}>DSO Directory</Text>
+        <View style={{ width: 20 }} />
+      </View>
 
-      <ThemedView style={styles.searchRow}>
+      <View style={styles.searchRow}>
         <TextInput
           style={styles.searchInput}
           placeholder="Search by school name..."
+          placeholderTextColor={Palette.inkPlaceholder}
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={handleSearch}
         />
-        <TouchableOpacity style={styles.searchButton} onPress={handleSearch} disabled={searching}>
-          <ThemedText style={styles.searchButtonText}>{searching ? '...' : 'Search'}</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
+        <Pressable style={styles.searchButton} onPress={handleSearch} disabled={searching}>
+          <Text style={styles.searchButtonText}>{searching ? '...' : 'Search'}</Text>
+        </Pressable>
+      </View>
 
-      {schools ? (
-        schools.length > 0 ? (
-          schools.map((school, index) => (
-            <ThemedView key={school.id || index} style={styles.schoolCard}>
-              <ThemedText style={styles.schoolName}>{school.school}</ThemedText>
-            {school.dso_office && (
-            <ThemedText style={styles.dsoName}>DSO: {school.dso_office}</ThemedText>
-            )}
+      <ScrollView contentContainerStyle={styles.content}>
+        {schools ? (
+          schools.length > 0 ? (
+            schools.map((school, index) => (
+              <View key={school.id || index} style={styles.schoolCard}>
+                <Text style={styles.schoolName}>{school.school}</Text>
+                {school.dso_office ? <Text style={styles.dsoName}>DSO: {school.dso_office}</Text> : null}
 
-              <ThemedView style={styles.actionRow}>
-                {school.phone && (
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => Linking.openURL(`tel:${school.phone}`)}>
-                    <ThemedText style={styles.actionButtonText}>📞 Call</ThemedText>
-                  </TouchableOpacity>
-                )}
-                {school.email && (
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => Linking.openURL(`mailto:${school.email}`)}>
-                    <ThemedText style={styles.actionButtonText}>✉️ Email</ThemedText>
-                  </TouchableOpacity>
-                )}
-                {school.website && (
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => Linking.openURL(school.website)}>
-                    <ThemedText style={styles.actionButtonText}>🌐 Website</ThemedText>
-                  </TouchableOpacity>
-                )}
-              </ThemedView>
-            </ThemedView>
-          ))
+                <View style={styles.actionRow}>
+                  {school.phone ? (
+                    <Pressable style={styles.actionButton} onPress={() => Linking.openURL(`tel:${school.phone}`)}>
+                      <PhoneIcon size={14} color={Palette.purple} />
+                      <Text style={styles.actionButtonText}>Call</Text>
+                    </Pressable>
+                  ) : null}
+                  {school.email ? (
+                    <Pressable style={styles.actionButton} onPress={() => Linking.openURL(`mailto:${school.email}`)}>
+                      <EnvelopeSimpleIcon size={14} color={Palette.purple} />
+                      <Text style={styles.actionButtonText}>Email</Text>
+                    </Pressable>
+                  ) : null}
+                  {school.website ? (
+                    <Pressable style={styles.actionButton} onPress={() => Linking.openURL(school.website)}>
+                      <GlobeIcon size={14} color={Palette.purple} />
+                      <Text style={styles.actionButtonText}>Website</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.bodyText}>No school found matching that search.</Text>
+              {fallbackLink ? (
+                <Pressable onPress={() => Linking.openURL(fallbackLink)}>
+                  <Text style={styles.fallbackLink}>Check USCIS&apos;s official DSO lookup →</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          )
         ) : (
-          <ThemedView style={styles.emptyState}>
-            <ThemedText style={{ marginBottom: 8 }}>No school found matching that search.</ThemedText>
-            {fallbackLink && (
-              <TouchableOpacity onPress={() => Linking.openURL(fallbackLink)}>
-                <ThemedText style={styles.fallbackLink}>Check USCIS's official DSO lookup →</ThemedText>
-              </TouchableOpacity>
-            )}
-          </ThemedView>
-        )
-      ) : (
-        <ThemedText style={{ paddingHorizontal: 16 }}>Loading...</ThemedText>
-      )}
-    </ParallaxScrollView>
+          <Text style={styles.bodyText}>Loading...</Text>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  root: { flex: 1, backgroundColor: Palette.white },
+  header: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 62,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
-  screenTitle: {
-    fontSize: 26,
-    fontFamily: 'Fredoka_700Bold',
-    color: '#1A1A2E',
+  title: {
+    fontFamily: Type.headingBold,
+    fontSize: 20,
+    color: Palette.ink,
   },
   searchRow: {
     flexDirection: 'row',
     gap: 8,
-    marginHorizontal: 16,
+    paddingHorizontal: 20,
     marginBottom: 16,
-    backgroundColor: 'transparent',
   },
   searchInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    paddingHorizontal: 14,
+    height: 44,
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.ink,
   },
   searchButton: {
-    backgroundColor: '#6C63FF',
+    backgroundColor: Palette.purple,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: Radius.input,
     alignItems: 'center',
     justifyContent: 'center',
   },
   searchButtonText: {
-    color: '#fff',
-    fontWeight: '600',
+    fontFamily: Type.bodySemiBold,
+    color: Palette.white,
   },
+  content: { paddingHorizontal: 20, paddingBottom: 40 },
   schoolCard: {
-    gap: 8,
-    marginHorizontal: 16,
-    marginBottom: 14,
+    gap: 6,
+    marginBottom: 12,
     padding: 16,
-    backgroundColor: '#F0EEFF',
-    borderRadius: 20,
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: Radius.cardSmall,
   },
   schoolName: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 16,
-    color: '#1A1A2E',
+    fontFamily: Type.headingSemiBold,
+    fontSize: 15,
+    color: Palette.ink,
   },
   dsoName: {
+    fontFamily: Type.bodyRegular,
     fontSize: 13,
-    color: '#888',
+    color: Palette.inkFaint,
   },
   actionRow: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 6,
-    backgroundColor: 'transparent',
   },
   actionButton: {
-    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Palette.dividerLight,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 10,
   },
   actionButtonText: {
-    color: '#6C63FF',
-    fontFamily: 'Fredoka_600SemiBold',
+    fontFamily: Type.bodySemiBold,
     fontSize: 13,
+    color: Palette.purple,
   },
   emptyState: {
-    marginHorizontal: 16,
-    padding: 16,
+    padding: 4,
+    gap: 8,
+  },
+  bodyText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13.5,
+    color: Palette.inkMuted,
   },
   fallbackLink: {
-    color: '#6C63FF',
-    fontFamily: 'Fredoka_600SemiBold',
+    fontFamily: Type.bodySemiBold,
+    color: Palette.purple,
   },
 });
