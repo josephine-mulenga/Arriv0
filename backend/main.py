@@ -1067,11 +1067,13 @@ def signup(request: Request, data: SignupRequest):
         if e.code in ("email_exists", "user_already_exists") or "already registered" in e.message.lower():
             logger.error(f"Signup error: duplicate email correlation_id={correlation_id}")
             raise HTTPException(status_code=409, detail="An account with this email already exists. Try logging in instead.")
-        logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
-        raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
+        logger.error(f"Signup error: {e.code} correlation_id={correlation_id}")
+        # TEMPORARY: surfacing e.code (a safe Supabase enum, not a stack trace)
+        # to diagnose a failure in production — revert once root-caused.
+        raise HTTPException(status_code=400, detail=f"Signup failed ({e.code}). Please check your details and try again.")
     except Exception as e:
         logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
-        raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
+        raise HTTPException(status_code=400, detail=f"Signup failed ({type(e).__name__}). Please check your details and try again.")
 
 @app.post("/login")
 @limiter.limit("10/minute")
