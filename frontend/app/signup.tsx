@@ -1,43 +1,35 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, Link } from 'expo-router';
+import {
+  CaretLeftIcon,
+  UserIcon,
+  EnvelopeSimpleIcon,
+  LockSimpleIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  CheckCircleIcon,
+} from 'phosphor-react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { Palette, Radius, Type } from '@/constants/theme';
 
+// Mirrors the backend's password_must_be_strong validator (backend/main.py) exactly —
+// the design spec shows only the first three rows, but the API rejects a password
+// missing a special character, so that check has to surface here too or signup fails
+// one screen later with no way for the user to see why.
 const passwordRules = [
-  { label: 'At least 8 characters', test: (pw) => pw.length >= 8 },
-  { label: 'One uppercase letter', test: (pw) => /[A-Z]/.test(pw) },
-  { label: 'One number', test: (pw) => /[0-9]/.test(pw) },
-  { label: 'One special character', test: (pw) => /[!@#$%^&*(),.?":{}|<>]/.test(pw) },
-  { label: 'No spaces', test: (pw) => pw.length > 0 && !/\s/.test(pw) },
+  { label: 'At least 8 characters', test: (pw: string) => pw.length >= 8 },
+  { label: 'One uppercase letter', test: (pw: string) => /[A-Z]/.test(pw) },
+  { label: 'One number', test: (pw: string) => /[0-9]/.test(pw) },
+  { label: 'One special character', test: (pw: string) => /[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(pw) },
 ];
 
-function PasswordChecklist({ password }) {
-  return (
-    <View style={styles.checklist}>
-      {passwordRules.map((rule) => {
-        const passed = rule.test(password);
-        return (
-          <View key={rule.label} style={styles.checklistRow}>
-            <View style={[styles.checkCircle, passed && styles.checkCirclePassed]}>
-              {passed && <ThemedText style={styles.checkMark}>✓</ThemedText>}
-            </View>
-            <ThemedText style={[styles.checklistText, passed && styles.checklistTextPassed]}>
-              {rule.label}
-            </ThemedText>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 export default function SignupScreen() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const isPasswordValid = passwordRules.every((rule) => rule.test(password));
   const canContinue = name.trim().length > 0 && email.trim().length > 0 && isPasswordValid;
@@ -50,94 +42,177 @@ export default function SignupScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={{ height: 100 }}>
-        <GradientHeaderBackground />
-      </View>
+    <View style={styles.root}>
+      <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <CaretLeftIcon size={18} color={Palette.ink} weight="bold" />
+      </Pressable>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled">
-        <ThemedText style={styles.title}>Create your account</ThemedText>
-        <ThemedText style={styles.subtitle}>Let's get you started.</ThemedText>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Create your account</Text>
+        <Text style={styles.subtitle}>Let&apos;s get you started.</Text>
 
-        <TextInput style={styles.input} placeholder="Full name" value={name} onChangeText={setName} />
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        <View style={styles.inputRow}>
+          <UserIcon size={17} color="#A9A7BE" />
+          <TextInput
+            style={styles.input}
+            placeholder="Full Name"
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={name}
+            onChangeText={setName}
+          />
+        </View>
 
-        <PasswordChecklist password={password} />
+        <View style={styles.inputRow}>
+          <EnvelopeSimpleIcon size={17} color="#A9A7BE" />
+          <TextInput
+            style={styles.input}
+            placeholder="Email Address"
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        </View>
 
-        <TouchableOpacity
-          style={[styles.button, !canContinue && styles.buttonDisabled]}
+        <View style={styles.inputRow}>
+          <LockSimpleIcon size={17} color="#A9A7BE" />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <Pressable onPress={() => setShowPassword((v) => !v)}>
+            {showPassword ? (
+              <EyeSlashIcon size={17} color="#A9A7BE" />
+            ) : (
+              <EyeIcon size={17} color="#A9A7BE" />
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.checklist}>
+          {passwordRules.map((rule) => {
+            const passed = rule.test(password);
+            return (
+              <View key={rule.label} style={styles.checklistRow}>
+                <CheckCircleIcon
+                  size={15}
+                  color={passed ? Palette.green : Palette.chevron}
+                  weight="fill"
+                />
+                <Text style={[styles.checklistText, passed && styles.checklistTextPassed]}>
+                  {rule.label}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <PrimaryButton
+          label="Sign Up"
           onPress={handleContinue}
-          disabled={!canContinue}>
-          <ThemedText style={styles.buttonText}>Continue</ThemedText>
-        </TouchableOpacity>
+          disabled={!canContinue}
+          style={styles.submitButton}
+        />
 
         <Link href="/login" style={styles.link}>
-          <ThemedText>Already have an account? Log in</ThemedText>
+          <Text style={styles.linkText}>
+            Already have an account? <Text style={styles.linkTextStrong}>Log in</Text>
+          </Text>
         </Link>
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 24, gap: 12, paddingBottom: 40 },
-  title: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 26,
-    color: '#1A1A2E',
+  root: {
+    flex: 1,
+    backgroundColor: Palette.white,
+    paddingTop: 62,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 8,
-  },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
-  checklist: { gap: 6, marginTop: -4, marginBottom: 4, paddingHorizontal: 4 },
-  checklistRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  checkCircle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: '#ccc',
-    backgroundColor: '#fff',
+  backButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: Palette.dividerLight,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 20,
   },
-  checkCirclePassed: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+  content: {
+    padding: 26,
+    paddingTop: 18,
   },
-  checkMark: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
+  title: {
+    fontFamily: Type.headingBold,
+    fontSize: 26,
+    textAlign: 'center',
+    color: Palette.ink,
+  },
+  subtitle: {
+    marginTop: 6,
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    textAlign: 'center',
+    color: Palette.inkFaint,
+    marginBottom: 24,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    paddingHorizontal: 14,
+    height: 50,
+    marginBottom: 11,
+  },
+  input: {
+    flex: 1,
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.ink,
+  },
+  checklist: {
+    gap: 7,
+    marginTop: 4,
+    marginBottom: 20,
+    paddingHorizontal: 2,
+  },
+  checklistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   checklistText: {
+    fontFamily: Type.bodyRegular,
     fontSize: 13,
-    color: '#888',
+    color: Palette.inkMuted,
   },
   checklistTextPassed: {
-    color: '#4CAF50',
+    color: Palette.inkMuted,
   },
-  button: { backgroundColor: '#6C63FF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-  buttonDisabled: { backgroundColor: '#C4C0F5' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  link: { marginTop: 12, alignSelf: 'center' },
+  submitButton: {
+    marginTop: 4,
+  },
+  link: {
+    marginTop: 16,
+    alignSelf: 'center',
+  },
+  linkText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.inkFaint,
+  },
+  linkTextStrong: {
+    fontFamily: Type.bodyBold,
+    color: Palette.purple,
+  },
 });

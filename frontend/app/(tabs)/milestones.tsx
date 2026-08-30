@@ -1,105 +1,156 @@
-import { StyleSheet } from 'react-native';
 import { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+
 import { getMilestones } from '@/api';
 import { useAuth } from '@/AuthContext';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { RailRow } from '@/components/ui/rail-row';
+import { Palette, Radius, Spacing, Type } from '@/constants/theme';
+
+interface Milestone {
+  id: number;
+  title: string;
+  description: string;
+  status: 'done' | 'next' | 'locked';
+}
+
+interface MilestonesData {
+  completed: number;
+  total: number;
+  milestones: Milestone[];
+}
 
 export default function MilestonesScreen() {
   const { token } = useAuth();
-  const [milestonesData, setMilestonesData] = useState(null);
+  const [data, setData] = useState<MilestonesData | null>(null);
 
   useEffect(() => {
-    const fetchMilestones = async () => {
-      try {
-        const data = await getMilestones(token);
-        setMilestonesData(data);
-      } catch (err) {
-        console.log('Error fetching milestones:', err.message);
-      }
-    };
-    if (token) fetchMilestones();
+    if (!token) return;
+    getMilestones(token).then(setData).catch(() => {});
   }, [token]);
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
-      headerImage={<GradientHeaderBackground logoSize={50} />}>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText style={styles.screenTitle}>Milestones</ThemedText>
-      </ThemedView>
+    <View style={styles.root}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Milestones</Text>
+        {data && (
+          <Text style={styles.subtitle}>
+            {data.completed} of {data.total} complete since you landed
+          </Text>
+        )}
+      </View>
 
-      {milestonesData ? (
-        <>
-          <ThemedView style={styles.progressSummary}>
-            <ThemedText style={styles.progressText}>
-              {milestonesData.completed} of {milestonesData.total} complete ({milestonesData.percentage}%)
-            </ThemedText>
-          </ThemedView>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {data?.milestones.map((item, index) => {
+          const isLast = index === data.milestones.length - 1;
 
-          {milestonesData.milestones.map((item) => (
-            <ThemedView key={item.id} style={styles.milestoneCard}>
-              <ThemedText style={styles.cardTitle}>{item.icon} {item.title}</ThemedText>
-              <ThemedText>{item.description}</ThemedText>
+          if (item.status === 'done') {
+            return (
+              <RailRow key={item.id} dotColor={Palette.green} dotFilled dotSize={13} isLast={isLast}>
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={styles.cardDescription}>{item.description}</Text>
+                </View>
+              </RailRow>
+            );
+          }
 
-              {item.status === 'done' && (
-                <ThemedText style={styles.doneText}>✅ Completed, nice work!</ThemedText>
-              )}
-              {item.status === 'up next' && (
-                <ThemedText style={styles.upNextText}>🔜 Up next</ThemedText>
-              )}
-              {item.status === 'locked' && (
-                <ThemedText style={styles.lockedText}>🔒 Locked</ThemedText>
-              )}
-            </ThemedView>
-          ))}
-        </>
-      ) : (
-        <ThemedText style={{ paddingHorizontal: 16 }}>Loading...</ThemedText>
-      )}
-    </ParallaxScrollView>
+          if (item.status === 'next') {
+            return (
+              <RailRow
+                key={item.id}
+                dotColor={Palette.purple}
+                dotFilled={false}
+                ringWidth={2.5}
+                dotSize={13}
+                isLast={isLast}>
+                <View style={[styles.card, styles.cardInProgress]}>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={styles.cardDescription}>{item.description}</Text>
+                </View>
+              </RailRow>
+            );
+          }
+
+          return (
+            <RailRow
+              key={item.id}
+              dotColor={Palette.inkDisabled}
+              dotFilled={false}
+              ringWidth={2.5}
+              dotSize={13}
+              isLast={isLast}>
+              <View style={[styles.card, styles.cardLocked]}>
+                <Text style={[styles.cardTitle, styles.cardTitleLocked]}>{item.title}</Text>
+                <Text style={styles.cardDescription}>{item.description}</Text>
+              </View>
+            </RailRow>
+          );
+        })}
+
+        {!data && <Text style={styles.emptyText}>Loading your milestones...</Text>}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    marginBottom: 16,
+  root: {
+    flex: 1,
+    backgroundColor: Palette.white,
   },
-  screenTitle: {
-    fontSize: 26,
-    fontFamily: 'Fredoka_700Bold',
-    color: '#1A1A2E',
+  header: {
+    paddingTop: 62,
+    paddingHorizontal: Spacing.screenPadding,
+    paddingBottom: 16,
+  },
+  title: {
+    fontFamily: Type.headingBold,
+    fontSize: 22,
+    color: Palette.ink,
+  },
+  subtitle: {
+    marginTop: 2,
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    color: Palette.inkFaint,
+  },
+  content: {
+    paddingHorizontal: Spacing.screenPadding,
+    paddingBottom: 108,
+  },
+  card: {
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: Radius.cardSmall,
+    padding: 14,
+  },
+  cardInProgress: {
+    backgroundColor: Palette.purpleCard,
+    borderColor: Palette.purpleCardBorder,
+  },
+  cardLocked: {
+    backgroundColor: Palette.surfaceSubtle,
+    borderColor: Palette.divider,
   },
   cardTitle: {
-    fontSize: 16,
-    fontFamily: 'Fredoka_600SemiBold',
+    fontFamily: Type.headingSemiBold,
+    fontSize: 14,
+    color: Palette.ink,
   },
-  progressSummary: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F0EEFF',
-    borderRadius: 20,
-    alignItems: 'center',
+  cardTitleLocked: {
+    color: Palette.inkPlaceholder,
   },
-  progressText: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 16,
+  cardDescription: {
+    marginTop: 4,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: Palette.inkMuted,
   },
-  milestoneCard: {
-    gap: 4,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: '#F0EEFF',
+  emptyText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    color: Palette.inkPlaceholder,
   },
-  doneText: { color: 'green', fontWeight: '600' },
-  upNextText: { color: '#6C63FF', fontWeight: '600' },
-  lockedText: { color: '#999999', fontWeight: '600' },
 });

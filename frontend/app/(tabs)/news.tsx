@@ -1,26 +1,90 @@
-import { StyleSheet, Image, TouchableOpacity, Linking } from 'react-native';
 import { useEffect, useState } from 'react';
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  IdentificationCardIcon,
+  BriefcaseIcon,
+  GraduationCapIcon,
+  NewspaperIcon,
+  BookmarkSimpleIcon,
+  type Icon,
+} from 'phosphor-react-native';
+
 import { getNews, addBookmark, getBookmarks, deleteBookmark } from '@/api';
 import { useAuth } from '@/AuthContext';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { Chip } from '@/components/ui/chip';
+import { IconTile } from '@/components/ui/icon-tile';
+import { Palette, Spacing, Type } from '@/constants/theme';
 
 const TABS = ['All', 'F1 Visa', 'OPT', 'CPT', 'STEM OPT', 'Saved'];
 
+interface NewsItem {
+  id: string;
+  title: string;
+  body: string;
+  tag: string;
+  link?: string;
+  image_url?: string;
+  affects_f1?: boolean;
+  created_at?: string;
+}
+
+interface Bookmark {
+  id: string;
+  news_title: string;
+}
+
+const tagStyle: Record<string, { tint: string; color: string; icon: Icon }> = {
+  'F1 Visa': { tint: Palette.purpleTint, color: Palette.purple, icon: IdentificationCardIcon },
+  OPT: { tint: Palette.greenTint, color: Palette.green, icon: BriefcaseIcon },
+  CPT: { tint: Palette.amberTint, color: Palette.amber, icon: BriefcaseIcon },
+  'STEM OPT': { tint: Palette.redTint, color: Palette.red, icon: GraduationCapIcon },
+};
+
+function tagVisual(tag: string) {
+  return tagStyle[tag] ?? { tint: Palette.purpleTint, color: Palette.purple, icon: NewspaperIcon };
+}
+
+function relativeAge(dateString?: string): string {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const days = Math.max(0, Math.round((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)));
+  if (days === 0) return 'Today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days} days ago`;
+  const months = Math.round(days / 30);
+  return months === 1 ? '1 month ago' : `${months} months ago`;
+}
+
+function formatDate(dateString?: string): string {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// The backend's news source occasionally returns the same story more than
+// once (re-fetched on different runs); collapse those before rendering
+// rather than showing the same headline five times in a row.
+function dedupeByTitle(items: NewsItem[]): NewsItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.title.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export default function NewsScreen() {
   const { token } = useAuth();
-  const [realNewsItems, setRealNewsItems] = useState(null);
-  const [bookmarks, setBookmarks] = useState([]);
+  const [newsItems, setNewsItems] = useState<NewsItem[] | null>(null);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [selectedTab, setSelectedTab] = useState('All');
 
   const fetchNews = async () => {
     try {
       const data = await getNews(token);
-      setRealNewsItems(data);
-    } catch (err) {
-      console.log('Error fetching news:', err.message);
+      setNewsItems(dedupeByTitle(data.news ?? []));
+    } catch {
+      // keep last-known list on failure
     }
   };
 
@@ -28,8 +92,8 @@ export default function NewsScreen() {
     try {
       const data = await getBookmarks(token);
       setBookmarks(data.bookmarks || data);
-    } catch (err) {
-      console.log('Error fetching bookmarks:', err.message);
+    } catch {
+      // ignore; bookmark state just won't reflect saved articles
     }
   };
 
@@ -40,35 +104,24 @@ export default function NewsScreen() {
     }
   }, [token]);
 
-  const isBookmarked = (item) => bookmarks.some((b) => b.news_title === item.title);
+  const isBookmarked = (item: NewsItem) => bookmarks.some((b) => b.news_title === item.title);
+  const getBookmarkId = (item: NewsItem) => bookmarks.find((b) => b.news_title === item.title)?.id;
 
-  const getBookmarkId = (item) => {
-    const match = bookmarks.find((b) => b.news_title === item.title);
-    return match ? match.id : null;
-  };
-
-  const handleToggleBookmark = async (item) => {
+  const handleToggleBookmark = async (item: NewsItem) => {
     try {
       if (isBookmarked(item)) {
         const bookmarkId = getBookmarkId(item);
-        await deleteBookmark(bookmarkId, token);
+        if (bookmarkId) await deleteBookmark(bookmarkId, token);
       } else {
         await addBookmark(item, token);
       }
       await fetchBookmarks();
-    } catch (err) {
-      console.log('Error toggling bookmark:', err.message);
+    } catch {
+      // ignore; user can retry
     }
   };
 
-  const handleOpenArticle = (item) => {
-    if (item.link) {
-      Linking.openURL(item.link);
-    }
-  };
-
-  const allNews = realNewsItems ? realNewsItems.news : [];
-
+  const allNews = newsItems ?? [];
   const filteredNews =
     selectedTab === 'All'
       ? allNews
@@ -77,147 +130,163 @@ export default function NewsScreen() {
       : allNews.filter((item) => item.tag === selectedTab);
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
-      headerImage={<GradientHeaderBackground logoSize={50} />}>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText style={styles.screenTitle}>News</ThemedText>
-      </ThemedView>
+    <View style={styles.root}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Immigration News</Text>
+      </View>
 
-      <ThemedView style={styles.tabRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+        contentContainerStyle={styles.chipRow}>
         {TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => setSelectedTab(tab)}
-            style={[styles.tabButton, selectedTab === tab && styles.tabButtonActive]}>
-            <ThemedText style={[styles.tabText, selectedTab === tab && styles.tabTextActive]}>
-              {tab === 'Saved' ? '🔖 Saved' : tab}
-            </ThemedText>
-          </TouchableOpacity>
+          <Chip key={tab} label={tab} selected={selectedTab === tab} onPress={() => setSelectedTab(tab)} />
         ))}
-      </ThemedView>
+      </ScrollView>
 
-      {realNewsItems ? (
-        filteredNews.length > 0 ? (
-          filteredNews.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              activeOpacity={item.link ? 0.7 : 1}
-              onPress={() => handleOpenArticle(item)}
-              disabled={!item.link}>
-              <ThemedView
-                style={[styles.newsCard, item.affects_f1 ? styles.relevantCard : styles.generalCard]}>
-                {item.image_url ? (
-                  <Image source={{ uri: item.image_url }} style={styles.newsImage} />
-                ) : null}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {!newsItems && <Text style={styles.emptyText}>Loading news...</Text>}
 
-                <ThemedView style={styles.cardHeaderRow}>
-                  <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-                  <TouchableOpacity onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
-                    <ThemedText style={styles.bookmarkIcon}>
-                      {isBookmarked(item) ? '🔖' : '📑'}
-                    </ThemedText>
-                  </TouchableOpacity>
-                </ThemedView>
-
-                <ThemedText style={item.affects_f1 ? styles.tagDirect : styles.tagGeneral}>
-                  {item.tag}
-                </ThemedText>
-                <ThemedText>{item.body}</ThemedText>
-
-                {item.link && (
-                  <ThemedText style={styles.readMoreText}>Read full article →</ThemedText>
-                )}
-              </ThemedView>
-            </TouchableOpacity>
-          ))
-        ) : (
-          <ThemedText style={{ paddingHorizontal: 16 }}>
+        {newsItems && filteredNews.length === 0 && (
+          <Text style={styles.emptyText}>
             {selectedTab === 'Saved' ? 'No saved articles yet.' : 'No news in this category yet.'}
-          </ThemedText>
-        )
-      ) : (
-        <ThemedText style={{ paddingHorizontal: 16 }}>Loading...</ThemedText>
-      )}
-    </ParallaxScrollView>
+          </Text>
+        )}
+
+        {filteredNews.map((item, index) => {
+          const visual = tagVisual(item.tag);
+          const saved = isBookmarked(item);
+          return (
+            <Pressable
+              key={item.id ?? index}
+              style={[styles.row, index === filteredNews.length - 1 && styles.rowLast]}
+              onPress={() => item.link && Linking.openURL(item.link)}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headline} numberOfLines={3}>
+                  {item.title}
+                </Text>
+                <Text style={styles.meta}>
+                  {formatDate(item.created_at)}
+                  {item.created_at ? ` · ${relativeAge(item.created_at)}` : ''}
+                </Text>
+                <View style={[styles.badge, { backgroundColor: visual.tint }]}>
+                  <Text style={[styles.badgeText, { color: visual.color }]}>{item.tag}</Text>
+                </View>
+                <Text style={styles.whatThisMeans}>
+                  {item.affects_f1
+                    ? 'This directly affects your F-1 status — worth a read.'
+                    : 'General visa news — may not affect your status directly.'}
+                </Text>
+              </View>
+
+              <View style={styles.thumbColumn}>
+                {item.image_url ? (
+                  <Image source={{ uri: item.image_url }} style={styles.thumbImage} />
+                ) : (
+                  <IconTile icon={visual.icon} tint={visual.tint} color={visual.color} size={74} iconSize={28} />
+                )}
+                <Pressable hitSlop={8} onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
+                  <BookmarkSimpleIcon
+                    size={17}
+                    color={saved ? Palette.purple : Palette.inkFaint}
+                    weight={saved ? 'fill' : 'regular'}
+                  />
+                </Pressable>
+              </View>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  screenTitle: {
-    fontSize: 26,
-    fontFamily: 'Fredoka_700Bold',
-    color: '#1A1A2E',
-  },
-  tabRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    gap: 8,
-  },
-  tabButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: '#F0EEFF',
-  },
-  tabButtonActive: {
-    backgroundColor: '#6C63FF',
-  },
-  tabText: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 13,
-    color: '#6C63FF',
-  },
-  tabTextActive: {
-    color: '#FFFFFF',
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    backgroundColor: 'transparent',
-    gap: 8,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontFamily: 'Fredoka_600SemiBold',
+  root: {
     flex: 1,
+    backgroundColor: Palette.white,
+  },
+  header: {
+    paddingTop: 62,
+    paddingHorizontal: Spacing.screenPadding,
+  },
+  title: {
+    fontFamily: Type.headingBold,
+    fontSize: 22,
+    color: Palette.ink,
+  },
+  chipScroll: {
+    height: 64,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  chipRow: {
+    gap: 8,
+    alignItems: 'center',
+    paddingHorizontal: Spacing.screenPadding,
+    paddingVertical: 16,
+  },
+  content: {
+    paddingHorizontal: Spacing.screenPadding,
+    paddingBottom: 108,
+  },
+  emptyText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    color: Palette.inkPlaceholder,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.divider,
+  },
+  rowLast: {
+    borderBottomWidth: 0,
+  },
+  headline: {
+    fontFamily: Type.bodyBold,
+    fontSize: 14.5,
+    lineHeight: 20,
+    color: Palette.ink,
+  },
+  meta: {
+    marginTop: 4,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    color: Palette.inkPlaceholder,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    borderRadius: 9,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginTop: 6,
+  },
+  badgeText: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11,
+  },
+  whatThisMeans: {
+    marginTop: 6,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: Palette.inkMuted,
+  },
+  thumbColumn: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  thumbImage: {
+    width: 74,
+    height: 74,
+    borderRadius: 12,
+    backgroundColor: Palette.dividerLight,
   },
   bookmarkButton: {
     padding: 2,
-  },
-  bookmarkIcon: {
-    fontSize: 20,
-  },
-  newsCard: {
-    gap: 8,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 20,
-  },
-  newsImage: {
-    width: '100%',
-    height: 160,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  relevantCard: { backgroundColor: '#F0EEFF' },
-  generalCard: { backgroundColor: '#F5F5F7' },
-  tagDirect: { color: '#6C63FF', fontWeight: '600' },
-  tagGeneral: { color: '#888888', fontWeight: '600' },
-  readMoreText: {
-    color: '#6C63FF',
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 13,
-    marginTop: 4,
   },
 });

@@ -1,25 +1,36 @@
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { FolderOpenIcon, FolderSimpleIcon, CaretLeftIcon } from 'phosphor-react-native';
+
 import { getDocuments, updateDocument } from '@/api';
 import { useAuth } from '@/AuthContext';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { IconTile } from '@/components/ui/icon-tile';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { Palette, Spacing, Type } from '@/constants/theme';
 
 const CATEGORY_ORDER = ['Identity', 'Immigration', 'School', 'Health', 'Financial', 'Work Authorization'];
 
+interface Doc {
+  id: string;
+  name: string;
+  category?: string;
+  description?: string;
+  collected: boolean;
+}
+
 export default function DocumentsScreen() {
   const { token } = useAuth();
-  const [documents, setDocuments] = useState(null);
-  const [updatingId, setUpdatingId] = useState(null);
+  const [documents, setDocuments] = useState<Doc[] | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const fetchDocuments = async () => {
     try {
       const data = await getDocuments(token);
       setDocuments(Array.isArray(data) ? data : data.documents || []);
-    } catch (err) {
-      console.log('Error fetching documents:', err.message);
+    } catch {
+      // keep whatever was last loaded
     }
   };
 
@@ -27,167 +38,189 @@ export default function DocumentsScreen() {
     if (token) fetchDocuments();
   }, [token]);
 
-  const handleToggle = async (doc) => {
+  const handleToggle = async (doc: Doc) => {
+    if (!documents) return;
     setUpdatingId(doc.id);
     try {
-      await updateDocument(doc.id, !doc.collected, doc.notes || '', token);
+      await updateDocument(doc.id, !doc.collected, '', token);
       setDocuments((prev) =>
-        prev.map((d) => (d.id === doc.id ? { ...d, collected: !d.collected } : d))
+        (prev ?? []).map((d) => (d.id === doc.id ? { ...d, collected: !d.collected } : d))
       );
-    } catch (err) {
-      console.log('Error updating document:', err.message);
+    } catch {
+      // leave state as-is; user can retry the toggle
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const grouped = documents
-    ? documents.reduce((acc, doc) => {
-        const category = doc.category || 'Other';
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(doc);
-        return acc;
-      }, {})
-    : {};
-
+  const grouped: Record<string, Doc[]> = {};
+  (documents ?? []).forEach((doc) => {
+    const category = doc.category || 'Other';
+    if (!grouped[category]) grouped[category] = [];
+    grouped[category].push(doc);
+  });
   const orderedCategories = [
     ...CATEGORY_ORDER.filter((c) => grouped[c]),
     ...Object.keys(grouped).filter((c) => !CATEGORY_ORDER.includes(c)),
   ];
 
-  const totalCount = documents ? documents.length : 0;
-  const collectedCount = documents ? documents.filter((d) => d.collected).length : 0;
+  const validCount = (documents ?? []).filter((d) => d.collected).length;
+  const missingCount = (documents ?? []).filter((d) => !d.collected).length;
+
+  if (documents && documents.length === 0) {
+    return (
+      <View style={styles.root}>
+        <ScreenHeader />
+        <View style={styles.emptyState}>
+          <FolderOpenIcon size={44} color="#CFC9F5" />
+          <Text style={styles.emptyTitle}>Nothing tracked yet</Text>
+          <Text style={styles.emptyBody}>
+            Add the documents your status depends on and Arriv0 will warn you before any of them
+            expire.
+          </Text>
+          <PrimaryButton
+            label="Add my documents"
+            onPress={() => router.push('/chat')}
+            style={styles.emptyButton}
+          />
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#C7D9FF', dark: '#2A2450' }}
-      headerImage={<GradientHeaderBackground logoSize={50} />}>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText style={styles.screenTitle}>Documents</ThemedText>
-      </ThemedView>
+    <View style={styles.root}>
+      <ScreenHeader />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.subtitle}>
+          {documents ? `${validCount} valid · ${missingCount} missing for OPT` : 'Loading...'}
+        </Text>
 
-      {documents ? (
-        <>
-          <ThemedView style={styles.progressSummary}>
-            <ThemedText style={styles.progressText}>
-              {collectedCount} of {totalCount} collected
-            </ThemedText>
-          </ThemedView>
+        {orderedCategories.map((category) => (
+          <View key={category} style={styles.categorySection}>
+            <Text style={styles.categoryTitle}>{category}</Text>
+            {grouped[category].map((doc) => (
+              <Pressable
+                key={doc.id}
+                style={styles.docRow}
+                onPress={() => handleToggle(doc)}
+                disabled={updatingId === doc.id}>
+                <IconTile
+                  icon={FolderSimpleIcon}
+                  size={40}
+                  iconSize={18}
+                  tint={doc.collected ? Palette.greenTint : Palette.redTint}
+                  color={doc.collected ? Palette.green : Palette.red}
+                />
+                <View style={styles.docTextWrap}>
+                  <Text style={styles.docName}>{doc.name}</Text>
+                  {doc.description ? <Text style={styles.docDescription}>{doc.description}</Text> : null}
+                </View>
+                <StatusBadge
+                  label={doc.collected ? 'Valid' : 'Missing'}
+                  color={doc.collected ? Palette.green : Palette.red}
+                  tint={doc.collected ? Palette.greenTint : Palette.redTint}
+                />
+              </Pressable>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
 
-          {orderedCategories.map((category) => (
-            <ThemedView key={category} style={styles.categorySection}>
-              <ThemedText style={styles.categoryTitle}>{category}</ThemedText>
-
-              {grouped[category].map((doc) => (
-                <TouchableOpacity
-                  key={doc.id}
-                  style={styles.docRow}
-                  onPress={() => handleToggle(doc)}
-                  disabled={updatingId === doc.id}>
-                  <View style={[styles.checkbox, doc.collected && styles.checkboxChecked]}>
-                    {doc.collected && <ThemedText style={styles.checkMark}>✓</ThemedText>}
-                  </View>
-                  <ThemedView style={styles.docTextWrap}>
-                    <ThemedText style={doc.collected ? styles.docNameDone : styles.docName}>
-                      {doc.name}
-                    </ThemedText>
-                    {doc.description && (
-                      <ThemedText style={styles.docDescription}>{doc.description}</ThemedText>
-                    )}
-                  </ThemedView>
-                </TouchableOpacity>
-              ))}
-            </ThemedView>
-          ))}
-        </>
-      ) : (
-        <ThemedText style={{ paddingHorizontal: 16 }}>Loading...</ThemedText>
-      )}
-    </ParallaxScrollView>
+function ScreenHeader() {
+  return (
+    <View style={styles.header}>
+      <Pressable onPress={() => router.back()} hitSlop={8}>
+        <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
+      </Pressable>
+      <Text style={styles.title}>Documents</Text>
+      <View style={{ width: 20 }} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  root: {
+    flex: 1,
+    backgroundColor: Palette.white,
+  },
+  header: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  screenTitle: {
-    fontSize: 26,
-    fontFamily: 'Fredoka_700Bold',
-    color: '#1A1A2E',
-  },
-  progressSummary: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F0EEFF',
-    borderRadius: 20,
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 62,
+    paddingHorizontal: Spacing.screenPadding,
+    paddingBottom: 16,
   },
-  progressText: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 16,
+  title: {
+    fontFamily: Type.headingBold,
+    fontSize: 22,
+    color: Palette.ink,
+  },
+  content: {
+    paddingHorizontal: Spacing.screenPadding,
+    paddingBottom: 108,
+  },
+  subtitle: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    color: Palette.inkFaint,
+    marginBottom: Spacing.sectionGap,
   },
   categorySection: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F5F5F7',
-    borderRadius: 20,
-    gap: 4,
+    marginBottom: Spacing.sectionGap,
   },
   categoryTitle: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 16,
-    color: '#6C63FF',
-    marginBottom: 8,
+    fontFamily: Type.headingSemiBold,
+    fontSize: 15,
+    color: Palette.ink,
+    marginBottom: Spacing.cardGap,
   },
   docRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 8,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#6C63FF',
-    backgroundColor: '#fff',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  checkboxChecked: {
-    backgroundColor: '#6C63FF',
-  },
-  checkMark: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
+    gap: 12,
+    paddingVertical: 8,
   },
   docTextWrap: {
     flex: 1,
-    gap: 2,
-    backgroundColor: 'transparent',
   },
   docName: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 15,
-    color: '#1A1A2E',
-  },
-  docNameDone: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 15,
-    color: '#4CAF50',
-    textDecorationLine: 'line-through',
+    fontFamily: Type.headingSemiBold,
+    fontSize: 14,
+    color: Palette.ink,
   },
   docDescription: {
-    fontSize: 13,
-    color: '#888',
+    marginTop: 2,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    color: Palette.inkFaint,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    gap: 10,
+  },
+  emptyTitle: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 18,
+    color: Palette.ink,
+    marginTop: 8,
+  },
+  emptyBody: {
+    textAlign: 'center',
+    fontFamily: Type.bodyRegular,
+    fontSize: 13.5,
+    lineHeight: 21,
+    color: Palette.inkMuted,
+  },
+  emptyButton: {
+    marginTop: 12,
+    minWidth: 200,
   },
 });

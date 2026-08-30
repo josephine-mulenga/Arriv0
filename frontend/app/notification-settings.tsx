@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
+import { CaretLeftIcon } from 'phosphor-react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { Chip } from '@/components/ui/chip';
+import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { updateNotificationSettings, getTimezones } from '@/api';
 
@@ -13,7 +14,7 @@ export default function NotificationSettingsScreen() {
 
   const [notificationTime, setNotificationTime] = useState('09:00');
   const [timezone, setTimezone] = useState('America/New_York');
-  const [timezones, setTimezones] = useState([]);
+  const [timezones, setTimezones] = useState<{ label: string; value: string }[]>([]);
   const [timezonesLoading, setTimezonesLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -22,16 +23,16 @@ export default function NotificationSettingsScreen() {
   useEffect(() => {
     const fetchTimezones = async () => {
       try {
-        const tzList = await getTimezones();
-        setTimezones(tzList);
-      } catch (err) {
-        console.log('Error fetching timezones:', err.message);
+        const data = await getTimezones(token);
+        setTimezones(data.timezones ?? []);
+      } catch {
+        // fall back to the default timezone if the list can't load
       } finally {
         setTimezonesLoading(false);
       }
     };
     fetchTimezones();
-  }, []);
+  }, [token]);
 
   const handleSave = async () => {
     try {
@@ -40,7 +41,7 @@ export default function NotificationSettingsScreen() {
       setSaved(false);
       await updateNotificationSettings(user.id, notificationTime, timezone, token);
       setSaved(true);
-    } catch (err) {
+    } catch {
       setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
@@ -48,111 +49,101 @@ export default function NotificationSettingsScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={{ height: 100 }}>
-        <GradientHeaderBackground />
+    <View style={styles.root}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} hitSlop={8}>
+          <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
+        </Pressable>
+        <Text style={styles.title}>Notification settings</Text>
+        <View style={{ width: 20 }} />
       </View>
 
-      <ThemedView style={styles.content}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <ThemedText style={styles.backButton}>← Back</ThemedText>
-        </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.bodyText}>Choose when you&apos;d like to receive your daily status update.</Text>
 
-        <ThemedText style={styles.title}>Notification settings</ThemedText>
-        <ThemedText>Choose when you'd like to receive your daily status update.</ThemedText>
-
-        <ThemedText style={styles.label}>Time (24hr, HH:MM)</ThemedText>
+        <Text style={styles.label}>Time (24hr, HH:MM)</Text>
         <TextInput
           style={styles.input}
           placeholder="09:00"
+          placeholderTextColor={Palette.inkPlaceholder}
           value={notificationTime}
           onChangeText={setNotificationTime}
         />
 
-        <ThemedText style={styles.label}>Timezone</ThemedText>
+        <Text style={styles.label}>Timezone</Text>
         {timezonesLoading ? (
-          <ThemedText>Loading timezones...</ThemedText>
+          <Text style={styles.bodyText}>Loading timezones...</Text>
         ) : (
-          <ThemedView style={styles.timezoneRow}>
+          <View style={styles.timezoneRow}>
             {timezones.map((tz) => (
-              <TouchableOpacity
-                key={tz}
-                onPress={() => setTimezone(tz)}
-                style={[styles.tzButton, timezone === tz && styles.tzButtonActive]}>
-                <ThemedText style={timezone === tz && styles.tzTextActive}>
-                  {tz.includes('/') ? tz.split('/')[1].replace('_', ' ') : tz}
-                </ThemedText>
-              </TouchableOpacity>
+              <Chip
+                key={tz.value}
+                label={tz.label}
+                selected={timezone === tz.value}
+                onPress={() => setTimezone(tz.value)}
+              />
             ))}
-          </ThemedView>
+          </View>
         )}
 
-        {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
-        {saved && <ThemedText style={styles.successText}>Saved!</ThemedText>}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {saved ? <Text style={styles.successText}>Saved!</Text> : null}
 
-        <TouchableOpacity style={styles.button} onPress={handleSave} disabled={loading}>
-          <ThemedText style={styles.buttonText}>{loading ? 'Saving...' : 'Save'}</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
-    </ThemedView>
+        <PrimaryButton
+          label={loading ? 'Saving...' : 'Save'}
+          onPress={handleSave}
+          disabled={loading}
+          style={styles.submitButton}
+        />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { flex: 1, padding: 24, gap: 12 },
-  backButton: {
-    color: '#6C63FF',
-    fontWeight: '600',
-    marginBottom: 8,
+  root: { flex: 1, backgroundColor: Palette.white },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 62,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
   title: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 24,
-    color: '#1A1A2E',
+    fontFamily: Type.headingBold,
+    fontSize: 20,
+    color: Palette.ink,
+  },
+  content: { padding: 26, paddingTop: 0, gap: 12 },
+  bodyText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13.5,
+    color: Palette.inkMuted,
   },
   label: {
-    fontWeight: '600',
+    fontFamily: Type.bodyBold,
+    fontSize: 12.5,
+    color: Palette.inkMuted,
     marginTop: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    paddingHorizontal: 14,
+    height: 48,
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.ink,
   },
   timezoneRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  tzButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#F5F5F7',
-  },
-  tzButtonActive: {
-    backgroundColor: '#6C63FF',
-  },
-  tzTextActive: {
-    color: '#FFFFFF',
-  },
-  button: {
-    backgroundColor: '#6C63FF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  errorText: {
-    color: 'red',
-  },
-  successText: {
-    color: 'green',
-  },
+  errorText: { fontFamily: Type.bodyRegular, color: Palette.danger, fontSize: 13 },
+  successText: { fontFamily: Type.bodyRegular, color: Palette.green, fontSize: 13 },
+  submitButton: { marginTop: 8 },
 });

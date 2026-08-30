@@ -1,60 +1,97 @@
-import { useState, useRef, useEffect } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { router } from 'expo-router';
+import {
+  CaretLeftIcon,
+  RobotIcon,
+  PaperPlaneTiltIcon,
+  TrashIcon,
+  ListChecksIcon,
+  FolderSimpleIcon,
+  type Icon,
+} from 'phosphor-react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
 import { useAuth } from '@/AuthContext';
 import { chat, getChatHistory, clearChatHistory } from '@/api';
+import { Palette, Type } from '@/constants/theme';
+import { usePreferences } from '@/PreferencesContext';
 
-const DEFAULT_GREETING = {
+interface Message {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+const DEFAULT_GREETING: Message = {
   role: 'assistant',
   text: "Hi! I'm here to help with anything about your F1 status, OPT, CPT, or navigating life in the US. What's on your mind?",
 };
 
+interface ActionChip {
+  label: string;
+  icon: Icon;
+  href: string;
+}
+
+function actionChipFor(message: Message): ActionChip | null {
+  if (message.role !== 'assistant') return null;
+  const text = message.text.toLowerCase();
+  if (text.includes('opt')) {
+    return { label: 'Open my OPT checklist', icon: ListChecksIcon, href: '/deadline/opt-application' };
+  }
+  if (text.includes('document')) {
+    return { label: 'Open my documents', icon: FolderSimpleIcon, href: '/documents' };
+  }
+  return null;
+}
+
 export default function ChatScreen() {
   const { token } = useAuth();
-  const [messages, setMessages] = useState([DEFAULT_GREETING]);
+  const { chatTheme } = usePreferences();
+  const [messages, setMessages] = useState<Message[]>([DEFAULT_GREETING]);
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
-  const scrollViewRef = useRef(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-  const loadHistory = async () => {
-    try {
-      const data = await getChatHistory(token);
-      const rawHistory = Array.isArray(data) ? data : data.messages || [];
-      const historyMessages = rawHistory.map((msg) => ({
-        role: msg.role,
-        text: msg.content,
-      }));
-      if (historyMessages.length > 0) {
-        setMessages(historyMessages);
+    const loadHistory = async () => {
+      try {
+        const data = await getChatHistory(token);
+        const rawHistory = Array.isArray(data) ? data : data.messages || [];
+        const historyMessages: Message[] = rawHistory.map((msg: { role: 'user' | 'assistant'; content: string }) => ({
+          role: msg.role,
+          text: msg.content,
+        }));
+        if (historyMessages.length > 0) setMessages(historyMessages);
+      } catch {
+        // keep the default greeting if history can't load
+      } finally {
+        setHistoryLoading(false);
       }
-    } catch (err) {
-      console.log('Error loading chat history:', err.message);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-  if (token) loadHistory();
-}, [token]);
+    };
+    if (token) loadHistory();
+  }, [token]);
 
   const handleSend = async () => {
     if (!question.trim()) return;
-
-    const userMessage = { role: 'user', text: question };
+    const userMessage: Message = { role: 'user', text: question };
     setMessages((prev) => [...prev, userMessage]);
     setQuestion('');
     setLoading(true);
 
     try {
       const data = await chat(question, token);
-      console.log('Chat response:', data)
       setMessages((prev) => [...prev, { role: 'assistant', text: data.answer }]);
-    } catch (err) {
+    } catch {
       setMessages((prev) => [...prev, { role: 'assistant', text: "Sorry, I couldn't process that. Try again?" }]);
     } finally {
       setLoading(false);
@@ -65,152 +102,230 @@ export default function ChatScreen() {
     try {
       await clearChatHistory(token);
       setMessages([DEFAULT_GREETING]);
-    } catch (err) {
-      console.log('Error clearing chat history:', err.message);
+    } catch {
+      // ignore; history stays as-is
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-
-      <View style={{ height: 100 }}>
-        <GradientHeaderBackground />
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} hitSlop={8}>
+          <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
+        </Pressable>
+        <View style={styles.headerTitleBlock}>
+          <Text style={styles.headerTitle}>Arri AI Assistant</Text>
+          <Text style={styles.headerSubtitle}>Knows your dates. Not legal advice.</Text>
+        </View>
+        <Pressable onPress={handleClearHistory} hitSlop={8}>
+          <TrashIcon size={18} color={Palette.inkFaint} />
+        </Pressable>
       </View>
-
-      <ThemedView style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <ThemedText style={styles.backButton}>← Back</ThemedText>
-        </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>Ask Arrivo</ThemedText>
-        <TouchableOpacity onPress={handleClearHistory} style={styles.clearButton}>
-          <ThemedText style={styles.clearButtonText}>Clear</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
 
       <ScrollView
         ref={scrollViewRef}
-        style={styles.messagesContainer}
+        style={styles.messages}
+        contentContainerStyle={styles.messagesContent}
         onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}>
+        {messages.length <= 1 && (
+          <View style={styles.emptyState}>
+            <View style={[styles.emptyIconSquare, { backgroundColor: chatTheme.tint }]}>
+              <RobotIcon size={38} color={chatTheme.accent} weight="fill" />
+            </View>
+            <Text style={styles.emptyText}>How can I help you today?</Text>
+          </View>
+        )}
+
         {historyLoading ? (
-          <ThemedText style={styles.loadingText}>Loading conversation...</ThemedText>
+          <Text style={styles.loadingText}>Loading conversation...</Text>
         ) : (
-          messages.map((msg, index) => (
-            <ThemedView
-              key={index}
-              style={[styles.messageBubble, msg.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
-              <ThemedText style={msg.role === 'user' ? styles.userText : styles.assistantText}>
-                {msg.text}
-              </ThemedText>
-            </ThemedView>
-          ))
+          messages.map((msg, index) => {
+            const chip = actionChipFor(msg);
+            return (
+              <View key={index}>
+                <View
+                  style={[
+                    styles.bubble,
+                    msg.role === 'user'
+                      ? [styles.userBubble, { backgroundColor: chatTheme.accent }]
+                      : styles.assistantBubble,
+                  ]}>
+                  <Text style={msg.role === 'user' ? styles.userText : styles.assistantText}>{msg.text}</Text>
+                </View>
+                {chip && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.actionChip,
+                      pressed && { borderColor: chatTheme.accent },
+                    ]}
+                    onPress={() => router.push(chip.href as never)}>
+                    <chip.icon size={16} color={chatTheme.accent} />
+                    <Text style={styles.actionChipLabel}>{chip.label}</Text>
+                  </Pressable>
+                )}
+              </View>
+            );
+          })
         )}
         {loading && (
-          <ThemedView style={[styles.messageBubble, styles.assistantBubble]}>
-            <ThemedText style={styles.assistantText}>Typing...</ThemedText>
-          </ThemedView>
+          <View style={[styles.bubble, styles.assistantBubble]}>
+            <Text style={styles.assistantText}>Typing...</Text>
+          </View>
         )}
       </ScrollView>
 
-      <ThemedView style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          placeholder="Ask a question..."
-          value={question}
-          onChangeText={setQuestion}
-          onSubmitEditing={handleSend}
-        />
-        <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={loading}>
-          <ThemedText style={styles.sendButtonText}>Send</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
+      <View style={styles.composerRow}>
+        <View style={styles.composerPill}>
+          <TextInput
+            style={styles.input}
+            placeholder="Ask a question..."
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={question}
+            onChangeText={setQuestion}
+            onSubmitEditing={handleSend}
+          />
+        </View>
+        <Pressable
+          style={[styles.sendButton, { backgroundColor: chatTheme.accent }]}
+          onPress={handleSend}
+          disabled={loading}>
+          <PaperPlaneTiltIcon size={19} color={Palette.white} weight="fill" />
+        </Pressable>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
+    backgroundColor: Palette.white,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 16,
-    padding: 16,
-    paddingTop: 50,
+    gap: 12,
+    paddingTop: 62,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.divider,
   },
-  backButton: {
-    color: '#6C63FF',
-    fontWeight: '600',
+  headerTitleBlock: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 22,
-    color: '#1A1A2E',
+    fontFamily: Type.headingSemiBold,
+    fontSize: 16,
+    color: Palette.ink,
+  },
+  headerSubtitle: {
+    marginTop: 2,
+    fontFamily: Type.bodyRegular,
+    fontSize: 11.5,
+    color: Palette.inkPlaceholder,
+  },
+  messages: {
     flex: 1,
-    textAlign: 'center',
   },
-  clearButton: {
-    padding: 4,
+  messagesContent: {
+    padding: 20,
+    gap: 8,
   },
-  clearButtonText: {
-    color: '#D32F2F',
-    fontWeight: '600',
-    fontSize: 13,
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 14,
+  },
+  emptyIconSquare: {
+    width: 76,
+    height: 76,
+    borderRadius: 26,
+    backgroundColor: Palette.purpleTint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.inkMuted,
   },
   loadingText: {
     textAlign: 'center',
     marginTop: 24,
-    color: '#888',
+    fontFamily: Type.bodyRegular,
+    color: Palette.inkPlaceholder,
   },
-  messagesContainer: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  messageBubble: {
-    padding: 12,
-    borderRadius: 16,
+  bubble: {
+    padding: 13,
     marginBottom: 8,
-    maxWidth: '80%',
+    maxWidth: '84%',
   },
   userBubble: {
-    backgroundColor: '#6C63FF',
     alignSelf: 'flex-end',
+    maxWidth: '78%',
+    borderRadius: 16,
+    borderBottomRightRadius: 4,
   },
   assistantBubble: {
-    backgroundColor: '#F5F5F7',
+    backgroundColor: Palette.dividerLight,
     alignSelf: 'flex-start',
+    borderRadius: 16,
+    borderBottomLeftRadius: 4,
   },
   userText: {
-    color: '#FFFFFF',
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.white,
   },
   assistantText: {
-    color: '#1A1A2E',
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    lineHeight: 22,
+    color: Palette.ink,
   },
-  inputRow: {
+  actionChip: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 8,
     alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: Palette.borderInput,
+    borderRadius: 13,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    marginBottom: 10,
+  },
+  actionChipLabel: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 13.5,
+    color: Palette.ink,
+  },
+  composerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 16,
+  },
+  composerPill: {
+    flex: 1,
+    backgroundColor: Palette.dividerLight,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    height: 44,
+    justifyContent: 'center',
   },
   input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.ink,
   },
   sendButton: {
-    backgroundColor: '#6C63FF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

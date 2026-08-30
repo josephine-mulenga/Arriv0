@@ -1,10 +1,27 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View, ScrollView, Modal, FlatList, Linking } from 'react-native';
+import {
+  FlatList,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import {
+  CaretDownIcon,
+  CalendarBlankIcon,
+  GraduationCapIcon,
+  BriefcaseIcon,
+  CheckCircleIcon,
+  CircleIcon,
+} from 'phosphor-react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { GradientHeaderBackground } from '@/components/gradient-header-background';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 
 const months = [
@@ -13,84 +30,151 @@ const months = [
   { label: 'July', value: '07' }, { label: 'August', value: '08' }, { label: 'September', value: '09' },
   { label: 'October', value: '10' }, { label: 'November', value: '11' }, { label: 'December', value: '12' },
 ];
+const monthLabelByValue: Record<string, string> = Object.fromEntries(
+  months.map((m) => [m.value, m.label.slice(0, 3)])
+);
 const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 15 }, (_, i) => String(currentYear - 5 + i));
-const visaTypes = ['F1', 'J1', 'M1'];
 
-function Dropdown({ label, options, value, onSelect, getLabel = (o) => o, getValue = (o) => o }) {
+const visaTypes: { label: string; value: 'F1' | 'J1' | 'M1' }[] = [
+  { label: 'F-1', value: 'F1' },
+  { label: 'J-1', value: 'J1' },
+  { label: 'M-1', value: 'M1' },
+];
+
+const yearLevels = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
+
+const plans = [
+  {
+    key: 'opt',
+    title: 'Graduating, then OPT',
+    hint: 'Work in the U.S. after my degree',
+    icon: GraduationCapIcon,
+  },
+  {
+    key: 'cpt',
+    title: 'Internship during study',
+    hint: 'CPT for a summer or co-op role',
+    icon: BriefcaseIcon,
+  },
+  {
+    key: 'status',
+    title: 'Just staying in status',
+    hint: 'Coursework only for now',
+    icon: CheckCircleIcon,
+  },
+];
+
+function InlineDropdown({
+  label,
+  value,
+  onPress,
+}: {
+  label: string;
+  value: string | null;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={styles.dropdownRow} onPress={onPress}>
+      <Text style={value ? styles.dropdownValueFilled : styles.dropdownValuePlaceholder}>
+        {value ?? label}
+      </Text>
+      <CaretDownIcon size={15} color={Palette.inkFaint} />
+    </Pressable>
+  );
+}
+
+function DatePickerField({
+  label,
+  month,
+  day,
+  year,
+  onChangeMonth,
+  onChangeDay,
+  onChangeYear,
+  showIcon,
+}: {
+  label: string;
+  month: string;
+  day: string;
+  year: string;
+  onChangeMonth: (v: string) => void;
+  onChangeDay: (v: string) => void;
+  onChangeYear: (v: string) => void;
+  showIcon?: boolean;
+}) {
   const [open, setOpen] = useState(false);
-  const selected = options.find((o) => getValue(o) === value);
+  const display = month && day && year ? `${monthLabelByValue[month]} ${day}, ${year}` : null;
 
   return (
     <>
-      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(true)}>
-        <ThemedText style={value ? styles.dropdownTextFilled : styles.dropdownTextPlaceholder}>
-          {selected ? getLabel(selected) : label}
-        </ThemedText>
-      </TouchableOpacity>
+      <Pressable style={styles.dateField} onPress={() => setOpen(true)}>
+        <Text style={display ? styles.dropdownValueFilled : styles.dropdownValuePlaceholder} numberOfLines={1}>
+          {display ?? label}
+        </Text>
+        {showIcon && <CalendarBlankIcon size={16} color={Palette.inkFaint} />}
+      </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpen(false)}>
-          <View style={styles.modalContent}>
-            <ThemedText style={styles.modalTitle}>{label}</ThemedText>
-            <FlatList
-              data={options}
-              keyExtractor={(item) => getValue(item)}
-              style={{ maxHeight: 300 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalOption}
-                  onPress={() => {
-                    onSelect(getValue(item));
-                    setOpen(false);
-                  }}>
-                  <ThemedText
-                    style={getValue(item) === value ? styles.modalOptionTextSelected : styles.modalOptionText}>
-                    {getLabel(item)}
-                  </ThemedText>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </TouchableOpacity>
+        <Pressable style={styles.modalOverlay} onPress={() => setOpen(false)}>
+          <Pressable style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{label}</Text>
+            <View style={styles.dateColumns}>
+              <PickerColumn
+                options={months.map((m) => ({ label: m.label.slice(0, 3), value: m.value }))}
+                value={month}
+                onSelect={onChangeMonth}
+              />
+              <PickerColumn options={days.map((d) => ({ label: d, value: d }))} value={day} onSelect={onChangeDay} />
+              <PickerColumn options={years.map((y) => ({ label: y, value: y }))} value={year} onSelect={onChangeYear} />
+            </View>
+            <PrimaryButton label="Done" onPress={() => setOpen(false)} style={{ marginTop: 14 }} />
+          </Pressable>
+        </Pressable>
       </Modal>
     </>
   );
 }
 
-function DateDropdownGroup({ label, month, day, year, onChangeMonth, onChangeDay, onChangeYear }) {
+function PickerColumn({
+  options,
+  value,
+  onSelect,
+}: {
+  options: { label: string; value: string }[];
+  value: string;
+  onSelect: (v: string) => void;
+}) {
   return (
-    <View style={styles.dateGroup}>
-      <ThemedText style={styles.dateGroupLabel}>{label}</ThemedText>
-      <View style={styles.dateRow}>
-        <View style={{ flex: 1.4 }}>
-          <Dropdown
-            label="Month"
-            options={months}
-            value={month}
-            onSelect={onChangeMonth}
-            getLabel={(o) => o.label}
-            getValue={(o) => o.value}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Dropdown label="Day" options={days} value={day} onSelect={onChangeDay} />
-        </View>
-        <View style={{ flex: 1.1 }}>
-          <Dropdown label="Year" options={years} value={year} onSelect={onChangeYear} />
-        </View>
-      </View>
-    </View>
+    <FlatList
+      data={options}
+      keyExtractor={(item) => item.value}
+      style={styles.pickerColumn}
+      renderItem={({ item }) => (
+        <Pressable style={styles.pickerOption} onPress={() => onSelect(item.value)}>
+          <Text style={item.value === value ? styles.pickerOptionTextSelected : styles.pickerOptionText}>
+            {item.label}
+          </Text>
+        </Pressable>
+      )}
+    />
   );
 }
 
 export default function PersonalizeProfileScreen() {
-  const { name, email, password } = useLocalSearchParams();
+  const { name, email, password } = useLocalSearchParams<{
+    name: string;
+    email: string;
+    password: string;
+  }>();
   const { signup, login, loading, error } = useAuth();
 
   const [school, setSchool] = useState('');
-  const [visaType, setVisaType] = useState('F1');
+  const [visaType, setVisaType] = useState<'F1' | 'J1' | 'M1'>('F1');
+  const [yearLevel, setYearLevel] = useState<string | null>(null);
+  const [yearLevelOpen, setYearLevelOpen] = useState(false);
+  const [plan, setPlan] = useState<string | null>(null);
 
   const [startMonth, setStartMonth] = useState('');
   const [startDay, setStartDay] = useState('');
@@ -108,147 +192,371 @@ export default function PersonalizeProfileScreen() {
     try {
       await signup(email, password, name, school, visaType, programStartDate, programEndDate);
       await login(email, password);
-      router.replace('/(tabs)');
-    } catch (err) {
+      router.replace('/notification-permission');
+    } catch {
       // error is already captured by useAuth's error state
     }
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={{ height: 100 }}>
-        <GradientHeaderBackground />
+    <View style={styles.root}>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: '66%' }]} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled">
-        <ThemedText style={styles.title}>Tell us about you</ThemedText>
-        <ThemedText style={styles.subtitle}>This helps us personalize your experience.</ThemedText>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Tell us about you</Text>
+        <Text style={styles.subtitle}>This helps us personalize your experience.</Text>
 
-        <ThemedText style={styles.fieldLabel}>School / University</ThemedText>
-        <TextInput
-          style={styles.input}
-          placeholder="Select your school"
-          value={school}
-          onChangeText={setSchool}
-        />
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>School / University</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Select your school"
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={school}
+            onChangeText={setSchool}
+          />
+        </View>
 
-        <ThemedText style={styles.fieldLabel}>Visa Type</ThemedText>
-        <Dropdown label="Visa Type" options={visaTypes} value={visaType} onSelect={setVisaType} />
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Visa Type</Text>
+          <View style={styles.segmentRow}>
+            {visaTypes.map((v) => {
+              const selected = visaType === v.value;
+              return (
+                <Pressable
+                  key={v.value}
+                  style={[styles.segment, selected && styles.segmentSelected]}
+                  onPress={() => setVisaType(v.value)}>
+                  <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{v.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
-        <DateDropdownGroup
-          label="Program start date"
-          month={startMonth}
-          day={startDay}
-          year={startYear}
-          onChangeMonth={setStartMonth}
-          onChangeDay={setStartDay}
-          onChangeYear={setStartYear}
-        />
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Year Level</Text>
+          <InlineDropdown label="Select year" value={yearLevel} onPress={() => setYearLevelOpen(true)} />
+        </View>
+        <Modal visible={yearLevelOpen} transparent animationType="fade" onRequestClose={() => setYearLevelOpen(false)}>
+          <Pressable style={styles.modalOverlay} onPress={() => setYearLevelOpen(false)}>
+            <Pressable style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Year Level</Text>
+              {yearLevels.map((level) => (
+                <Pressable
+                  key={level}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setYearLevel(level);
+                    setYearLevelOpen(false);
+                  }}>
+                  <Text style={level === yearLevel ? styles.modalOptionTextSelected : styles.modalOptionText}>
+                    {level}
+                  </Text>
+                </Pressable>
+              ))}
+            </Pressable>
+          </Pressable>
+        </Modal>
 
-        <DateDropdownGroup
-          label="Program end date"
-          month={endMonth}
-          day={endDay}
-          year={endYear}
-          onChangeMonth={setEndMonth}
-          onChangeDay={setEndDay}
-          onChangeYear={setEndYear}
-        />
+        <View style={styles.dateRow}>
+          <View style={[styles.fieldGroup, { flex: 1 }]}>
+            <Text style={styles.fieldLabel}>Program Start</Text>
+            <DatePickerField
+              label="Select date"
+              month={startMonth}
+              day={startDay}
+              year={startYear}
+              onChangeMonth={setStartMonth}
+              onChangeDay={setStartDay}
+              onChangeYear={setStartYear}
+            />
+          </View>
+          <View style={[styles.fieldGroup, { flex: 1 }]}>
+            <Text style={styles.fieldLabel}>Program End</Text>
+            <DatePickerField
+              label="Select date"
+              month={endMonth}
+              day={endDay}
+              year={endYear}
+              onChangeMonth={setEndMonth}
+              onChangeDay={setEndDay}
+              onChangeYear={setEndYear}
+              showIcon
+            />
+          </View>
+        </View>
 
-        {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>What are you planning next?</Text>
+          <View style={styles.planList}>
+            {plans.map((p) => {
+              const selected = plan === p.key;
+              const PlanIcon = p.icon;
+              return (
+                <Pressable
+                  key={p.key}
+                  style={[styles.planRow, selected && styles.planRowSelected]}
+                  onPress={() => setPlan(p.key)}>
+                  <PlanIcon size={19} color={selected ? Palette.purple : Palette.inkMuted} weight={selected ? 'fill' : 'regular'} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.planTitle}>{p.title}</Text>
+                    <Text style={styles.planHint}>{p.hint}</Text>
+                  </View>
+                  {selected ? (
+                    <CheckCircleIcon size={20} color={Palette.purple} weight="fill" />
+                  ) : (
+                    <CircleIcon size={20} color={Palette.chevron} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
-        <TouchableOpacity
-          style={[styles.button, (!canSubmit || loading) && styles.buttonDisabled]}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <PrimaryButton
+          label={loading ? 'Creating account...' : 'Continue'}
           onPress={handleCreateAccount}
-          disabled={!canSubmit || loading}>
-          <ThemedText style={styles.buttonText}>{loading ? 'Creating account...' : 'Continue'}</ThemedText>
-        </TouchableOpacity>
+          disabled={!canSubmit || loading}
+          style={styles.submitButton}
+        />
 
-        <ThemedText style={styles.legalText}>
+        <Text style={styles.legalText}>
           By signing up, you agree to our{' '}
-          <ThemedText
+          <Text
             style={styles.legalLink}
             onPress={() => Linking.openURL('https://www.freeprivacypolicy.com/live/6d431a24-221e-4dfc-aa18-ebd77fc28f93')}>
             Privacy Policy
-          </ThemedText>{' '}
+          </Text>{' '}
           and{' '}
-          <ThemedText
+          <Text
             style={styles.legalLink}
             onPress={() => Linking.openURL('https://www.freeprivacypolicy.com/live/994c0a00-5d88-47e1-99a9-1ef79f7be6f8')}>
             Terms of Service
-          </ThemedText>
-        </ThemedText>
+          </Text>
+        </Text>
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 24, gap: 12, paddingBottom: 40 },
+  root: {
+    flex: 1,
+    backgroundColor: Palette.white,
+    paddingTop: 62,
+  },
+  progressTrack: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Palette.track,
+    marginHorizontal: 26,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Palette.purple,
+  },
+  content: {
+    padding: 26,
+    paddingTop: 22,
+    gap: 18,
+  },
+  fieldGroup: {
+    gap: 7,
+  },
   title: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 26,
-    color: '#1A1A2E',
+    fontFamily: Type.headingBold,
+    fontSize: 25,
+    textAlign: 'center',
+    color: Palette.ink,
   },
   subtitle: {
+    fontFamily: Type.bodyRegular,
     fontSize: 14,
-    color: '#888',
-    marginBottom: 8,
+    textAlign: 'center',
+    color: Palette.inkFaint,
+    marginTop: -8,
   },
   fieldLabel: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 13,
-    color: '#6C63FF',
-    marginBottom: -6,
+    fontFamily: Type.bodyBold,
+    fontSize: 12.5,
+    color: Palette.inkMuted,
   },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
-  dateGroup: { gap: 6 },
-  dateGroupLabel: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 13,
-    color: '#6C63FF',
-  },
-  dateRow: { flexDirection: 'row', gap: 8 },
-  dropdown: {
+  input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    paddingHorizontal: 14,
+    height: 48,
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.ink,
   },
-  dropdownTextFilled: { color: '#1A1A2E' },
-  dropdownTextPlaceholder: { color: '#999' },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  segment: {
+    flex: 1,
+    height: 44,
+    borderRadius: Radius.input,
+    borderWidth: 1,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentSelected: {
+    backgroundColor: Palette.purpleTint,
+    borderWidth: 1.5,
+    borderColor: Palette.purple,
+  },
+  segmentText: {
+    fontFamily: Type.bodyBold,
+    fontSize: 14,
+    color: Palette.inkFaint,
+  },
+  segmentTextSelected: {
+    color: Palette.purple,
+  },
+  dropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 48,
+    borderWidth: 1,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    paddingHorizontal: 14,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  dateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 48,
+    borderWidth: 1,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    paddingHorizontal: 14,
+  },
+  dropdownValueFilled: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.ink,
+  },
+  dropdownValuePlaceholder: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.inkPlaceholder,
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: Palette.scrim,
     justifyContent: 'center',
     padding: 24,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Palette.white,
+    borderRadius: Radius.cardLarge,
     padding: 16,
   },
   modalTitle: {
-    fontFamily: 'Fredoka_600SemiBold',
+    fontFamily: Type.headingSemiBold,
     fontSize: 16,
     marginBottom: 8,
-    color: '#1A1A2E',
+    color: Palette.ink,
   },
   modalOption: {
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0EEFF',
+    borderBottomColor: Palette.dividerLight,
   },
-  modalOptionText: { color: '#1A1A2E' },
-  modalOptionTextSelected: { color: '#6C63FF', fontFamily: 'Fredoka_600SemiBold' },
-  button: { backgroundColor: '#6C63FF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-  buttonDisabled: { backgroundColor: '#C4C0F5' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  errorText: { color: 'red' },
-  legalText: { fontSize: 12, textAlign: 'center', marginTop: 12, color: '#888' },
-  legalLink: { fontSize: 12, color: '#6C63FF', textDecorationLine: 'underline' },
+  modalOptionText: {
+    fontFamily: Type.bodyRegular,
+    color: Palette.ink,
+  },
+  modalOptionTextSelected: {
+    fontFamily: Type.bodyBold,
+    color: Palette.purple,
+  },
+  dateColumns: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  pickerColumn: {
+    flex: 1,
+    maxHeight: 220,
+  },
+  pickerOption: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  pickerOptionText: {
+    fontFamily: Type.bodyRegular,
+    color: Palette.ink,
+  },
+  pickerOptionTextSelected: {
+    fontFamily: Type.bodyBold,
+    color: Palette.purple,
+  },
+  planList: {
+    gap: 8,
+  },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: Radius.input,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    padding: 13,
+  },
+  planRowSelected: {
+    backgroundColor: Palette.purpleTint,
+    borderColor: Palette.purple,
+  },
+  planTitle: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 14.5,
+    color: Palette.ink,
+  },
+  planHint: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    color: Palette.inkFaint,
+    marginTop: 1,
+  },
+  errorText: {
+    color: Palette.danger,
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+  },
+  submitButton: {
+    marginTop: 4,
+  },
+  legalText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+    color: Palette.inkFaint,
+  },
+  legalLink: {
+    color: Palette.purple,
+    textDecorationLine: 'underline',
+  },
 });
