@@ -1067,13 +1067,18 @@ def signup(request: Request, data: SignupRequest):
         if e.code in ("email_exists", "user_already_exists") or "already registered" in e.message.lower():
             logger.error(f"Signup error: duplicate email correlation_id={correlation_id}")
             raise HTTPException(status_code=409, detail="An account with this email already exists. Try logging in instead.")
+        if e.code == "over_email_send_rate_limit":
+            # Supabase's built-in email sender is rate-limited to a handful
+            # of sends per hour — fine for testing, not for real signup
+            # traffic. A custom SMTP provider needs to be configured under
+            # Authentication > SMTP Settings for this to stop happening.
+            logger.error(f"Signup error: email rate limit hit correlation_id={correlation_id}")
+            raise HTTPException(status_code=429, detail="We're sending too many confirmation emails right now — please try again in a few minutes.")
         logger.error(f"Signup error: {e.code} correlation_id={correlation_id}")
-        # TEMPORARY: surfacing e.code (a safe Supabase enum, not a stack trace)
-        # to diagnose a failure in production — revert once root-caused.
-        raise HTTPException(status_code=400, detail=f"Signup failed ({e.code}). Please check your details and try again.")
+        raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
     except Exception as e:
         logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
-        raise HTTPException(status_code=400, detail=f"Signup failed ({type(e).__name__}). Please check your details and try again.")
+        raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
 
 @app.post("/login")
 @limiter.limit("10/minute")
