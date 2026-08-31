@@ -1075,10 +1075,12 @@ def signup(request: Request, data: SignupRequest):
             logger.error(f"Signup error: email rate limit hit correlation_id={correlation_id}")
             raise HTTPException(status_code=429, detail="We're sending too many confirmation emails right now — please try again in a few minutes.")
         logger.error(f"Signup error: {e.code} correlation_id={correlation_id}")
-        raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
+        # TEMPORARY diagnostic — revert once root-caused (see previous commit for the pattern).
+        raise HTTPException(status_code=400, detail=f"Signup failed [{e.code}: {e.message}].")
     except Exception as e:
         logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
-        raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
+        # TEMPORARY diagnostic — revert once root-caused.
+        raise HTTPException(status_code=400, detail=f"Signup failed [{type(e).__name__}: {str(e)[:300]}].")
 
 @app.post("/login")
 @limiter.limit("10/minute")
