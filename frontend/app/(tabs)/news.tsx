@@ -162,6 +162,21 @@ export default function NewsScreen() {
               key={item.id ?? index}
               style={[styles.row, index === filteredNews.length - 1 && styles.rowLast]}
               onPress={() => item.link && Linking.openURL(item.link)}>
+              <View style={styles.thumbColumn}>
+                {item.image_url ? (
+                  <Image source={{ uri: item.image_url }} style={styles.thumbImage} />
+                ) : (
+                  <IconTile icon={visual.icon} tint={visual.tint} color={visual.color} size={74} iconSize={28} />
+                )}
+                <Pressable hitSlop={8} onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
+                  <BookmarkSimpleIcon
+                    size={17}
+                    color={saved ? Palette.purple : Palette.inkFaint}
+                    weight={saved ? 'fill' : 'regular'}
+                  />
+                </Pressable>
+              </View>
+
               <View style={{ flex: 1 }}>
                 <Text style={styles.headline} numberOfLines={3}>
                   {item.title}
@@ -178,21 +193,6 @@ export default function NewsScreen() {
                     ? 'This directly affects your F-1 status — worth a read.'
                     : 'General visa news — may not affect your status directly.'}
                 </Text>
-              </View>
-
-              <View style={styles.thumbColumn}>
-                {item.image_url ? (
-                  <Image source={{ uri: item.image_url }} style={styles.thumbImage} />
-                ) : (
-                  <IconTile icon={visual.icon} tint={visual.tint} color={visual.color} size={74} iconSize={28} />
-                )}
-                <Pressable hitSlop={8} onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
-                  <BookmarkSimpleIcon
-                    size={17}
-                    color={saved ? Palette.purple : Palette.inkFaint}
-                    weight={saved ? 'fill' : 'regular'}
-                  />
-                </Pressable>
               </View>
             </Pressable>
           );

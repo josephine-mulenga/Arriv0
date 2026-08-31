@@ -174,7 +174,10 @@ export default function PersonalizeProfileScreen() {
   const [visaType, setVisaType] = useState<'F1' | 'J1' | 'M1'>('F1');
   const [yearLevel, setYearLevel] = useState<string | null>(null);
   const [yearLevelOpen, setYearLevelOpen] = useState(false);
-  const [plan, setPlan] = useState<string | null>(null);
+  const [selectedPlans, setSelectedPlans] = useState<string[]>([]);
+  const togglePlan = (key: string) => {
+    setSelectedPlans((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
+  };
 
   const [startMonth, setStartMonth] = useState('');
   const [startDay, setStartDay] = useState('');
@@ -190,7 +193,11 @@ export default function PersonalizeProfileScreen() {
 
   const handleCreateAccount = async () => {
     try {
-      await signup(email, password, name, school, visaType, programStartDate, programEndDate);
+      const result = await signup(email, password, name, school, visaType, programStartDate, programEndDate);
+      if (result?.email_confirmation_required) {
+        router.replace({ pathname: '/verify-email', params: { email, password } });
+        return;
+      }
       await login(email, password);
       router.replace('/notification-permission');
     } catch {
@@ -293,13 +300,13 @@ export default function PersonalizeProfileScreen() {
           <Text style={styles.fieldLabel}>What are you planning next?</Text>
           <View style={styles.planList}>
             {plans.map((p) => {
-              const selected = plan === p.key;
+              const selected = selectedPlans.includes(p.key);
               const PlanIcon = p.icon;
               return (
                 <Pressable
                   key={p.key}
                   style={[styles.planRow, selected && styles.planRowSelected]}
-                  onPress={() => setPlan(p.key)}>
+                  onPress={() => togglePlan(p.key)}>
                   <PlanIcon size={19} color={selected ? Palette.purple : Palette.inkMuted} weight={selected ? 'fill' : 'regular'} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.planTitle}>{p.title}</Text>

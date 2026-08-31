@@ -5,7 +5,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // there's no backend field for any of these yet. Mirrors the AuthContext
 // pattern (a Provider + a use*() hook) already established in this app.
 
-export type Appearance = 'light' | 'dark' | 'system';
 export type ReminderFrequency = 'once' | 'twice' | 'thrice';
 export type ChatThemeKey = 'purple' | 'blue' | 'green' | 'sunset';
 
@@ -25,8 +24,6 @@ export const CHAT_THEMES: ChatTheme[] = [
 ];
 
 interface Preferences {
-  appearance: Appearance;
-  setAppearance: (value: Appearance) => void;
   reminderFrequency: ReminderFrequency;
   setReminderFrequency: (value: ReminderFrequency) => void;
   chatThemeKey: ChatThemeKey;
@@ -38,7 +35,6 @@ interface Preferences {
 const STORAGE_KEY = 'appPreferences';
 
 const defaultPreferences = {
-  appearance: 'light' as Appearance,
   reminderFrequency: 'once' as ReminderFrequency,
   chatThemeKey: 'purple' as ChatThemeKey,
 };
@@ -46,7 +42,6 @@ const defaultPreferences = {
 const PreferencesContext = createContext<Preferences | null>(null);
 
 export const PreferencesProvider = ({ children }: { children: React.ReactNode }) => {
-  const [appearance, setAppearanceState] = useState<Appearance>(defaultPreferences.appearance);
   const [reminderFrequency, setReminderFrequencyState] = useState<ReminderFrequency>(
     defaultPreferences.reminderFrequency
   );
@@ -58,7 +53,6 @@ export const PreferencesProvider = ({ children }: { children: React.ReactNode })
       .then((raw) => {
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed.appearance) setAppearanceState(parsed.appearance);
           if (parsed.reminderFrequency) setReminderFrequencyState(parsed.reminderFrequency);
           if (parsed.chatThemeKey) setChatThemeKeyState(parsed.chatThemeKey);
         }
@@ -67,14 +61,10 @@ export const PreferencesProvider = ({ children }: { children: React.ReactNode })
   }, []);
 
   const persist = (next: Partial<typeof defaultPreferences>) => {
-    const merged = { appearance, reminderFrequency, chatThemeKey, ...next };
+    const merged = { reminderFrequency, chatThemeKey, ...next };
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged)).catch(() => {});
   };
 
-  const setAppearance = (value: Appearance) => {
-    setAppearanceState(value);
-    persist({ appearance: value });
-  };
   const setReminderFrequency = (value: ReminderFrequency) => {
     setReminderFrequencyState(value);
     persist({ reminderFrequency: value });
@@ -89,8 +79,6 @@ export const PreferencesProvider = ({ children }: { children: React.ReactNode })
   return (
     <PreferencesContext.Provider
       value={{
-        appearance,
-        setAppearance,
         reminderFrequency,
         setReminderFrequency,
         chatThemeKey,
