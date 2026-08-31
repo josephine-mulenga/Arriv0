@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { ClipboardTextIcon, CaretRightIcon } from 'phosphor-react-native';
 
 import { getMilestones } from '@/api';
 import { useAuth } from '@/AuthContext';
@@ -40,6 +42,18 @@ export default function MilestonesScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Pressable style={styles.promptCard} onPress={() => router.push('/complete-profile')}>
+          <ClipboardTextIcon size={20} color={Palette.purple} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.promptTitle}>Complete your profile</Text>
+            <Text style={styles.promptBody}>
+              Answer a few real questions so these milestones reflect your actual status, not a
+              guess based on your year.
+            </Text>
+          </View>
+          <CaretRightIcon size={16} color={Palette.chevron} />
+        </Pressable>
+
         {data?.milestones.map((item, index) => {
           const isLast = index === data.milestones.length - 1;
 
@@ -117,6 +131,29 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.screenPadding,
     paddingBottom: 108,
+  },
+  promptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Palette.purpleCard,
+    borderWidth: 1,
+    borderColor: Palette.purpleCardBorder,
+    borderRadius: Radius.cardSmall,
+    padding: 14,
+    marginBottom: Spacing.sectionGap,
+  },
+  promptTitle: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 14,
+    color: Palette.ink,
+  },
+  promptBody: {
+    marginTop: 2,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: Palette.inkBody,
   },
   card: {
     backgroundColor: Palette.white,

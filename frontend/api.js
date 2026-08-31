@@ -57,6 +57,16 @@ export const resetPassword = async (email) => {
   return data;
 };
 
+export const resendConfirmation = async (email) => {
+  const response = await fetch(`${BASE_URL}/resend-confirmation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  const data = await response.json();
+  return data;
+};
+
 export const getUserProfile = async (userId, token) => {
   const response = await fetch(`${BASE_URL}/user/${userId}`, {
     headers: { 'Authorization': `Bearer ${token}` }
@@ -64,8 +74,9 @@ export const getUserProfile = async (userId, token) => {
   return handleResponse(response);
 };
 
-export const getTimeline = async (token) => {
-  const response = await fetch(`${BASE_URL}/timeline`, {
+export const getTimeline = async (token, year) => {
+  const url = year ? `${BASE_URL}/timeline?year=${year}` : `${BASE_URL}/timeline`;
+  const response = await fetch(url, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return handleResponse(response);

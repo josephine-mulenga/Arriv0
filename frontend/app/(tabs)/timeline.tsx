@@ -6,6 +6,7 @@ import {
   CircleIcon,
   WarningCircleIcon,
   CloudSlashIcon,
+  SparkleIcon,
 } from 'phosphor-react-native';
 
 import { getTimeline } from '@/api';
@@ -27,14 +28,9 @@ interface TimelineData {
   year: string;
   status: string;
   steps: TimelineStep[];
+  current_year_level: number;
+  viewing_year_level: number;
 }
-
-const yearNameToNumber: Record<string, number> = {
-  Freshman: 1,
-  Sophomore: 2,
-  Junior: 3,
-  Senior: 4,
-};
 
 function stepStatus(step: TimelineStep) {
   if (step.warning) {
@@ -57,22 +53,26 @@ export default function TimelineScreen() {
     fetchTimeline();
   }, [token]);
 
-  const fetchTimeline = async () => {
+  useEffect(() => {
+    if (!token || selectedYear === null) return;
+    if (data && data.viewing_year_level === selectedYear) return;
+    fetchTimeline(selectedYear);
+  }, [selectedYear]);
+
+  const fetchTimeline = async (year?: number) => {
     try {
-      const result = await getTimeline(token);
+      const result = await getTimeline(token, year);
       setData(result);
       setOffline(false);
-      setSelectedYear(yearNameToNumber[result.year] ?? 1);
+      if (year === undefined) setSelectedYear(result.current_year_level ?? 1);
     } catch {
       setOffline(true);
     }
   };
 
-  const currentYear = data ? yearNameToNumber[data.year] ?? 1 : 1;
-  const viewingOtherYear = selectedYear !== null && selectedYear !== currentYear;
-
   const upcoming = data ? data.steps.filter((s) => !s.done) : [];
   const completed = data ? data.steps.filter((s) => s.done) : [];
+  const showCptGuide = data ? data.steps.some((s) => s.task.toLowerCase().includes('cpt')) : false;
 
   return (
     <View style={styles.root}>
@@ -108,41 +108,49 @@ export default function TimelineScreen() {
                 You&apos;re offline, so this is the last copy Arriv0 saved. Dates don&apos;t change
                 often, but new rule updates won&apos;t appear until you reconnect.
               </Text>
-              <Pressable style={styles.retryButton} onPress={fetchTimeline}>
+              <Pressable style={styles.retryButton} onPress={() => fetchTimeline(selectedYear ?? undefined)}>
                 <Text style={styles.retryText}>Try again</Text>
               </Pressable>
             </View>
           </View>
         )}
 
-        {viewingOtherYear ? (
-          <Text style={styles.otherYearNote}>
-            Only your current year&apos;s timeline is available right now — check back as you
-            progress through the program.
-          </Text>
-        ) : (
-          <View style={offline ? styles.skeletonWrap : undefined}>
-            {upcoming.length > 0 && (
-              <>
-                <Text style={styles.groupHeader}>UPCOMING</Text>
-                {upcoming.map((step, index) => (
-                  <StepRow key={index} step={step} isLast={index === upcoming.length - 1 && completed.length === 0} />
-                ))}
-              </>
-            )}
-
-            {completed.length > 0 && (
-              <>
-                <Text style={styles.groupHeader}>COMPLETED</Text>
-                {completed.map((step, index) => (
-                  <StepRow key={index} step={step} isLast={index === completed.length - 1} />
-                ))}
-              </>
-            )}
-
-            {!data && !offline && <Text style={styles.emptyText}>Loading your timeline...</Text>}
+        {showCptGuide && (
+          <View style={styles.guideCard}>
+            <SparkleIcon size={18} color={Palette.purple} weight="fill" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.guideTitle}>New to CPT?</Text>
+              <Text style={styles.guideBody}>
+                CPT requires one full academic year of study first, must relate to your major,
+                and needs DSO authorization before you start work. Use 12+ months of full-time
+                CPT and you permanently lose OPT eligibility — part-time CPT (20 hrs/week or
+                less) doesn&apos;t count against that limit.
+              </Text>
+            </View>
           </View>
         )}
+
+        <View style={offline ? styles.skeletonWrap : undefined}>
+          {upcoming.length > 0 && (
+            <>
+              <Text style={styles.groupHeader}>UPCOMING</Text>
+              {upcoming.map((step, index) => (
+                <StepRow key={index} step={step} isLast={index === upcoming.length - 1 && completed.length === 0} />
+              ))}
+            </>
+          )}
+
+          {completed.length > 0 && (
+            <>
+              <Text style={styles.groupHeader}>COMPLETED</Text>
+              {completed.map((step, index) => (
+                <StepRow key={index} step={step} isLast={index === completed.length - 1} />
+              ))}
+            </>
+          )}
+
+          {!data && !offline && <Text style={styles.emptyText}>Loading your timeline...</Text>}
+        </View>
       </ScrollView>
     </View>
   );
@@ -250,12 +258,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Palette.inkPlaceholder,
   },
-  otherYearNote: {
+  guideCard: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: Palette.purpleCard,
+    borderWidth: 1,
+    borderColor: Palette.purpleCardBorder,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: Spacing.sectionGap,
+  },
+  guideTitle: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 14.5,
+    color: Palette.ink,
+  },
+  guideBody: {
+    marginTop: 4,
     fontFamily: Type.bodyRegular,
-    fontSize: 13.5,
-    lineHeight: 21,
-    color: Palette.inkMuted,
-    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 19,
+    color: Palette.inkBody,
   },
   offlineBanner: {
     flexDirection: 'row',

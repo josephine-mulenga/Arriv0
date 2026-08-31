@@ -9,6 +9,7 @@ import {
   FolderSimpleIcon,
   BellIcon,
   CloudSlashIcon,
+  ClipboardTextIcon,
   CameraIcon,
   ImageIcon,
 } from 'phosphor-react-native';
@@ -127,6 +128,11 @@ export default function ProfileScreen() {
         <Text style={styles.groupLabel}>Account</Text>
         <View style={styles.group}>
           <ActionRow icon={PencilSimpleIcon} label="Edit Profile" onPress={() => router.push('/edit-profile')} />
+          <ActionRow
+            icon={ClipboardTextIcon}
+            label="Complete Your Profile"
+            onPress={() => router.push('/complete-profile')}
+          />
           <ActionRow icon={FolderSimpleIcon} label="Documents" onPress={() => router.push('/documents')} />
           <ActionRow
             icon={BellIcon}

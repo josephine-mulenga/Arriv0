@@ -44,6 +44,9 @@ interface ActionChip {
 function actionChipFor(message: Message): ActionChip | null {
   if (message.role !== 'assistant') return null;
   const text = message.text.toLowerCase();
+  if (text.includes('cpt')) {
+    return { label: 'See my CPT timeline', icon: ListChecksIcon, href: '/(tabs)/timeline' };
+  }
   if (text.includes('opt')) {
     return { label: 'Open my OPT checklist', icon: ListChecksIcon, href: '/deadline/opt-application' };
   }

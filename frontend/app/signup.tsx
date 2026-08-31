@@ -25,14 +25,18 @@ const passwordRules = [
   { label: 'One special character', test: (pw: string) => /[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(pw) },
 ];
 
+// Requires a proper extension (.com, .edu, .org, ...) — not just "any text with an @".
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+
 export default function SignupScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  const isEmailValid = EMAIL_PATTERN.test(email.trim());
   const isPasswordValid = passwordRules.every((rule) => rule.test(password));
-  const canContinue = name.trim().length > 0 && email.trim().length > 0 && isPasswordValid;
+  const canContinue = name.trim().length > 0 && isEmailValid && isPasswordValid;
 
   const handleContinue = () => {
     router.push({
@@ -74,6 +78,9 @@ export default function SignupScreen() {
             keyboardType="email-address"
           />
         </View>
+        {email.trim().length > 0 && !isEmailValid && (
+          <Text style={styles.fieldError}>Enter a valid email address, like you@example.com</Text>
+        )}
 
         <View style={styles.inputRow}>
           <LockSimpleIcon size={17} color="#A9A7BE" />
@@ -179,6 +186,13 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyRegular,
     fontSize: 14,
     color: Palette.ink,
+  },
+  fieldError: {
+    marginTop: -6,
+    marginBottom: 11,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    color: Palette.danger,
   },
   checklist: {
     gap: 7,

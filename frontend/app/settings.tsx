@@ -1,16 +1,10 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { CaretLeftIcon, CheckIcon, MoonIcon, SunIcon, DeviceMobileIcon } from 'phosphor-react-native';
+import { CaretLeftIcon, CheckIcon } from 'phosphor-react-native';
 
 import { Chip } from '@/components/ui/chip';
-import { Palette, Radius, Spacing, Type } from '@/constants/theme';
-import { CHAT_THEMES, usePreferences, type Appearance, type ReminderFrequency } from '@/PreferencesContext';
-
-const appearanceOptions: { value: Appearance; label: string; icon: typeof SunIcon }[] = [
-  { value: 'light', label: 'Light', icon: SunIcon },
-  { value: 'dark', label: 'Dark', icon: MoonIcon },
-  { value: 'system', label: 'System', icon: DeviceMobileIcon },
-];
+import { Palette, Spacing, Type } from '@/constants/theme';
+import { CHAT_THEMES, usePreferences, type ReminderFrequency } from '@/PreferencesContext';
 
 const reminderOptions: { value: ReminderFrequency; label: string }[] = [
   { value: 'once', label: 'Once a day' },
@@ -19,8 +13,7 @@ const reminderOptions: { value: ReminderFrequency; label: string }[] = [
 ];
 
 export default function SettingsScreen() {
-  const { appearance, setAppearance, reminderFrequency, setReminderFrequency, chatThemeKey, setChatThemeKey, chatTheme } =
-    usePreferences();
+  const { reminderFrequency, setReminderFrequency, chatThemeKey, setChatThemeKey, chatTheme } = usePreferences();
 
   return (
     <View style={styles.root}>
@@ -33,29 +26,6 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionHeader}>Appearance</Text>
-        <View style={styles.appearanceRow}>
-          {appearanceOptions.map((opt) => {
-            const selected = appearance === opt.value;
-            const OptIcon = opt.icon;
-            return (
-              <Pressable
-                key={opt.value}
-                style={[styles.appearanceOption, selected && styles.appearanceOptionSelected]}
-                onPress={() => setAppearance(opt.value)}>
-                <OptIcon size={20} color={selected ? Palette.purple : Palette.inkMuted} weight={selected ? 'fill' : 'regular'} />
-                <Text style={[styles.appearanceLabel, selected && styles.appearanceLabelSelected]}>{opt.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        {appearance !== 'light' && (
-          <Text style={styles.note}>
-            Dark mode is coming soon — your preference is saved and the app will switch
-            automatically once it ships.
-          </Text>
-        )}
-
         <Text style={styles.sectionHeader}>Daily Reminders</Text>
         <Text style={styles.sectionBody}>
           How many nudges Arriv0 sends you about upcoming deadlines and documents.
@@ -135,40 +105,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: Palette.inkFaint,
     marginBottom: Spacing.cardGap,
-  },
-  appearanceRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  appearanceOption: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 14,
-    borderRadius: Radius.input,
-    borderWidth: 1,
-    borderColor: Palette.borderInput,
-    backgroundColor: Palette.white,
-  },
-  appearanceOptionSelected: {
-    backgroundColor: Palette.purpleTint,
-    borderWidth: 1.5,
-    borderColor: Palette.purple,
-  },
-  appearanceLabel: {
-    fontFamily: Type.bodySemiBold,
-    fontSize: 12.5,
-    color: Palette.inkMuted,
-  },
-  appearanceLabelSelected: {
-    color: Palette.purple,
-  },
-  note: {
-    marginTop: 10,
-    fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    lineHeight: 19,
-    color: Palette.inkPlaceholder,
   },
   chipRow: {
     flexDirection: 'row',

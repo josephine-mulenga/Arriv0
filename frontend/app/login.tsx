@@ -6,19 +6,33 @@ import { EnvelopeSimpleIcon, LockSimpleIcon } from 'phosphor-react-native';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
+import { resendConfirmation } from '@/api';
 
 export default function LoginScreen() {
   const { login, loading, error } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resent, setResent] = useState(false);
+
+  const needsConfirmation = !!error && error.toLowerCase().includes('confirm your email');
 
   const handleLogin = async () => {
+    setResent(false);
     try {
       await login(email, password);
       router.replace('/(tabs)');
     } catch {
       // error is already captured by useAuth's error state
+    }
+  };
+
+  const handleResend = async () => {
+    try {
+      await resendConfirmation(email);
+      setResent(true);
+    } catch {
+      // best-effort; the link stays available to retry
     }
   };
 
@@ -53,6 +67,12 @@ export default function LoginScreen() {
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {needsConfirmation && !resent && (
+          <Text style={styles.linkText} onPress={handleResend}>
+            <Text style={styles.linkTextStrong}>Resend confirmation email</Text>
+          </Text>
+        )}
+        {resent && <Text style={styles.successText}>Confirmation email resent.</Text>}
 
         <PrimaryButton
           label={loading ? 'Logging in...' : 'Log in'}
@@ -111,6 +131,11 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyRegular,
     fontSize: 13,
     color: Palette.danger,
+  },
+  successText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    color: Palette.green,
   },
   submitButton: {
     marginTop: 8,
