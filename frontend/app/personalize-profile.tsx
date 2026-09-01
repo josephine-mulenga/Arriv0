@@ -193,11 +193,7 @@ export default function PersonalizeProfileScreen() {
 
   const handleCreateAccount = async () => {
     try {
-      const result = await signup(email, password, name, school, visaType, programStartDate, programEndDate);
-      if (result?.email_confirmation_required) {
-        router.replace({ pathname: '/verify-email', params: { email, password } });
-        return;
-      }
+      await signup(email, password, name, school, visaType, programStartDate, programEndDate);
       await login(email, password);
       router.replace('/notification-permission');
     } catch {
