@@ -65,3 +65,11 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS has_i765_submitted boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS citizenship_country text,
   ADD COLUMN IF NOT EXISTS visa_expiry_date date;
+
+-- Migration: has_reported_to_dso (2026-09-02)
+-- Milestones/Timeline were marking "Arrived and reported to DSO" done just
+-- because 10+ days had passed since program_start_date — no actual
+-- confirmation the student did it. Replaces that date guess with a real
+-- answer from Complete Your Profile.
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS has_reported_to_dso boolean DEFAULT false;
