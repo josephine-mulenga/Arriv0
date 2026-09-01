@@ -757,7 +757,6 @@ Does this news affect this student specifically? If yes write a personalized pus
     except Exception as e:
         logger.error(f"Failed to personalize news: {e}")
         return None
-
 async def process_and_notify():
     logger.info("Starting news fetch and notification job")
     news_items = await fetch_uscis_news()
@@ -778,14 +777,16 @@ async def process_and_notify():
             "image_url": item.get("image_url", "")
         })
         if affects_f1:
-            supabase_admin.table("news").insert({
-                "title": item["title"],
-                "body": summary,
-                "affects_f1": affects_f1,
-                "tag": tag,
-                "link": item["link"],
-                "image_url": item.get("image_url", "")
-            }).execute()
+            existing = supabase_admin.table("news").select("id").eq("title", item["title"]).execute()
+            if not existing.data:
+                supabase_admin.table("news").insert({
+                    "title": item["title"],
+                    "body": summary,
+                    "affects_f1": affects_f1,
+                    "tag": tag,
+                    "link": item["link"],
+                    "image_url": item.get("image_url", "")
+                }).execute()
 
     users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
     if not users.data:
