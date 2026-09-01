@@ -339,19 +339,20 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
     has_done_cpt = cpt_months_used > 0
     has_opt_recommendation = profile.get("has_opt_recommendation", False)
     has_i765_submitted = profile.get("has_i765_submitted", False)
+    # Answered directly on Complete Your Profile — arriving and being past
+    # the 10-day window are not the same thing as having actually reported
+    # in, so this can't be inferred from the calendar alone.
+    has_reported_to_dso = profile.get("has_reported_to_dso", False)
 
     today = date.today()
     program_start = profile.get("program_start_date")
     program_end = profile.get("program_end_date")
 
-    reported_to_dso = False
     start_date = today
     end_date = today + timedelta(days=365 * 4)
 
     if program_start:
         start_date = date.fromisoformat(str(program_start)[:10])
-        days_since_start = (today - start_date).days
-        reported_to_dso = days_since_start > 10
 
     if program_end:
         end_date = date.fromisoformat(str(program_end)[:10])
@@ -369,11 +370,11 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
             "year": "Freshman",
             "status": "You are settling in. Focus on your first 30 days.",
             "steps": [
-                {"task": "Report to DSO within 10 days of arrival", "done": reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=10))}"},
-                {"task": "Get I-20 signed by DSO", "done": reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=14))}"},
+                {"task": "Report to DSO within 10 days of arrival", "done": has_reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=10))}"},
+                {"task": "Get I-20 signed by DSO", "done": has_reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=14))}"},
                 {"task": "Apply for Social Security Number", "done": has_ssn, "link": "https://www.ssa.gov/ssnumber/", "date_range": f"{fmt_date(start_date + timedelta(days=14))} — {fmt_date(start_date + timedelta(days=60))}"},
                 {"task": "Open a bank account", "done": has_bank_account, "link": "https://www.chase.com/personal/checking/college-checking", "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"},
-                {"task": "Understand your on-campus work rights", "done": year_level >= 1, "link": "https://studyinthestates.dhs.gov/students/work", "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"}
+                {"task": "Understand your on-campus work rights", "done": False, "link": "https://studyinthestates.dhs.gov/students/work", "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"}
             ]
         },
         2: {
@@ -390,7 +391,7 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
             "year": "Junior",
             "status": "OPT is approaching. Start preparing now.",
             "steps": [
-                {"task": "Understand CPT vs OPT differences", "done": year_level >= 3, "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
+                {"task": "Understand CPT vs OPT differences", "done": False, "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
                 {"task": "Create your USCIS account now", "done": False, "link": "https://myaccount.uscis.gov", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
                 {"task": "Check if your major qualifies for STEM OPT", "done": False, "link": "https://www.ice.gov/sevis/stemlist", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
                 {"task": "Start networking with OPT friendly employers", "done": False, "link": "https://www.linkedin.com/jobs", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"}
@@ -400,7 +401,7 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
             "year": "Senior",
             "status": "Your OPT window is approaching. Submit as early as possible.",
             "steps": [
-                {"task": "Confirm program end date with DSO", "done": True, "date_range": f"{fmt_date(year_3_end)} — {fmt_date(opt_window_start)}"},
+                {"task": "Confirm program end date with DSO", "done": False, "date_range": f"{fmt_date(year_3_end)} — {fmt_date(opt_window_start)}"},
                 {"task": "Request OPT recommendation from DSO", "done": has_opt_recommendation, "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
                 {"task": "Complete Form I-765 on USCIS", "done": has_i765_submitted, "link": "https://www.uscis.gov/i-765", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
                 {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
@@ -424,24 +425,17 @@ def build_milestones(profile: dict) -> list:
     has_bank_account = profile.get("has_bank_account", False)
     cpt_months_used = profile.get("cpt_months_used", 0)
     has_done_cpt = cpt_months_used > 0
-    # These two have no real signal until the student answers them directly
-    # (on the Complete Your Profile screen) — falling back to a year-level
-    # guess here previously marked them done/locked based on assumption
-    # rather than an actual answer.
+    # These have no real signal until the student answers them directly (on
+    # the Complete Your Profile screen) — falling back to a year-level or
+    # elapsed-time guess here previously marked them done/locked based on
+    # assumption rather than an actual answer.
     has_opt_recommendation = profile.get("has_opt_recommendation", False)
     has_i765_submitted = profile.get("has_i765_submitted", False)
-
-    today = date.today()
-    program_start = profile.get("program_start_date")
-    reported_to_dso = False
-    if program_start:
-        start_date = date.fromisoformat(str(program_start)[:10])
-        days_since_start = (today - start_date).days
-        reported_to_dso = days_since_start > 10
+    has_reported_to_dso = profile.get("has_reported_to_dso", False)
 
     return [
-        {"id": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.", "status": "done" if reported_to_dso else "next"},
-        {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if has_bank_account else ("next" if reported_to_dso else "locked")},
+        {"id": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.", "status": "done" if has_reported_to_dso else "next"},
+        {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if has_bank_account else ("next" if has_reported_to_dso else "locked")},
         {"id": 3, "icon": "🪪", "title": "Applied for Social Security Number", "description": "Required for working in the US and building credit history.", "status": "done" if has_ssn else ("next" if has_bank_account else "locked")},
         {"id": 4, "icon": "💼", "title": "First CPT internship authorized", "description": "You gained real US work experience. This goes on your resume.", "status": "done" if has_done_cpt else ("next" if year_level >= 2 else "locked")},
         {"id": 5, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if has_opt_recommendation else ("next" if year_level >= 3 else "locked")},
@@ -929,6 +923,7 @@ class UpdateProfileRequest(BaseModel):
     has_i765_submitted: Optional[bool] = None
     citizenship_country: Optional[str] = None
     visa_expiry_date: Optional[str] = None
+    has_reported_to_dso: Optional[bool] = None
 
     @validator('name')
     def name_must_be_valid(cls, v):
