@@ -46,6 +46,7 @@ export default function CompleteProfileScreen() {
   const [saved, setSaved] = useState(false);
   const [partialSaveNote, setPartialSaveNote] = useState<string | null>(null);
 
+  const [hasReportedToDso, setHasReportedToDso] = useState(false);
   const [hasBankAccount, setHasBankAccount] = useState(false);
   const [hasSsn, setHasSsn] = useState(false);
   const [cptMonthsUsed, setCptMonthsUsed] = useState('0');
@@ -58,6 +59,7 @@ export default function CompleteProfileScreen() {
     if (!user || !token) return;
     getUserProfile(user.id, token)
       .then((data) => {
+        setHasReportedToDso(!!data.has_reported_to_dso);
         setHasBankAccount(!!data.has_bank_account);
         setHasSsn(!!data.has_ssn);
         setCptMonthsUsed(String(data.cpt_months_used ?? 0));
@@ -97,6 +99,7 @@ export default function CompleteProfileScreen() {
       await updateProfile(
         user.id,
         {
+          has_reported_to_dso: hasReportedToDso,
           has_opt_recommendation: hasOptRecommendation,
           has_i765_submitted: hasI765Submitted,
           citizenship_country: citizenshipCountry || undefined,
@@ -134,6 +137,12 @@ export default function CompleteProfileScreen() {
           <Text style={styles.loadingText}>Loading your profile...</Text>
         ) : (
           <>
+            <YesNoRow
+              label="Have you reported to your DSO?"
+              hint="Checking in within 10 days of arrival and getting your I-20 signed."
+              value={hasReportedToDso}
+              onChange={setHasReportedToDso}
+            />
             <YesNoRow label="Do you have a US bank account?" value={hasBankAccount} onChange={setHasBankAccount} />
             <YesNoRow label="Do you have a Social Security Number?" value={hasSsn} onChange={setHasSsn} />
 

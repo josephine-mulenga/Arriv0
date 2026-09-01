@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ClipboardTextIcon, CaretRightIcon } from 'phosphor-react-native';
 
 import { getMilestones } from '@/api';
@@ -25,10 +26,15 @@ export default function MilestonesScreen() {
   const { token } = useAuth();
   const [data, setData] = useState<MilestonesData | null>(null);
 
-  useEffect(() => {
-    if (!token) return;
-    getMilestones(token).then(setData).catch(() => {});
-  }, [token]);
+  // Tabs stay mounted when you switch away, so a plain useEffect only ever
+  // fires once — refetch on every focus instead, so answers from Complete
+  // Your Profile show up here as soon as you come back to this tab.
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      getMilestones(token).then(setData).catch(() => {});
+    }, [token])
+  );
 
   return (
     <View style={styles.root}>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -43,28 +43,27 @@ export default function HomeScreen() {
   const [missingDocs, setMissingDocs] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Refetch on every focus, not just on mount — tabs stay mounted when you
+  // switch away, so a plain useEffect would keep showing stale data after
+  // answering questions elsewhere (e.g. Complete Your Profile, Documents).
   useFocusEffect(
     useCallback(() => {
       if (!token || !user) return;
       getUserProfile(user.id, token).then(setProfile).catch(() => {});
+      getAIStatus(token)
+        .then((data) => setAiMessage(data.ai_message))
+        .catch(() => {});
+      getTimeline(token)
+        .then((data) => setSteps(data.steps ?? []))
+        .catch(() => {});
+      getDocuments(token)
+        .then((data) => {
+          const list = Array.isArray(data) ? data : data.documents ?? [];
+          setMissingDocs(list.filter((d: { collected?: boolean }) => !d.collected).length);
+        })
+        .catch(() => {});
     }, [token, user])
   );
-
-  useEffect(() => {
-    if (!token) return;
-    getAIStatus(token)
-      .then((data) => setAiMessage(data.ai_message))
-      .catch(() => {});
-    getTimeline(token)
-      .then((data) => setSteps(data.steps ?? []))
-      .catch(() => {});
-    getDocuments(token)
-      .then((data) => {
-        const list = Array.isArray(data) ? data : data.documents ?? [];
-        setMissingDocs(list.filter((d: { collected?: boolean }) => !d.collected).length);
-      })
-      .catch(() => {});
-  }, [token]);
 
   const spine =
     profile?.program_start_date && profile?.program_end_date
