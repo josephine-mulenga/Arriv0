@@ -13,7 +13,7 @@ const handleResponse = async (response) => {
   return data;
 };
 
-export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate, major, hasSsn, hasBankAccount, cptMonthsUsed) => {
+export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate, major, hasSsn, hasBankAccount, cptMonthsUsed, referralCode) => {
   const response = await fetch(`${BASE_URL}/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -28,7 +28,8 @@ export const signup = async (email, password, name, school, visaType, programSta
       major: major,
       has_ssn: hasSsn,
       has_bank_account: hasBankAccount,
-      cpt_months_used: cptMonthsUsed
+      cpt_months_used: cptMonthsUsed,
+      referral_code: referralCode || undefined
     })
   });
   const data = await response.json();
@@ -91,8 +92,26 @@ export const getStatus = async (token) => {
   return handleResponse(response);
 };
 
-export const getNews = async (token) => {
-  const response = await fetch(`${BASE_URL}/news`, {
+export const getNews = async (token, { tag, page } = {}) => {
+  const params = new URLSearchParams();
+  if (tag && tag !== 'All') params.set('tag', tag);
+  if (page) params.set('page', String(page));
+  const query = params.toString();
+  const response = await fetch(`${BASE_URL}/news${query ? `?${query}` : ''}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const searchNews = async (query, token) => {
+  const response = await fetch(`${BASE_URL}/news/search?q=${encodeURIComponent(query)}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const getSingleNews = async (newsId, token) => {
+  const response = await fetch(`${BASE_URL}/news/${newsId}`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return handleResponse(response);
@@ -258,6 +277,41 @@ export const getDsoDirectory = async (token) => {
 
 export const searchDso = async (school, token) => {
   const response = await fetch(`${BASE_URL}/dso-search?school=${encodeURIComponent(school)}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const generateReferralCode = async (token) => {
+  const response = await fetch(`${BASE_URL}/referral/generate`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const sendReferralInvite = async (referredEmail, token) => {
+  const response = await fetch(`${BASE_URL}/referral/invite`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ referred_email: referredEmail })
+  });
+  return handleResponse(response);
+};
+
+export const getReferralStats = async (token) => {
+  const response = await fetch(`${BASE_URL}/referral/stats`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const verifyReferralCode = async (code, token) => {
+  const response = await fetch(`${BASE_URL}/referral/verify?code=${encodeURIComponent(code)}`, {
+    method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return handleResponse(response);

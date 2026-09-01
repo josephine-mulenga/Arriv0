@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   IdentificationCardIcon,
   BriefcaseIcon,
@@ -31,6 +31,10 @@ interface NewsItem {
 interface Bookmark {
   id: string;
   news_title: string;
+  news_body: string;
+  news_link?: string;
+  news_tag?: string;
+  news_image_url?: string;
 }
 
 const tagStyle: Record<string, { tint: string; color: string; icon: Icon }> = {
@@ -60,9 +64,8 @@ function formatDate(dateString?: string): string {
   return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// The backend's news source occasionally returns the same story more than
-// once (re-fetched on different runs); collapse those before rendering
-// rather than showing the same headline five times in a row.
+// Defensive — the backend now dedupes at the source, but this costs nothing
+// and guards against a stray re-fetch inserting the same story twice again.
 function dedupeByTitle(items: NewsItem[]): NewsItem[] {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -73,16 +76,33 @@ function dedupeByTitle(items: NewsItem[]): NewsItem[] {
   });
 }
 
+function bookmarkToNewsItem(b: Bookmark): NewsItem {
+  return {
+    id: b.id,
+    title: b.news_title,
+    body: b.news_body,
+    tag: b.news_tag ?? '',
+    link: b.news_link,
+    image_url: b.news_image_url,
+  };
+}
+
 export default function NewsScreen() {
   const { token } = useAuth();
   const [newsItems, setNewsItems] = useState<NewsItem[] | null>(null);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [selectedTab, setSelectedTab] = useState('All');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const fetchNews = async () => {
+  const fetchNews = async (tag: string, targetPage: number, append: boolean) => {
     try {
-      const data = await getNews(token);
-      setNewsItems(dedupeByTitle(data.news ?? []));
+      const data = await getNews(token, { tag, page: targetPage });
+      const incoming = dedupeByTitle(data.news ?? []);
+      setNewsItems((prev) => (append && prev ? dedupeByTitle([...prev, ...incoming]) : incoming));
+      setHasMore(!!data.has_more);
+      setPage(data.page ?? targetPage);
     } catch {
       // keep last-known list on failure
     }
@@ -98,11 +118,21 @@ export default function NewsScreen() {
   };
 
   useEffect(() => {
-    if (token) {
-      fetchNews();
-      fetchBookmarks();
-    }
+    if (!token) return;
+    fetchBookmarks();
   }, [token]);
+
+  useEffect(() => {
+    if (!token || selectedTab === 'Saved') return;
+    setNewsItems(null);
+    fetchNews(selectedTab, 1, false);
+  }, [token, selectedTab]);
+
+  const handleLoadMore = async () => {
+    setLoadingMore(true);
+    await fetchNews(selectedTab, page + 1, true);
+    setLoadingMore(false);
+  };
 
   const isBookmarked = (item: NewsItem) => bookmarks.some((b) => b.news_title === item.title);
   const getBookmarkId = (item: NewsItem) => bookmarks.find((b) => b.news_title === item.title)?.id;
@@ -121,13 +151,7 @@ export default function NewsScreen() {
     }
   };
 
-  const allNews = newsItems ?? [];
-  const filteredNews =
-    selectedTab === 'All'
-      ? allNews
-      : selectedTab === 'Saved'
-      ? allNews.filter((item) => isBookmarked(item))
-      : allNews.filter((item) => item.tag === selectedTab);
+  const displayedNews = selectedTab === 'Saved' ? bookmarks.map(bookmarkToNewsItem) : newsItems ?? [];
 
   return (
     <View style={styles.root}>
@@ -146,21 +170,21 @@ export default function NewsScreen() {
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {!newsItems && <Text style={styles.emptyText}>Loading news...</Text>}
+        {selectedTab !== 'Saved' && !newsItems && <Text style={styles.emptyText}>Loading news...</Text>}
 
-        {newsItems && filteredNews.length === 0 && (
+        {displayedNews.length === 0 && (newsItems || selectedTab === 'Saved') && (
           <Text style={styles.emptyText}>
             {selectedTab === 'Saved' ? 'No saved articles yet.' : 'No news in this category yet.'}
           </Text>
         )}
 
-        {filteredNews.map((item, index) => {
+        {displayedNews.map((item, index) => {
           const visual = tagVisual(item.tag);
           const saved = isBookmarked(item);
           return (
             <Pressable
               key={item.id ?? index}
-              style={[styles.row, index === filteredNews.length - 1 && styles.rowLast]}
+              style={[styles.row, index === displayedNews.length - 1 && styles.rowLast]}
               onPress={() => item.link && Linking.openURL(item.link)}>
               <View style={styles.thumbColumn}>
                 {item.image_url ? (
@@ -185,9 +209,11 @@ export default function NewsScreen() {
                   {formatDate(item.created_at)}
                   {item.created_at ? ` · ${relativeAge(item.created_at)}` : ''}
                 </Text>
-                <View style={[styles.badge, { backgroundColor: visual.tint }]}>
-                  <Text style={[styles.badgeText, { color: visual.color }]}>{item.tag}</Text>
-                </View>
+                {item.tag ? (
+                  <View style={[styles.badge, { backgroundColor: visual.tint }]}>
+                    <Text style={[styles.badgeText, { color: visual.color }]}>{item.tag}</Text>
+                  </View>
+                ) : null}
                 <Text style={styles.whatThisMeans}>
                   {item.affects_f1
                     ? 'This directly affects your F-1 status — worth a read.'
@@ -197,6 +223,16 @@ export default function NewsScreen() {
             </Pressable>
           );
         })}
+
+        {selectedTab !== 'Saved' && hasMore && (
+          <Pressable style={styles.loadMoreButton} onPress={handleLoadMore} disabled={loadingMore}>
+            {loadingMore ? (
+              <ActivityIndicator color={Palette.purple} />
+            ) : (
+              <Text style={styles.loadMoreText}>Load more</Text>
+            )}
+          </Pressable>
+        )}
       </ScrollView>
     </View>
   );
@@ -288,5 +324,14 @@ const styles = StyleSheet.create({
   },
   bookmarkButton: {
     padding: 2,
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  loadMoreText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 13.5,
+    color: Palette.purple,
   },
 });

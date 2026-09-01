@@ -187,13 +187,28 @@ export default function PersonalizeProfileScreen() {
   const [endDay, setEndDay] = useState('');
   const [endYear, setEndYear] = useState('');
 
+  const [referralCode, setReferralCode] = useState('');
+
   const programStartDate = startYear && startMonth && startDay ? `${startYear}-${startMonth}-${startDay}` : '';
   const programEndDate = endYear && endMonth && endDay ? `${endYear}-${endMonth}-${endDay}` : '';
   const canSubmit = school.trim().length > 0 && !!programStartDate && !!programEndDate;
 
   const handleCreateAccount = async () => {
     try {
-      await signup(email, password, name, school, visaType, programStartDate, programEndDate);
+      await signup(
+        email,
+        password,
+        name,
+        school,
+        visaType,
+        programStartDate,
+        programEndDate,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        referralCode.trim() || undefined
+      );
       await login(email, password);
       router.replace('/notification-permission');
     } catch {
@@ -317,6 +332,18 @@ export default function PersonalizeProfileScreen() {
               );
             })}
           </View>
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Referral code (optional)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Got a code from a friend?"
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={referralCode}
+            onChangeText={(v) => setReferralCode(v.toUpperCase())}
+            autoCapitalize="characters"
+          />
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
