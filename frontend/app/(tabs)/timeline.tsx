@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   MagnifyingGlassIcon,
   CheckCircleIcon,
@@ -15,6 +16,7 @@ import { Chip } from '@/components/ui/chip';
 import { RailRow } from '@/components/ui/rail-row';
 import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { router } from 'expo-router';
+import { getStepCompletion, setStepCompletion } from '@/utils/step-completion';
 
 interface TimelineStep {
   task: string;
@@ -32,11 +34,11 @@ interface TimelineData {
   viewing_year_level: number;
 }
 
-function stepStatus(step: TimelineStep) {
+function stepStatus(step: TimelineStep, effectiveDone: boolean) {
   if (step.warning) {
     return { label: 'Hard deadline', color: Palette.amber, icon: WarningCircleIcon, filled: true };
   }
-  if (step.done) {
+  if (effectiveDone) {
     return { label: 'Completed', color: Palette.green, icon: CheckCircleIcon, filled: true };
   }
   return { label: 'Not started', color: Palette.inkDisabled, icon: CircleIcon, filled: false };
@@ -47,11 +49,20 @@ export default function TimelineScreen() {
   const [data, setData] = useState<TimelineData | null>(null);
   const [offline, setOffline] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  // Steps with no real backend signal (no linked profile field) start
+  // unconfirmed and stay that way until the student explicitly taps them —
+  // never auto-marked done just because time has passed.
+  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    if (!token) return;
-    fetchTimeline();
-  }, [token]);
+  // Refetch on every focus, not just on mount — tabs stay mounted when you
+  // switch away, so a plain useEffect would keep showing stale done/locked
+  // status after answering questions elsewhere (e.g. Complete Your Profile).
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      fetchTimeline(selectedYear ?? undefined);
+    }, [token])
+  );
 
   useEffect(() => {
     if (!token || selectedYear === null) return;
@@ -70,8 +81,24 @@ export default function TimelineScreen() {
     }
   };
 
-  const upcoming = data ? data.steps.filter((s) => !s.done) : [];
-  const completed = data ? data.steps.filter((s) => s.done) : [];
+  const deadlineKey = data ? `timeline-year-${data.viewing_year_level}` : null;
+
+  useEffect(() => {
+    if (!deadlineKey) return;
+    getStepCompletion(deadlineKey).then(setConfirmed);
+  }, [deadlineKey]);
+
+  const isEffectivelyDone = (step: TimelineStep) => step.done || !!confirmed[step.task];
+
+  const handleToggleConfirm = async (step: TimelineStep) => {
+    if (step.done || !deadlineKey) return; // real backend facts aren't user-editable
+    const next = !confirmed[step.task];
+    setConfirmed((prev) => ({ ...prev, [step.task]: next }));
+    await setStepCompletion(deadlineKey, step.task, next);
+  };
+
+  const upcoming = data ? data.steps.filter((s) => !isEffectivelyDone(s)) : [];
+  const completed = data ? data.steps.filter((s) => isEffectivelyDone(s)) : [];
   const showCptGuide = data ? data.steps.some((s) => s.task.toLowerCase().includes('cpt')) : false;
 
   return (
@@ -135,7 +162,13 @@ export default function TimelineScreen() {
             <>
               <Text style={styles.groupHeader}>UPCOMING</Text>
               {upcoming.map((step, index) => (
-                <StepRow key={index} step={step} isLast={index === upcoming.length - 1 && completed.length === 0} />
+                <StepRow
+                  key={index}
+                  step={step}
+                  effectiveDone={false}
+                  isLast={index === upcoming.length - 1 && completed.length === 0}
+                  onToggleConfirm={() => handleToggleConfirm(step)}
+                />
               ))}
             </>
           )}
@@ -144,7 +177,13 @@ export default function TimelineScreen() {
             <>
               <Text style={styles.groupHeader}>COMPLETED</Text>
               {completed.map((step, index) => (
-                <StepRow key={index} step={step} isLast={index === completed.length - 1} />
+                <StepRow
+                  key={index}
+                  step={step}
+                  effectiveDone={true}
+                  isLast={index === completed.length - 1}
+                  onToggleConfirm={() => handleToggleConfirm(step)}
+                />
               ))}
             </>
           )}
@@ -156,9 +195,22 @@ export default function TimelineScreen() {
   );
 }
 
-function StepRow({ step, isLast }: { step: TimelineStep; isLast: boolean }) {
-  const status = stepStatus(step);
+function StepRow({
+  step,
+  effectiveDone,
+  isLast,
+  onToggleConfirm,
+}: {
+  step: TimelineStep;
+  effectiveDone: boolean;
+  isLast: boolean;
+  onToggleConfirm: () => void;
+}) {
+  const status = stepStatus(step, effectiveDone);
   const StatusIcon = status.icon;
+  // Real backend facts (has_bank_account, has_ssn, etc.) aren't user-
+  // editable here — only steps with no such signal are tappable to confirm.
+  const isConfirmable = !step.done;
 
   return (
     <RailRow dotColor={status.color} dotFilled={status.filled} isLast={isLast}>
@@ -168,8 +220,15 @@ function StepRow({ step, isLast }: { step: TimelineStep; isLast: boolean }) {
         <Text style={styles.cardTitle}>{step.task}</Text>
         {step.date_range ? <Text style={styles.cardDate}>{step.date_range}</Text> : null}
         <View style={styles.cardFooter}>
-          <Text style={[styles.cardStatusLabel, { color: status.color }]}>{status.label}</Text>
-          <StatusIcon size={20} color={status.color} weight={status.filled ? 'fill' : 'regular'} />
+          <Text style={[styles.cardStatusLabel, { color: status.color }]}>
+            {isConfirmable && !effectiveDone ? 'Tap to confirm' : status.label}
+          </Text>
+          <Pressable
+            hitSlop={10}
+            disabled={!isConfirmable}
+            onPress={onToggleConfirm}>
+            <StatusIcon size={20} color={status.color} weight={status.filled ? 'fill' : 'regular'} />
+          </Pressable>
         </View>
       </Pressable>
     </RailRow>
