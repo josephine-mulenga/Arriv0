@@ -11,7 +11,7 @@ import {
   type Icon,
 } from 'phosphor-react-native';
 
-import { getTimeline, getDocuments, getNews } from '@/api';
+import { getTimeline, getDocuments, searchNews } from '@/api';
 import { useAuth } from '@/AuthContext';
 import { Chip } from '@/components/ui/chip';
 import { IconTile } from '@/components/ui/icon-tile';
@@ -40,15 +40,15 @@ export default function SearchScreen() {
   const { token } = useAuth();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
-  const [results, setResults] = useState<Result[]>([]);
+  const [staticResults, setStaticResults] = useState<Result[]>([]);
+  const [newsResults, setNewsResults] = useState<Result[]>([]);
 
   useEffect(() => {
     if (!token) return;
     Promise.all([
       getTimeline(token).catch(() => null),
       getDocuments(token).catch(() => null),
-      getNews(token).catch(() => null),
-    ]).then(([timeline, docs, news]) => {
+    ]).then(([timeline, docs]) => {
       const list: Result[] = [];
 
       (timeline?.steps ?? []).forEach((step: { task: string; date_range?: string }) => {
@@ -76,25 +76,6 @@ export default function SearchScreen() {
         });
       });
 
-      const seenTitles = new Set<string>();
-      const uniqueNews = (news?.news ?? []).filter((item: { title: string }) => {
-        const key = item.title.trim().toLowerCase();
-        if (seenTitles.has(key)) return false;
-        seenTitles.add(key);
-        return true;
-      });
-      uniqueNews.forEach((item: { id: string; title: string; tag: string }) => {
-        list.push({
-          type: 'News',
-          title: item.title,
-          meta: item.tag,
-          icon: NewspaperIcon,
-          tint: Palette.amberTint,
-          color: Palette.amber,
-          onPress: () => router.push('/(tabs)/news'),
-        });
-      });
-
       ANSWERS.forEach((answer) => {
         list.push({
           type: 'Answers',
@@ -107,17 +88,46 @@ export default function SearchScreen() {
         });
       });
 
-      setResults(list);
+      setStaticResults(list);
     });
   }, [token]);
 
+  // News is searched live from the backend instead of pre-loaded — there's
+  // no "browse all news" need here, that's what the News tab is for.
+  useEffect(() => {
+    if (!token || query.trim().length === 0) {
+      setNewsResults([]);
+      return;
+    }
+    const handle = setTimeout(() => {
+      searchNews(query.trim(), token)
+        .then((data) => {
+          const items = (data.news ?? []).map(
+            (item: { id: string; title: string; tag: string }): Result => ({
+              type: 'News',
+              title: item.title,
+              meta: item.tag,
+              icon: NewspaperIcon,
+              tint: Palette.amberTint,
+              color: Palette.amber,
+              onPress: () => router.push('/(tabs)/news'),
+            })
+          );
+          setNewsResults(items);
+        })
+        .catch(() => setNewsResults([]));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [token, query]);
+
   const filtered = useMemo(() => {
-    return results.filter((r) => {
+    const combined = [...staticResults, ...newsResults];
+    return combined.filter((r) => {
       const matchesFilter = filter === 'All' || r.type === filter;
       const matchesQuery = query.trim().length === 0 || r.title.toLowerCase().includes(query.trim().toLowerCase());
       return matchesFilter && matchesQuery;
     });
-  }, [results, filter, query]);
+  }, [staticResults, newsResults, filter, query]);
 
   return (
     <View style={styles.root}>
