@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import {
   CaretLeftIcon,
   RobotIcon,
@@ -24,6 +25,8 @@ import { useAuth } from '@/AuthContext';
 import { chat, getChatHistory, clearChatHistory } from '@/api';
 import { Palette, Type } from '@/constants/theme';
 import { usePreferences } from '@/PreferencesContext';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface Message {
   role: 'user' | 'assistant';
@@ -64,6 +67,8 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
+  const sendScale = useSharedValue(1);
+  const sendAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: sendScale.value }] }));
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -86,6 +91,7 @@ export default function ChatScreen() {
 
   const handleSend = async () => {
     if (!question.trim()) return;
+    sendScale.value = withSequence(withSpring(0.8, { damping: 10, stiffness: 400 }), withSpring(1));
     const userMessage: Message = { role: 'user', text: question };
     setMessages((prev) => [...prev, userMessage]);
     setQuestion('');
@@ -111,7 +117,10 @@ export default function ChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
@@ -188,12 +197,12 @@ export default function ChatScreen() {
             onSubmitEditing={handleSend}
           />
         </View>
-        <Pressable
-          style={[styles.sendButton, { backgroundColor: chatTheme.accent }]}
+        <AnimatedPressable
+          style={[styles.sendButton, { backgroundColor: chatTheme.accent }, sendAnimatedStyle]}
           onPress={handleSend}
           disabled={loading}>
           <PaperPlaneTiltIcon size={19} color={Palette.white} weight="fill" />
-        </Pressable>
+        </AnimatedPressable>
       </View>
     </KeyboardAvoidingView>
   );

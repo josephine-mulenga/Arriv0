@@ -65,7 +65,7 @@ export default function MilestonesScreen() {
 
           if (item.status === 'done') {
             return (
-              <RailRow key={item.id} dotColor={Palette.green} dotFilled dotSize={13} isLast={isLast}>
+              <RailRow key={item.id} dotColor={Palette.green} dotFilled dotSize={13} isLast={isLast} index={index}>
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>{item.title}</Text>
                   <Text style={styles.cardDescription}>{item.description}</Text>
@@ -82,7 +82,8 @@ export default function MilestonesScreen() {
                 dotFilled={false}
                 ringWidth={2.5}
                 dotSize={13}
-                isLast={isLast}>
+                isLast={isLast}
+                index={index}>
                 <View style={[styles.card, styles.cardInProgress]}>
                   <Text style={styles.cardTitle}>{item.title}</Text>
                   <Text style={styles.cardDescription}>{item.description}</Text>
@@ -98,7 +99,8 @@ export default function MilestonesScreen() {
               dotFilled={false}
               ringWidth={2.5}
               dotSize={13}
-              isLast={isLast}>
+              isLast={isLast}
+              index={index}>
               <View style={[styles.card, styles.cardLocked]}>
                 <Text style={[styles.cardTitle, styles.cardTitleLocked]}>{item.title}</Text>
                 <Text style={styles.cardDescription}>{item.description}</Text>

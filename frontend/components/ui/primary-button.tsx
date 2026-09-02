@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { Palette, Radius, Type } from '@/constants/theme';
 
@@ -9,19 +10,31 @@ interface PrimaryButtonProps {
   style?: ViewStyle;
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 export function PrimaryButton({ label, onPress, disabled, style }: PrimaryButtonProps) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
       disabled={disabled}
+      onPressIn={() => {
+        scale.value = withSpring(0.96, { damping: 14, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 10, stiffness: 200 });
+      }}
       style={({ pressed }) => [
         styles.button,
-        disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
+        disabled && styles.disabled,
         style,
+        animatedStyle,
       ]}>
       <Text style={styles.label}>{label}</Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

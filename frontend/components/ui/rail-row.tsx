@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 
 import { Palette } from '@/constants/theme';
 
@@ -8,6 +10,7 @@ interface RailRowProps {
   dotSize?: number;
   ringWidth?: number;
   isLast?: boolean;
+  index?: number;
   children: React.ReactNode;
 }
 
@@ -20,17 +23,30 @@ export function RailRow({
   dotSize = 11,
   ringWidth = 0,
   isLast = false,
+  index = 0,
   children,
 }: RailRowProps) {
+  const dotScale = useSharedValue(1);
+
+  useEffect(() => {
+    if (dotFilled) {
+      dotScale.value = withSequence(withSpring(1.35, { damping: 6, stiffness: 400 }), withSpring(1));
+    }
+  }, [dotFilled]);
+
+  const dotAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: dotScale.value }],
+  }));
+
   return (
-    <View style={styles.row}>
+    <Animated.View entering={FadeInDown.delay(index * 40).duration(320)} style={styles.row}>
       <View style={styles.rail}>
         <View
           style={[
             styles.dotWrap,
             { marginTop: 20 },
           ]}>
-          <View
+          <Animated.View
             style={[
               styles.dot,
               {
@@ -41,13 +57,14 @@ export function RailRow({
                 borderWidth: ringWidth,
                 borderColor: ringWidth ? dotColor : 'transparent',
               },
+              dotAnimatedStyle,
             ]}
           />
         </View>
         {!isLast && <View style={styles.line} />}
       </View>
       <View style={styles.card}>{children}</View>
-    </View>
+    </Animated.View>
   );
 }
 

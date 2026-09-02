@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import Animated, { useAnimatedProps, useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 
 import { Palette } from '@/constants/theme';
 
@@ -12,7 +14,10 @@ interface ProgressRingProps {
   children?: React.ReactNode;
 }
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 // SVG ring reused by Home's status card and the deadline-detail screen.
+// Fills from empty on mount/percent-change instead of appearing static.
 export function ProgressRing({
   size = 82,
   strokeWidth = 8,
@@ -24,7 +29,16 @@ export function ProgressRing({
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const clamped = Math.min(100, Math.max(0, percent));
-  const offset = circumference * (1 - clamped / 100);
+
+  const animatedPercent = useSharedValue(0);
+
+  useEffect(() => {
+    animatedPercent.value = withTiming(clamped, { duration: 900, easing: Easing.out(Easing.cubic) });
+  }, [clamped]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - animatedPercent.value / 100),
+  }));
 
   return (
     <View style={[styles.wrap, { width: size, height: size }]}>
@@ -37,7 +51,7 @@ export function ProgressRing({
           strokeWidth={strokeWidth}
           fill="none"
         />
-        <Circle
+        <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
           r={radius}
@@ -46,7 +60,7 @@ export function ProgressRing({
           fill="none"
           strokeLinecap="round"
           strokeDasharray={circumference}
-          strokeDashoffset={offset}
+          animatedProps={animatedProps}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>

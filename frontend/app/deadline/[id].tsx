@@ -3,8 +3,6 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   CaretLeftIcon,
-  CheckCircleIcon,
-  CircleIcon,
   SparkleIcon,
   FolderSimpleIcon,
 } from 'phosphor-react-native';
@@ -12,6 +10,7 @@ import {
 import { getUserProfile } from '@/api';
 import { useAuth } from '@/AuthContext';
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { AnimatedCheck } from '@/components/ui/animated-check';
 import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { computeOptSpine, formatDate } from '@/utils/date-spine';
 import { getStepCompletion, setStepCompletion } from '@/utils/step-completion';
@@ -131,11 +130,7 @@ export default function DeadlineDetailScreen() {
           const done = !!completion[step.key];
           return (
             <Pressable key={step.key} style={styles.stepRow} onPress={() => toggleStep(step.key)}>
-              {done ? (
-                <CheckCircleIcon size={20} color={Palette.green} weight="fill" />
-              ) : (
-                <CircleIcon size={20} color={Palette.chevron} />
-              )}
+              <AnimatedCheck done={done} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.stepTitle, done && styles.stepTitleDone]}>{step.title}</Text>
                 <Text style={styles.stepMeta}>{step.meta}</Text>

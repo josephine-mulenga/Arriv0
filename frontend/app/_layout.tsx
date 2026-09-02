@@ -40,9 +40,8 @@ export default function RootLayout() {
         <AuthProvider>
           <PreferencesProvider>
             <ThemeProvider value={DefaultTheme}>
-              <Stack>
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="modal" options={{ headerShown: true, presentation: 'modal', title: 'Modal' }} />
               </Stack>
               <StatusBar style="dark" />
             </ThemeProvider>

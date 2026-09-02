@@ -3,13 +3,28 @@ import { supabase } from './supabase';
 
 const BASE_URL = 'https://arriv0-production.up.railway.app';
 
+// FastAPI's own validation errors return `detail` as an array of
+// {msg, loc, ...} objects rather than a string — passing that straight into
+// `new Error()` silently stringifies to "[object Object]". This normalizes
+// every shape `detail` can take into something readable.
+const extractErrorMessage = (data, fallback) => {
+  const detail = data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) => (typeof item === 'string' ? item : item?.msg)).filter(Boolean);
+    if (messages.length) return messages.join(' ');
+  }
+  if (detail && typeof detail === 'object' && typeof detail.msg === 'string') return detail.msg;
+  return fallback;
+};
+
 const handleResponse = async (response) => {
   if (response.status === 401) {
     triggerLogout();
     throw new Error('Session expired. Please log in again.');
   }
   const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Request failed');
+  if (!response.ok) throw new Error(extractErrorMessage(data, 'Request failed'));
   return data;
 };
 
@@ -33,7 +48,7 @@ export const signup = async (email, password, name, school, visaType, programSta
     })
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Signup failed');
+  if (!response.ok) throw new Error(extractErrorMessage(data, 'Signup failed'));
   return data;
 };
 
@@ -44,7 +59,7 @@ export const login = async (email, password) => {
     body: JSON.stringify({ email, password })
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Login failed');
+  if (!response.ok) throw new Error(extractErrorMessage(data, 'Login failed'));
   return data;
 };
 

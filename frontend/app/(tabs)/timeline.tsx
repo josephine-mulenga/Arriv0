@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import {
   MagnifyingGlassIcon,
   CheckCircleIcon,
@@ -164,6 +165,7 @@ export default function TimelineScreen() {
               {upcoming.map((step, index) => (
                 <StepRow
                   key={index}
+                  index={index}
                   step={step}
                   effectiveDone={false}
                   isLast={index === upcoming.length - 1 && completed.length === 0}
@@ -179,6 +181,7 @@ export default function TimelineScreen() {
               {completed.map((step, index) => (
                 <StepRow
                   key={index}
+                  index={index}
                   step={step}
                   effectiveDone={true}
                   isLast={index === completed.length - 1}
@@ -199,11 +202,13 @@ function StepRow({
   step,
   effectiveDone,
   isLast,
+  index,
   onToggleConfirm,
 }: {
   step: TimelineStep;
   effectiveDone: boolean;
   isLast: boolean;
+  index: number;
   onToggleConfirm: () => void;
 }) {
   const status = stepStatus(step, effectiveDone);
@@ -212,8 +217,16 @@ function StepRow({
   // editable here — only steps with no such signal are tappable to confirm.
   const isConfirmable = !step.done;
 
+  const iconScale = useSharedValue(1);
+  useEffect(() => {
+    if (effectiveDone) {
+      iconScale.value = withSequence(withSpring(1.4, { damping: 6, stiffness: 400 }), withSpring(1));
+    }
+  }, [effectiveDone]);
+  const iconAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: iconScale.value }] }));
+
   return (
-    <RailRow dotColor={status.color} dotFilled={status.filled} isLast={isLast}>
+    <RailRow dotColor={status.color} dotFilled={status.filled} isLast={isLast} index={index}>
       <Pressable
         style={[styles.card, { borderLeftColor: status.color }]}
         onPress={() => step.link && Linking.openURL(step.link)}>
@@ -227,7 +240,9 @@ function StepRow({
             hitSlop={10}
             disabled={!isConfirmable}
             onPress={onToggleConfirm}>
-            <StatusIcon size={20} color={status.color} weight={status.filled ? 'fill' : 'regular'} />
+            <Animated.View style={iconAnimatedStyle}>
+              <StatusIcon size={20} color={status.color} weight={status.filled ? 'fill' : 'regular'} />
+            </Animated.View>
           </Pressable>
         </View>
       </Pressable>
