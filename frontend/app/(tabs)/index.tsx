@@ -106,19 +106,21 @@ export default function HomeScreen() {
         </Animated.View>
 
         <Text style={styles.sectionHeader}>Your Status</Text>
-        <Pressable
-          style={styles.statusCard}
-          onPress={() => router.push('/deadline/opt-application')}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.statusLabel}>OPT application window opens</Text>
-            <Text style={styles.statusNumber}>{spine ? Math.max(spine.daysToWindow, 0) : '--'} days</Text>
-            <Text style={styles.statusDate}>{spine ? formatDate(spine.optWindowOpens) : ''}</Text>
-          </View>
-          <ProgressRing percent={spine?.programElapsedPercent ?? 0}>
-            <Text style={styles.ringPercent}>{spine?.programElapsedPercent ?? 0}%</Text>
-            <Text style={styles.ringSubLabel}>of program</Text>
-          </ProgressRing>
-        </Pressable>
+        <Animated.View entering={FadeInUp.delay(80).duration(400)}>
+          <Pressable
+            style={styles.statusCard}
+            onPress={() => router.push('/deadline/opt-application')}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.statusLabel}>OPT application window opens</Text>
+              <Text style={styles.statusNumber}>{spine ? Math.max(spine.daysToWindow, 0) : '--'} days</Text>
+              <Text style={styles.statusDate}>{spine ? formatDate(spine.optWindowOpens) : ''}</Text>
+            </View>
+            <ProgressRing percent={spine?.programElapsedPercent ?? 0}>
+              <Text style={styles.ringPercent}>{spine?.programElapsedPercent ?? 0}%</Text>
+              <Text style={styles.ringSubLabel}>of program</Text>
+            </ProgressRing>
+          </Pressable>
+        </Animated.View>
 
         <View style={styles.rowBetween}>
           <Text style={styles.sectionHeader}>Upcoming</Text>
@@ -131,7 +133,10 @@ export default function HomeScreen() {
           <Text style={styles.emptyText}>Nothing upcoming right now — check back soon.</Text>
         ) : (
           upcoming.map((step, index) => (
-            <View key={index} style={styles.upcomingRow}>
+            <Animated.View
+              key={index}
+              entering={FadeInUp.delay(120 + index * 60).duration(350)}
+              style={styles.upcomingRow}>
               <View style={styles.upcomingIconTile}>
                 <ClockIcon size={18} color={Palette.purple} />
               </View>
@@ -144,7 +149,7 @@ export default function HomeScreen() {
               ) : (
                 <CircleIcon size={19} color={Palette.inkDisabled} />
               )}
-            </View>
+            </Animated.View>
           ))
         )}
 

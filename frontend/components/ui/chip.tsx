@@ -1,4 +1,6 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { useEffect } from 'react';
+import { Pressable, StyleSheet } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Palette, Radius, Type } from '@/constants/theme';
 
@@ -8,16 +10,40 @@ interface ChipProps {
   onPress: () => void;
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 // Single-select pill used for year chips, category chips, filter chips.
 export function Chip({ label, selected, onPress }: ChipProps) {
+  const scale = useSharedValue(1);
+  const bg = useSharedValue(selected ? 1 : 0);
+
+  useEffect(() => {
+    bg.value = withTiming(selected ? 1 : 0, { duration: 180 });
+    if (selected) {
+      scale.value = withSequence(withSpring(1.08, { damping: 8, stiffness: 400 }), withSpring(1));
+    }
+  }, [selected]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: bg.value > 0.5 ? Palette.purple : Palette.dividerLight,
+    transform: [{ scale: scale.value }],
+  }));
+  const animatedLabelStyle = useAnimatedStyle(() => ({
+    color: bg.value > 0.5 ? Palette.white : Palette.inkMuted,
+  }));
+
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
-      style={[styles.chip, selected ? styles.chipSelected : styles.chipUnselected]}>
-      <Text style={[styles.label, selected ? styles.labelSelected : styles.labelUnselected]}>
-        {label}
-      </Text>
-    </Pressable>
+      onPressIn={() => {
+        scale.value = withSpring(0.94, { damping: 14, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(selected ? 1.02 : 1, { damping: 10, stiffness: 200 });
+      }}
+      style={[styles.chip, animatedStyle]}>
+      <Animated.Text style={[styles.label, animatedLabelStyle]}>{label}</Animated.Text>
+    </AnimatedPressable>
   );
 }
 
@@ -27,20 +53,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 15,
   },
-  chipSelected: {
-    backgroundColor: Palette.purple,
-  },
-  chipUnselected: {
-    backgroundColor: Palette.dividerLight,
-  },
   label: {
     fontFamily: Type.bodySemiBold,
     fontSize: 13,
-  },
-  labelSelected: {
-    color: Palette.white,
-  },
-  labelUnselected: {
-    color: Palette.inkMuted,
   },
 });
