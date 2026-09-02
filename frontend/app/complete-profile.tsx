@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { CaretLeftIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { PressableScale } from '@/components/ui/pressable-scale';
 import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { getUserProfile, updateProfile } from '@/api';
@@ -24,16 +25,16 @@ function YesNoRow({
       <Text style={styles.fieldLabel}>{label}</Text>
       {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
       <View style={styles.segmentRow}>
-        <Pressable
+        <PressableScale
           style={[styles.segment, value && styles.segmentSelected]}
           onPress={() => onChange(true)}>
           <Text style={[styles.segmentText, value && styles.segmentTextSelected]}>Yes</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
           style={[styles.segment, !value && styles.segmentSelected]}
           onPress={() => onChange(false)}>
           <Text style={[styles.segmentText, !value && styles.segmentTextSelected]}>No</Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated, {
+  BounceIn,
+  FadeInUp,
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
@@ -35,28 +37,32 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        <Animated.View style={floatStyle}>
+        <Animated.View entering={BounceIn.duration(900)} style={floatStyle}>
           <ArrivoLogo size={140} />
         </Animated.View>
 
-        <Text style={styles.wordmark}>Arriv0</Text>
+        <Animated.Text entering={FadeInUp.delay(300).duration(500)} style={styles.wordmark}>
+          Arriv0
+        </Animated.Text>
 
-        <Text style={styles.tagline}>Your journey.{'\n'}Your guide.</Text>
+        <Animated.Text entering={FadeInUp.delay(450).duration(500)} style={styles.tagline}>
+          Your journey.{'\n'}Your guide.
+        </Animated.Text>
 
-        <Text style={styles.body}>
+        <Animated.Text entering={FadeInUp.delay(600).duration(500)} style={styles.body}>
           Helping international students in the U.S. stay on track from day one to OPT.
-        </Text>
+        </Animated.Text>
 
         <View style={styles.spacer} />
 
-        <View style={styles.buttonBlock}>
+        <Animated.View entering={FadeInUp.delay(800).duration(500)} style={styles.buttonBlock}>
           <PrimaryButton label="Get Started" onPress={() => router.push('/intro')} />
           <Pressable onPress={() => router.push('/login')} style={styles.link}>
             <Text style={styles.linkText}>
               Already have an account? <Text style={styles.linkTextStrong}>Log in</Text>
             </Text>
           </Pressable>
-        </View>
+        </Animated.View>
       </View>
     </View>
   );
