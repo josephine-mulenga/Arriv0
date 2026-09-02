@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, Link } from 'expo-router';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import {
   CaretLeftIcon,
   UserIcon,
@@ -8,10 +9,10 @@ import {
   LockSimpleIcon,
   EyeIcon,
   EyeSlashIcon,
-  CheckCircleIcon,
 } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { AnimatedCheck } from '@/components/ui/animated-check';
 import { Palette, Radius, Type } from '@/constants/theme';
 
 // Mirrors the backend's password_must_be_strong validator (backend/main.py) exactly —
@@ -52,85 +53,96 @@ export default function SignupScreen() {
       </Pressable>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Create your account</Text>
-        <Text style={styles.subtitle}>Let&apos;s get you started.</Text>
+        <Animated.View entering={FadeInDown.duration(400)}>
+          <Text style={styles.title}>Create your account</Text>
+          <Text style={styles.subtitle}>Let&apos;s get you started.</Text>
+        </Animated.View>
 
-        <View style={styles.inputRow}>
-          <UserIcon size={17} color="#A9A7BE" />
-          <TextInput
-            style={styles.input}
-            placeholder="Full Name"
-            placeholderTextColor={Palette.inkPlaceholder}
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
+        <Animated.View entering={FadeInUp.delay(80).duration(350)}>
+          <View style={styles.inputRow}>
+            <UserIcon size={17} color="#A9A7BE" />
+            <TextInput
+              style={styles.input}
+              placeholder="Full Name"
+              placeholderTextColor={Palette.inkPlaceholder}
+              value={name}
+              onChangeText={setName}
+            />
+          </View>
+        </Animated.View>
 
-        <View style={styles.inputRow}>
-          <EnvelopeSimpleIcon size={17} color="#A9A7BE" />
-          <TextInput
-            style={styles.input}
-            placeholder="Email Address"
-            placeholderTextColor={Palette.inkPlaceholder}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-        </View>
+        <Animated.View entering={FadeInUp.delay(140).duration(350)}>
+          <View style={styles.inputRow}>
+            <EnvelopeSimpleIcon size={17} color="#A9A7BE" />
+            <TextInput
+              style={styles.input}
+              placeholder="Email Address"
+              placeholderTextColor={Palette.inkPlaceholder}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </View>
+        </Animated.View>
         {email.trim().length > 0 && !isEmailValid && (
-          <Text style={styles.fieldError}>Enter a valid email address, like you@example.com</Text>
+          <Animated.Text entering={FadeInDown.duration(200)} style={styles.fieldError}>
+            Enter a valid email address, like you@example.com
+          </Animated.Text>
         )}
 
-        <View style={styles.inputRow}>
-          <LockSimpleIcon size={17} color="#A9A7BE" />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={Palette.inkPlaceholder}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-          />
-          <Pressable onPress={() => setShowPassword((v) => !v)}>
-            {showPassword ? (
-              <EyeSlashIcon size={17} color="#A9A7BE" />
-            ) : (
-              <EyeIcon size={17} color="#A9A7BE" />
-            )}
-          </Pressable>
-        </View>
+        <Animated.View entering={FadeInUp.delay(200).duration(350)}>
+          <View style={styles.inputRow}>
+            <LockSimpleIcon size={17} color="#A9A7BE" />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor={Palette.inkPlaceholder}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
+            <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+              {showPassword ? (
+                <EyeSlashIcon size={17} color="#A9A7BE" />
+              ) : (
+                <EyeIcon size={17} color="#A9A7BE" />
+              )}
+            </Pressable>
+          </View>
+        </Animated.View>
 
         <View style={styles.checklist}>
-          {passwordRules.map((rule) => {
+          {passwordRules.map((rule, index) => {
             const passed = rule.test(password);
             return (
-              <View key={rule.label} style={styles.checklistRow}>
-                <CheckCircleIcon
-                  size={15}
-                  color={passed ? Palette.green : Palette.chevron}
-                  weight="fill"
-                />
+              <Animated.View
+                key={rule.label}
+                entering={FadeInUp.delay(240 + index * 40).duration(300)}
+                style={styles.checklistRow}>
+                <AnimatedCheck done={passed} size={15} />
                 <Text style={[styles.checklistText, passed && styles.checklistTextPassed]}>
                   {rule.label}
                 </Text>
-              </View>
+              </Animated.View>
             );
           })}
         </View>
 
-        <PrimaryButton
-          label="Sign Up"
-          onPress={handleContinue}
-          disabled={!canContinue}
-          style={styles.submitButton}
-        />
+        <Animated.View entering={FadeInUp.delay(400).duration(350)}>
+          <PrimaryButton
+            label="Sign Up"
+            onPress={handleContinue}
+            disabled={!canContinue}
+            style={styles.submitButton}
+          />
 
-        <Link href="/login" style={styles.link}>
-          <Text style={styles.linkText}>
-            Already have an account? <Text style={styles.linkTextStrong}>Log in</Text>
-          </Text>
-        </Link>
+          <Link href="/login" style={styles.link}>
+            <Text style={styles.linkText}>
+              Already have an account? <Text style={styles.linkTextStrong}>Log in</Text>
+            </Text>
+          </Link>
+        </Animated.View>
       </ScrollView>
     </View>
   );

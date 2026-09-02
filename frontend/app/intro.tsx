@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { PathIcon, BriefcaseIcon, BellIcon, SparkleIcon, type Icon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
@@ -16,14 +17,19 @@ const features: { icon: Icon; text: string }[] = [
 export default function IntroScreen() {
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>Everything you need,{'\n'}in one place.</Text>
+      <Animated.Text entering={FadeInDown.duration(400)} style={styles.title}>
+        Everything you need,{'\n'}in one place.
+      </Animated.Text>
 
       <View style={styles.featureList}>
         {features.map((item, index) => (
-          <View key={index} style={styles.featureRow}>
+          <Animated.View
+            key={index}
+            entering={FadeInRight.delay(150 + index * 100).duration(400)}
+            style={styles.featureRow}>
             <IconTile icon={item.icon} tint={Palette.purpleTint} color={Palette.purple} iconSize={21} />
             <Text style={styles.featureText}>{item.text}</Text>
-          </View>
+          </Animated.View>
         ))}
       </View>
 

@@ -17,10 +17,11 @@ import {
   GraduationCapIcon,
   BriefcaseIcon,
   CheckCircleIcon,
-  CircleIcon,
 } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { PressableScale } from '@/components/ui/pressable-scale';
+import { AnimatedCheck } from '@/components/ui/animated-check';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 
@@ -243,12 +244,12 @@ export default function PersonalizeProfileScreen() {
             {visaTypes.map((v) => {
               const selected = visaType === v.value;
               return (
-                <Pressable
+                <PressableScale
                   key={v.value}
                   style={[styles.segment, selected && styles.segmentSelected]}
                   onPress={() => setVisaType(v.value)}>
                   <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{v.label}</Text>
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>
@@ -314,8 +315,9 @@ export default function PersonalizeProfileScreen() {
               const selected = selectedPlans.includes(p.key);
               const PlanIcon = p.icon;
               return (
-                <Pressable
+                <PressableScale
                   key={p.key}
+                  scaleTo={0.97}
                   style={[styles.planRow, selected && styles.planRowSelected]}
                   onPress={() => togglePlan(p.key)}>
                   <PlanIcon size={19} color={selected ? Palette.purple : Palette.inkMuted} weight={selected ? 'fill' : 'regular'} />
@@ -323,12 +325,8 @@ export default function PersonalizeProfileScreen() {
                     <Text style={styles.planTitle}>{p.title}</Text>
                     <Text style={styles.planHint}>{p.hint}</Text>
                   </View>
-                  {selected ? (
-                    <CheckCircleIcon size={20} color={Palette.purple} weight="fill" />
-                  ) : (
-                    <CircleIcon size={20} color={Palette.chevron} />
-                  )}
-                </Pressable>
+                  <AnimatedCheck done={selected} />
+                </PressableScale>
               );
             })}
           </View>
