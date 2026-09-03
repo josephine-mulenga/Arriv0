@@ -1,7 +1,13 @@
 ﻿import requests
 
-r = requests.post("https://arriv0-production.up.railway.app/resend-confirmation", json={
-    "email": "oseibonsu0201@gmail.com"
+r = requests.post("https://arriv0-production.up.railway.app/signup", json={
+    "email": "davidoseisenu210@gmail.com",
+    "password": "Test1234!",
+    "name": "David Test",
+    "school": "Voorhees University",
+    "visa_type": "F1",
+    "program_start_date": "2025-08-01",
+    "program_end_date": "2029-05-15"
 })
 print(r.status_code)
 print(r.json())
