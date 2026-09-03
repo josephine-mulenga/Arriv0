@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -218,7 +220,10 @@ export default function PersonalizeProfileScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: '66%' }]} />
       </View>
@@ -368,7 +373,7 @@ export default function PersonalizeProfileScreen() {
           </Text>
         </Text>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

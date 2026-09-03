@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
@@ -26,16 +26,20 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+      <ThemedView style={styles.container}>
       <ThemedText type="title">Reset your password</ThemedText>
 
       {submitted ? (
         <ThemedText style={styles.successText}>
-          If an account exists for {email}, we've sent instructions to reset your password.
+          If an account exists for {email}, we&apos;ve sent instructions to reset your password.
         </ThemedText>
       ) : (
         <>
-          <ThemedText>Enter your email and we'll send you a link to reset your password.</ThemedText>
+          <ThemedText>Enter your email and we&apos;ll send you a link to reset your password.</ThemedText>
 
           <TextInput
             style={styles.input}
@@ -56,7 +60,8 @@ export default function ResetPasswordScreen() {
       <TouchableOpacity onPress={() => router.push('/login')} style={styles.link}>
         <ThemedText>Back to log in</ThemedText>
       </TouchableOpacity>
-    </ThemedView>
+      </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import {
   MagnifyingGlassIcon,
@@ -130,7 +130,10 @@ export default function SearchScreen() {
   }, [staticResults, newsResults, filter, query]);
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
       <View style={styles.header}>
         <View style={styles.searchBar}>
           <MagnifyingGlassIcon size={17} color={Palette.inkFaint} />
@@ -185,7 +188,7 @@ export default function SearchScreen() {
           ))}
         </ScrollView>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { CaretLeftIcon } from 'phosphor-react-native';
 
@@ -49,7 +49,10 @@ export default function NotificationSettingsScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
@@ -96,7 +99,7 @@ export default function NotificationSettingsScreen() {
           style={styles.submitButton}
         />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

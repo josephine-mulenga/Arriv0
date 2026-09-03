@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -188,7 +190,10 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
@@ -270,7 +275,7 @@ export default function EditProfileScreen() {
           </>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
