@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, Link } from 'expo-router';
 import { EnvelopeSimpleIcon, LockSimpleIcon } from 'phosphor-react-native';
 
@@ -37,7 +37,10 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
       <View style={styles.content}>
         <Text style={styles.title}>Log in</Text>
 
@@ -89,7 +92,7 @@ export default function LoginScreen() {
           <Text style={styles.linkText}>Forgot your password?</Text>
         </Link>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

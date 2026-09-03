@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import {
@@ -101,7 +101,10 @@ export default function ReferralsScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <CaretLeftIcon size={20} color={Palette.ink} weight="bold" />
@@ -205,7 +208,7 @@ export default function ReferralsScreen() {
           {redeemMessage ? <Text style={styles.messageText}>{redeemMessage}</Text> : null}
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
