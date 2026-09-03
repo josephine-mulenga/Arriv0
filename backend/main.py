@@ -33,6 +33,7 @@ SUPABASE_SECRET = os.getenv("SUPABASE_SECRET")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
@@ -276,6 +277,28 @@ def log_api_usage(endpoint: str, model: str, user_id: str = None):
     except Exception as e:
         logger.error(f"Failed to log API usage: {e}")
 
+async def send_email(to: str, subject: str, html: str):
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": "Arriv0 <noreply@arriv0.com>",
+                    "to": [to],
+                    "subject": subject,
+                    "html": html
+                }
+            )
+            logger.info(f"Email sent to {to} status {response.status_code}")
+            return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return False
+
 def get_document_context(user_id: str) -> str:
     try:
         response = supabase_admin.table("documents").select("name, category, collected, notes").eq("user_id", user_id).execute()
@@ -339,20 +362,19 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
     has_done_cpt = cpt_months_used > 0
     has_opt_recommendation = profile.get("has_opt_recommendation", False)
     has_i765_submitted = profile.get("has_i765_submitted", False)
-    # Answered directly on Complete Your Profile — arriving and being past
-    # the 10-day window are not the same thing as having actually reported
-    # in, so this can't be inferred from the calendar alone.
-    has_reported_to_dso = profile.get("has_reported_to_dso", False)
 
     today = date.today()
     program_start = profile.get("program_start_date")
     program_end = profile.get("program_end_date")
 
+    reported_to_dso = False
     start_date = today
     end_date = today + timedelta(days=365 * 4)
 
     if program_start:
         start_date = date.fromisoformat(str(program_start)[:10])
+        days_since_start = (today - start_date).days
+        reported_to_dso = days_since_start > 10
 
     if program_end:
         end_date = date.fromisoformat(str(program_end)[:10])
@@ -370,11 +392,11 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
             "year": "Freshman",
             "status": "You are settling in. Focus on your first 30 days.",
             "steps": [
-                {"task": "Report to DSO within 10 days of arrival", "done": has_reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=10))}"},
-                {"task": "Get I-20 signed by DSO", "done": has_reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=14))}"},
+                {"task": "Report to DSO within 10 days of arrival", "done": reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=10))}"},
+                {"task": "Get I-20 signed by DSO", "done": reported_to_dso, "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=14))}"},
                 {"task": "Apply for Social Security Number", "done": has_ssn, "link": "https://www.ssa.gov/ssnumber/", "date_range": f"{fmt_date(start_date + timedelta(days=14))} — {fmt_date(start_date + timedelta(days=60))}"},
                 {"task": "Open a bank account", "done": has_bank_account, "link": "https://www.chase.com/personal/checking/college-checking", "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"},
-                {"task": "Understand your on-campus work rights", "done": False, "link": "https://studyinthestates.dhs.gov/students/work", "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"}
+                {"task": "Understand your on-campus work rights", "done": year_level >= 1, "link": "https://studyinthestates.dhs.gov/students/work", "date_range": f"{fmt_date(start_date)} — {fmt_date(start_date + timedelta(days=30))}"}
             ]
         },
         2: {
@@ -391,7 +413,7 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
             "year": "Junior",
             "status": "OPT is approaching. Start preparing now.",
             "steps": [
-                {"task": "Understand CPT vs OPT differences", "done": False, "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
+                {"task": "Understand CPT vs OPT differences", "done": year_level >= 3, "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
                 {"task": "Create your USCIS account now", "done": False, "link": "https://myaccount.uscis.gov", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
                 {"task": "Check if your major qualifies for STEM OPT", "done": False, "link": "https://www.ice.gov/sevis/stemlist", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"},
                 {"task": "Start networking with OPT friendly employers", "done": False, "link": "https://www.linkedin.com/jobs", "date_range": f"{fmt_date(year_2_end)} — {fmt_date(year_3_end)}"}
@@ -401,7 +423,7 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
             "year": "Senior",
             "status": "Your OPT window is approaching. Submit as early as possible.",
             "steps": [
-                {"task": "Confirm program end date with DSO", "done": False, "date_range": f"{fmt_date(year_3_end)} — {fmt_date(opt_window_start)}"},
+                {"task": "Confirm program end date with DSO", "done": True, "date_range": f"{fmt_date(year_3_end)} — {fmt_date(opt_window_start)}"},
                 {"task": "Request OPT recommendation from DSO", "done": has_opt_recommendation, "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
                 {"task": "Complete Form I-765 on USCIS", "done": has_i765_submitted, "link": "https://www.uscis.gov/i-765", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
                 {"task": "Pay $520 USCIS filing fee", "done": False, "link": "https://pay.gov/public/home", "date_range": f"{fmt_date(opt_window_start)} — {fmt_date(opt_apply_by)}"},
@@ -425,17 +447,24 @@ def build_milestones(profile: dict) -> list:
     has_bank_account = profile.get("has_bank_account", False)
     cpt_months_used = profile.get("cpt_months_used", 0)
     has_done_cpt = cpt_months_used > 0
-    # These have no real signal until the student answers them directly (on
-    # the Complete Your Profile screen) — falling back to a year-level or
-    # elapsed-time guess here previously marked them done/locked based on
-    # assumption rather than an actual answer.
+    # These two have no real signal until the student answers them directly
+    # (on the Complete Your Profile screen) — falling back to a year-level
+    # guess here previously marked them done/locked based on assumption
+    # rather than an actual answer.
     has_opt_recommendation = profile.get("has_opt_recommendation", False)
     has_i765_submitted = profile.get("has_i765_submitted", False)
-    has_reported_to_dso = profile.get("has_reported_to_dso", False)
+
+    today = date.today()
+    program_start = profile.get("program_start_date")
+    reported_to_dso = False
+    if program_start:
+        start_date = date.fromisoformat(str(program_start)[:10])
+        days_since_start = (today - start_date).days
+        reported_to_dso = days_since_start > 10
 
     return [
-        {"id": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.", "status": "done" if has_reported_to_dso else "next"},
-        {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if has_bank_account else ("next" if has_reported_to_dso else "locked")},
+        {"id": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.", "status": "done" if reported_to_dso else "next"},
+        {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if has_bank_account else ("next" if reported_to_dso else "locked")},
         {"id": 3, "icon": "🪪", "title": "Applied for Social Security Number", "description": "Required for working in the US and building credit history.", "status": "done" if has_ssn else ("next" if has_bank_account else "locked")},
         {"id": 4, "icon": "💼", "title": "First CPT internship authorized", "description": "You gained real US work experience. This goes on your resume.", "status": "done" if has_done_cpt else ("next" if year_level >= 2 else "locked")},
         {"id": 5, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if has_opt_recommendation else ("next" if year_level >= 3 else "locked")},
@@ -644,43 +673,66 @@ async def fetch_uscis_news():
             "F1 visa student immigration SEVIS work authorization",
             "STEM OPT extension international student employment",
             "CPT curricular practical training F1 student",
+            "international student visa United States university",
+            "immigration policy student visa 2026",
         ]
         async with httpx.AsyncClient(timeout=10.0) as client:
             for query in queries:
-                response = await client.get(
-                    "https://newsapi.org/v2/everything",
-                    params={
-                        "q": query,
-                        "language": "en",
-                        "sortBy": "publishedAt",
-                        "pageSize": 3,
-                        "apiKey": NEWS_API_KEY
-                    },
-                    headers={"User-Agent": "Arriv0/1.0"}
-                )
-                if response.status_code == 200:
-                    articles = response.json().get("articles", [])
-                    for article in articles:
-                        title = article.get("title", "")
-                        if any(kw in title.lower() for kw in ["opt", "cpt", "f-1", "f1", "sevis", "uscis", "visa", "immigration", "international student", "work authorization"]):
-                            news_items.append({
-                                "title": title[:200],
-                                "link": article.get("url", ""),
-                                "summary": article.get("description", "")[:500] or article.get("content", "")[:500],
-                                "image_url": article.get("urlToImage", "") or ""
-                            })
-                else:
-                    logger.error(f"NewsAPI error: {response.status_code}")
+                try:
+                    response = await client.get(
+                        "https://newsapi.org/v2/everything",
+                        params={
+                            "q": query,
+                            "language": "en",
+                            "sortBy": "publishedAt",
+                            "pageSize": 3,
+                            "apiKey": NEWS_API_KEY
+                        },
+                        headers={"User-Agent": "Arriv0/1.0"}
+                    )
+                    if response.status_code == 200:
+                        articles = response.json().get("articles", [])
+                        for article in articles:
+                            title = article.get("title", "")
+                            description = article.get("description", "") or ""
+                            content_check = (title + " " + description).lower()
+                            if any(kw in content_check for kw in [
+                                "opt", "cpt", "f1", "f-1", "sevis", "uscis",
+                                "immigration", "international student", "visa",
+                                "student", "work authorization", "practical training",
+                                "stem", "h-1b", "green card", "deportation", "dso",
+                                "i-20", "i-765", "foreign student", "study abroad",
+                                "student visa", "work permit", "employment authorization",
+                                "trump", "ice", "border", "asylum", "refugee",
+                                "tuition", "college", "university", "campus",
+                                "scholarship", "fellowship", "graduate student",
+                                "doctorate", "phd", "masters degree", "undergraduate"
+                            ]):
+                                news_items.append({
+                                    "title": title[:200],
+                                    "link": article.get("url", ""),
+                                    "summary": description[:500] or article.get("content", "")[:500],
+                                    "image_url": article.get("urlToImage", "") or "",
+                                    "published_at": article.get("publishedAt")
+                                })
+                    else:
+                        logger.error(f"NewsAPI error: {response.status_code}")
+                except Exception as e:
+                    logger.error(f"NewsAPI query error: {e}")
+                    continue
+
         seen = set()
         unique_items = []
         for item in news_items:
             if item["title"] not in seen:
                 seen.add(item["title"])
                 unique_items.append(item)
+
         logger.info(f"Fetched {len(unique_items)} relevant news items")
-        return unique_items[:5]
+        return unique_items[:8]
+
     except httpx.TimeoutException:
-        logger.error("NewsAPI request timed out after 10 seconds")
+        logger.error("NewsAPI request timed out")
         return []
     except Exception as e:
         logger.error(f"Failed to fetch news: {e}")
@@ -923,7 +975,6 @@ class UpdateProfileRequest(BaseModel):
     has_i765_submitted: Optional[bool] = None
     citizenship_country: Optional[str] = None
     visa_expiry_date: Optional[str] = None
-    has_reported_to_dso: Optional[bool] = None
 
     @validator('name')
     def name_must_be_valid(cls, v):
@@ -966,7 +1017,7 @@ class ReferralRequest(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
-    scheduler.add_job(process_and_notify, CronTrigger(hour="*"))
+    scheduler.add_job(process_and_notify, CronTrigger(hour="*/3"))
     scheduler.add_job(send_opt_countdown_alerts, CronTrigger(hour=9, minute=0))
     scheduler.start()
     logger.info("Morning notification scheduler started — checking every minute")
