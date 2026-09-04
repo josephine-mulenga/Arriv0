@@ -332,6 +332,17 @@ export const verifyReferralCode = async (code, token) => {
   return handleResponse(response);
 };
 
+export const getInternships = async (token, { query, page } = {}) => {
+  const params = new URLSearchParams();
+  if (query) params.set('query', query);
+  if (page) params.set('page', String(page));
+  const search = params.toString();
+  const response = await fetch(`${BASE_URL}/internships${search ? `?${search}` : ''}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
 export const uploadAvatar = async (userId, imageUri) => {
   const response = await fetch(imageUri);
   const blob = await response.blob();

@@ -7,6 +7,7 @@ import {
   PathIcon,
   StarIcon,
   NewspaperIcon,
+  BriefcaseIcon,
   UserIcon,
   type Icon,
 } from 'phosphor-react-native';
@@ -83,6 +84,14 @@ export default function TabLayout() {
           title: 'News',
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={NewspaperIcon} color={color} focused={focused} />,
           tabBarLabel: ({ color }) => <TabLabel label="News" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="internships"
+        options={{
+          title: 'Internships',
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={BriefcaseIcon} color={color} focused={focused} />,
+          tabBarLabel: ({ color }) => <TabLabel label="Internships" color={color} />,
         }}
       />
       <Tabs.Screen

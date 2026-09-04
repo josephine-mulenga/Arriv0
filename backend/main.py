@@ -34,6 +34,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
+ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
@@ -1875,6 +1877,75 @@ def verify_referral_code(request: Request, code: str, authorization: Optional[st
     except Exception as e:
         logger.error(f"Referral verify error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to verify referral code.")
+
+@app.get("/internships")
+@limiter.limit("20/minute")
+async def get_internships(request: Request, authorization: Optional[str] = Header(None), query: Optional[str] = None, page: int = 1):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+
+    if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
+        raise HTTPException(status_code=503, detail="Internship search isn't set up yet — check back soon.")
+
+    profile = get_profile_from_db(user_id, correlation_id)
+    major = (profile.get("major") or "").strip()
+    search_terms = query.strip() if query and query.strip() else (f"{major} intern" if major else "internship")
+    page = max(page, 1)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"https://api.adzuna.com/v1/api/jobs/us/search/{page}",
+                params={
+                    "app_id": ADZUNA_APP_ID,
+                    "app_key": ADZUNA_APP_KEY,
+                    "results_per_page": 20,
+                    "what": search_terms,
+                    "sort_by": "date",
+                    "content-type": "application/json",
+                },
+            )
+        if response.status_code != 200:
+            logger.error(f"Adzuna error: {response.status_code} correlation_id={correlation_id}")
+            raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
+
+        data = response.json()
+        results = []
+        for job in data.get("results", []):
+            company = job.get("company") or {}
+            location = job.get("location") or {}
+            results.append({
+                "id": job.get("id"),
+                "title": job.get("title"),
+                "company": company.get("display_name"),
+                "location": location.get("display_name"),
+                "description": job.get("description"),
+                "url": job.get("redirect_url"),
+                "created": job.get("created"),
+                "salary_min": job.get("salary_min"),
+                "salary_max": job.get("salary_max"),
+            })
+
+        total = data.get("count", 0)
+        per_page = 20
+        total_pages = -(-total // per_page) if total else 1
+        return {
+            "results": results,
+            "count": total,
+            "page": page,
+            "total_pages": total_pages,
+            "has_more": page < total_pages,
+            "query": search_terms,
+            "major_matched": bool(major) and not (query and query.strip()),
+        }
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Internship search timed out. Try again shortly.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Internship search error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to search internships.")
 
 @app.get("/admin/usage")
 @limiter.limit("10/minute")
