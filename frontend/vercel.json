@@ -1,0 +1,7 @@
+{
+  "buildCommand": "npx expo export -p web",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/deadline/:id", "destination": "/deadline/[id].html" }
+  ]
+}
