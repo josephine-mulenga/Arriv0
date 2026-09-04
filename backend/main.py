@@ -1016,6 +1016,25 @@ class BookmarkRequest(BaseModel):
 class ReferralRequest(BaseModel):
     referred_email: EmailStr
 
+class FeedbackRequest(BaseModel):
+    category: str = "general"
+    message: str
+
+    @validator("category")
+    def category_must_be_known(cls, v):
+        allowed = {"feature", "improvement", "bug", "general"}
+        if v not in allowed:
+            raise ValueError(f"category must be one of {allowed}")
+        return v
+
+    @validator("message")
+    def message_must_not_be_blank(cls, v):
+        if not v.strip():
+            raise ValueError("message cannot be blank")
+        if len(v) > 2000:
+            raise ValueError("message must be 2000 characters or fewer")
+        return v.strip()
+
 @app.on_event("startup")
 async def startup_event():
     scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
@@ -1877,6 +1896,24 @@ def verify_referral_code(request: Request, code: str, authorization: Optional[st
     except Exception as e:
         logger.error(f"Referral verify error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to verify referral code.")
+
+@app.post("/feedback")
+@limiter.limit("10/minute")
+def submit_feedback(request: Request, data: FeedbackRequest, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        supabase_admin.table("feedback").insert({
+            "user_id": user_id,
+            "user_email": verified.user.email,
+            "category": data.category,
+            "message": data.message
+        }).execute()
+        return {"message": "Thanks — your feedback was sent to the team."}
+    except Exception as e:
+        logger.error(f"Feedback submit error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to submit feedback.")
 
 @app.get("/internships")
 @limiter.limit("20/minute")

@@ -73,3 +73,28 @@ ALTER TABLE users
 -- answer from Complete Your Profile.
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS has_reported_to_dso boolean DEFAULT false;
+
+-- Migration: feedback table (2026-09-04)
+-- Backs the in-app Feedback screen — students suggest features or flag
+-- improvements; the team reviews submissions directly in the Supabase table
+-- editor (service role bypasses RLS, so no admin endpoint is needed).
+CREATE TABLE IF NOT EXISTS feedback (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id),
+  user_email text,
+  category text NOT NULL DEFAULT 'general' CHECK (category IN ('feature', 'improvement', 'bug', 'general')),
+  message text NOT NULL,
+  created_at timestamp DEFAULT now()
+);
+
+ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can submit their own feedback"
+ON feedback
+FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can view their own feedback"
+ON feedback
+FOR SELECT
+USING (auth.uid() = user_id);
