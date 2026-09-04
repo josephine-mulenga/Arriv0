@@ -13,6 +13,8 @@ import {
   GiftIcon,
   CameraIcon,
   ImageIcon,
+  EnvelopeSimpleIcon,
+  ChatCenteredDotsIcon,
 } from 'phosphor-react-native';
 
 import { getUserProfile, uploadAvatar, updateProfile } from '@/api';
@@ -147,6 +149,12 @@ export default function ProfileScreen() {
             onPress={() => router.push('/(tabs)/timeline')}
             isLast
           />
+        </View>
+
+        <Text style={styles.groupLabel}>Support</Text>
+        <View style={styles.group}>
+          <ActionRow icon={ChatCenteredDotsIcon} label="Feedback" onPress={() => router.push('/feedback')} />
+          <ActionRow icon={EnvelopeSimpleIcon} label="Contact Us" onPress={() => router.push('/contact-us')} isLast />
         </View>
       </ScrollView>
 

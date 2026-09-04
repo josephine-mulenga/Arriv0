@@ -343,6 +343,18 @@ export const getInternships = async (token, { query, page } = {}) => {
   return handleResponse(response);
 };
 
+export const submitFeedback = async (category, message, token) => {
+  const response = await fetch(`${BASE_URL}/feedback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ category, message })
+  });
+  return handleResponse(response);
+};
+
 export const uploadAvatar = async (userId, imageUri) => {
   const response = await fetch(imageUri);
   const blob = await response.blob();
