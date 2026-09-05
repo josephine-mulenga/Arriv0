@@ -38,16 +38,16 @@ export default function MilestonesScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Milestones</Text>
-        {data && (
-          <Text style={styles.subtitle}>
-            {data.completed} of {data.total} complete since you landed
-          </Text>
-        )}
-      </View>
-
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Milestones</Text>
+          {data && (
+            <Text style={styles.subtitle}>
+              {data.completed} of {data.total} complete since you landed
+            </Text>
+          )}
+        </View>
+
         <Pressable style={styles.promptCard} onPress={() => router.push('/complete-profile')}>
           <ClipboardTextIcon size={20} color={Palette.purple} />
           <View style={{ flex: 1 }}>
@@ -122,7 +122,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 62,
-    paddingHorizontal: Spacing.screenPadding,
     paddingBottom: 16,
   },
   title: {

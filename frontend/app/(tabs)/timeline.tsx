@@ -104,29 +104,29 @@ export default function TimelineScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Your Timeline</Text>
-        <Pressable style={styles.searchButton} onPress={() => router.push('/search')}>
-          <MagnifyingGlassIcon size={18} color={Palette.inkBody} />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipScroll}
-        contentContainerStyle={styles.chipRow}>
-        {[1, 2, 3, 4].map((year) => (
-          <Chip
-            key={year}
-            label={`Year ${year}`}
-            selected={selectedYear === year}
-            onPress={() => setSelectedYear(year)}
-          />
-        ))}
-      </ScrollView>
-
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Your Timeline</Text>
+          <Pressable style={styles.searchButton} onPress={() => router.push('/search')}>
+            <MagnifyingGlassIcon size={18} color={Palette.inkBody} />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScroll}
+          contentContainerStyle={styles.chipRow}>
+          {[1, 2, 3, 4].map((year) => (
+            <Chip
+              key={year}
+              label={`Year ${year}`}
+              selected={selectedYear === year}
+              onPress={() => setSelectedYear(year)}
+            />
+          ))}
+        </ScrollView>
+
         {offline && (
           <View style={styles.offlineBanner}>
             <CloudSlashIcon size={22} color={Palette.amber} />
@@ -260,7 +260,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 62,
-    paddingHorizontal: Spacing.screenPadding,
   },
   title: {
     fontFamily: Type.headingBold,

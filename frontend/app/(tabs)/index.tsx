@@ -74,23 +74,23 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>
-            {greeting()}{profile?.name ? `, ${profile.name.split(' ')[0]}` : ''} 👋
-          </Text>
-          <Text style={styles.subtitle}>Here&apos;s your journey for today.</Text>
-        </View>
-        <Pressable style={styles.iconButton} onPress={() => setMenuOpen(true)}>
-          <ListIcon size={19} color={Palette.inkBody} />
-        </Pressable>
-        <Pressable style={[styles.iconButton, { marginLeft: 8 }]} onPress={() => router.push('/notification-settings')}>
-          <BellIcon size={19} color={Palette.inkBody} weight="fill" />
-          <View style={styles.notifDot} />
-        </Pressable>
-      </View>
-
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.greeting}>
+              {greeting()}{profile?.name ? `, ${profile.name.split(' ')[0]}` : ''} 👋
+            </Text>
+            <Text style={styles.subtitle}>Here&apos;s your journey for today.</Text>
+          </View>
+          <Pressable style={styles.iconButton} onPress={() => setMenuOpen(true)}>
+            <ListIcon size={19} color={Palette.inkBody} />
+          </Pressable>
+          <Pressable style={[styles.iconButton, { marginLeft: 8 }]} onPress={() => router.push('/notification-settings')}>
+            <BellIcon size={19} color={Palette.inkBody} weight="fill" />
+            <View style={styles.notifDot} />
+          </Pressable>
+        </View>
+
         <Animated.View entering={FadeInUp.duration(400)}>
           <Pressable style={styles.aiCard} onPress={() => router.push('/chat')}>
             <View style={styles.aiCardHeader}>
@@ -183,7 +183,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingTop: 62,
-    paddingHorizontal: Spacing.screenPadding,
     paddingBottom: 16,
   },
   greeting: {

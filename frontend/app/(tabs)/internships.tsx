@@ -88,24 +88,24 @@ export default function InternshipsScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Internships</Text>
-      </View>
-
-      <View style={styles.searchBar}>
-        <MagnifyingGlassIcon size={17} color={Palette.inkFaint} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search internships"
-          placeholderTextColor={Palette.inkPlaceholder}
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-        />
-      </View>
-
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Internships</Text>
+        </View>
+
+        <View style={styles.searchBar}>
+          <MagnifyingGlassIcon size={17} color={Palette.inkFaint} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search internships"
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={query}
+            onChangeText={setQuery}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+          />
+        </View>
+
         {majorMatched && items && items.length > 0 && (
           <View style={styles.matchBanner}>
             <Text style={styles.matchBannerText}>Matched to your major</Text>
@@ -201,7 +201,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 62,
-    paddingHorizontal: Spacing.screenPadding,
   },
   title: {
     fontFamily: Type.headingBold,
@@ -212,8 +211,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginHorizontal: Spacing.screenPadding,
     marginTop: 14,
+    marginBottom: 16,
     backgroundColor: Palette.dividerLight,
     borderRadius: 13,
     paddingHorizontal: 14,
@@ -227,7 +226,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.screenPadding,
-    paddingTop: 16,
     paddingBottom: 108,
   },
   matchBanner: {
