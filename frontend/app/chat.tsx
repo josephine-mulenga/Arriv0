@@ -272,11 +272,15 @@ const styles = StyleSheet.create({
   bubble: {
     padding: 13,
     marginBottom: 8,
-    maxWidth: '84%',
+    // A fixed cap rather than a percentage — on a phone-width container this
+    // never actually binds (the container itself is narrower), but it stops
+    // bubbles from stretching absurdly wide once the desktop shell gives
+    // this screen a wider column (see WebShell's WIDE_CONTENT_PATHNAMES).
+    maxWidth: 480,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    maxWidth: '78%',
+    maxWidth: 420,
     borderRadius: 16,
     borderBottomRightRadius: 4,
   },
