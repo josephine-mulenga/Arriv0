@@ -10,6 +10,7 @@ import {
   DESKTOP_CONTENT_MAX_WIDTH,
   TAB_PATHNAMES,
   AUTH_PATHNAMES,
+  WIDE_CONTENT_ROUTES,
 } from '@/constants/layout';
 import { WebSidebar } from '@/components/web-sidebar';
 import { WebAuthPanel } from '@/components/web-auth-panel';
@@ -42,7 +43,14 @@ export function WebShell({ children }: { children: ReactNode }) {
   const isDesktop = !isNarrow && width > DESKTOP_BREAKPOINT;
   const showSidebar = isDesktop && TAB_PATHNAMES.includes(pathname);
   const showAuthPanel = isDesktop && !showSidebar && AUTH_PATHNAMES.includes(pathname);
-  const contentMaxWidth = isNarrow ? undefined : showSidebar ? DESKTOP_CONTENT_MAX_WIDTH : WEB_NARROW_MAX_WIDTH;
+  const wideContentRoute = isDesktop && WIDE_CONTENT_ROUTES.find((r) => r.pathname === pathname);
+  const contentMaxWidth = isNarrow
+    ? undefined
+    : showSidebar
+      ? DESKTOP_CONTENT_MAX_WIDTH
+      : wideContentRoute
+        ? wideContentRoute.maxWidth
+        : WEB_NARROW_MAX_WIDTH;
 
   return (
     <View style={styles.root}>
