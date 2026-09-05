@@ -7,6 +7,7 @@ import {
   NewspaperIcon,
   BriefcaseIcon,
   UserIcon,
+  AirplaneLandingIcon,
   type Icon,
 } from 'phosphor-react-native';
 
@@ -29,7 +30,12 @@ export function WebSidebar() {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.logo}>Arriv0</Text>
+      <View style={styles.logoRow}>
+        <View style={styles.logoMark}>
+          <AirplaneLandingIcon size={17} color={Palette.white} weight="fill" />
+        </View>
+        <Text style={styles.logo}>Arriv0</Text>
+      </View>
       <View style={styles.nav}>
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.pathname;
@@ -58,12 +64,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: Palette.white,
   },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 28,
+    paddingHorizontal: 12,
+  },
+  logoMark: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: Palette.purple,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   logo: {
     fontFamily: Type.headingBold,
     fontSize: 20,
     color: Palette.purple,
-    marginBottom: 28,
-    paddingHorizontal: 12,
   },
   nav: {
     gap: 2,

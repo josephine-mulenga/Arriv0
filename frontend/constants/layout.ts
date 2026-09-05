@@ -8,3 +8,15 @@ export const DESKTOP_CONTENT_MAX_WIDTH = 1040;
 // current route gets the desktop sidebar shell or stays in the narrow
 // single-column layout used by pushed detail screens (documents, chat, etc).
 export const TAB_PATHNAMES = ['/', '/timeline', '/milestones', '/news', '/internships', '/profile'];
+
+// Pre-login/onboarding flow — gets a branding panel beside the form on
+// desktop instead of empty backdrop.
+export const AUTH_PATHNAMES = [
+  '/welcome',
+  '/intro',
+  '/signup',
+  '/login',
+  '/personalize-profile',
+  '/notification-permission',
+  '/reset-password',
+];

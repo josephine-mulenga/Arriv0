@@ -9,22 +9,27 @@ import {
   DESKTOP_SIDEBAR_WIDTH,
   DESKTOP_CONTENT_MAX_WIDTH,
   TAB_PATHNAMES,
+  AUTH_PATHNAMES,
 } from '@/constants/layout';
 import { WebSidebar } from '@/components/web-sidebar';
+import { WebAuthPanel } from '@/components/web-auth-panel';
 
 // On native this is a total no-op passthrough — zero visual change to the
 // phone apps. On web, this renders ONE stable tree shape at all times (only
-// style values and the sidebar's presence toggle) so that resizing the
-// window or navigating between routes never unmounts/remounts the Stack
-// navigator underneath — that would reset navigation history and app state.
+// style values and which optional slot is populated ever change) so that
+// resizing the window or navigating between routes never unmounts/remounts
+// the Stack navigator underneath — that would reset navigation history and
+// app state.
 //
-// Modes, by width:
+// Modes, by width and route:
 //  - narrow (phone-width browser): full-bleed, identical to native — no shell.
 //  - medium/desktop on a pushed detail screen (documents, chat, etc): the
 //    original centered phone-width column with a hairline border.
 //  - desktop on one of the 6 tab screens: persistent left sidebar nav
 //    (replacing the bottom tab bar — see (tabs)/_layout.tsx) + a wider
-//    centered content column, so it reads as an actual web app shell.
+//    centered content column.
+//  - desktop on the auth/onboarding flow: a branding panel fills the space
+//    beside the form instead of empty backdrop.
 export function WebShell({ children }: { children: ReactNode }) {
   const { width } = useWindowDimensions();
   const pathname = usePathname();
@@ -34,13 +39,18 @@ export function WebShell({ children }: { children: ReactNode }) {
   }
 
   const isNarrow = width <= WEB_NARROW_MAX_WIDTH;
-  const showSidebar = !isNarrow && width > DESKTOP_BREAKPOINT && TAB_PATHNAMES.includes(pathname);
+  const isDesktop = !isNarrow && width > DESKTOP_BREAKPOINT;
+  const showSidebar = isDesktop && TAB_PATHNAMES.includes(pathname);
+  const showAuthPanel = isDesktop && !showSidebar && AUTH_PATHNAMES.includes(pathname);
   const contentMaxWidth = isNarrow ? undefined : showSidebar ? DESKTOP_CONTENT_MAX_WIDTH : WEB_NARROW_MAX_WIDTH;
 
   return (
     <View style={styles.root}>
       <View style={[styles.sidebarSlot, { width: showSidebar ? DESKTOP_SIDEBAR_WIDTH : 0 }]}>
         {showSidebar && <WebSidebar />}
+      </View>
+      <View style={[styles.authPanelSlot, { flex: showAuthPanel ? 1 : 0 }]}>
+        {showAuthPanel && <WebAuthPanel />}
       </View>
       <View style={[styles.contentOuter, isNarrow && styles.contentOuterNarrow]}>
         <View
@@ -63,6 +73,9 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.white,
   },
   sidebarSlot: {
+    overflow: 'hidden',
+  },
+  authPanelSlot: {
     overflow: 'hidden',
   },
   contentOuter: {

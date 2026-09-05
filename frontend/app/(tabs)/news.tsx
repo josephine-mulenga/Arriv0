@@ -155,21 +155,21 @@ export default function NewsScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Immigration News</Text>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipScroll}
-        contentContainerStyle={styles.chipRow}>
-        {TABS.map((tab) => (
-          <Chip key={tab} label={tab} selected={selectedTab === tab} onPress={() => setSelectedTab(tab)} />
-        ))}
-      </ScrollView>
-
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Immigration News</Text>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScroll}
+          contentContainerStyle={styles.chipRow}>
+          {TABS.map((tab) => (
+            <Chip key={tab} label={tab} selected={selectedTab === tab} onPress={() => setSelectedTab(tab)} />
+          ))}
+        </ScrollView>
+
         {selectedTab !== 'Saved' && !newsItems && <Text style={styles.emptyText}>Loading news...</Text>}
 
         {displayedNews.length === 0 && (newsItems || selectedTab === 'Saved') && (
@@ -245,7 +245,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 62,
-    paddingHorizontal: Spacing.screenPadding,
   },
   title: {
     fontFamily: Type.headingBold,
