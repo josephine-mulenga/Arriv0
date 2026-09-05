@@ -58,7 +58,7 @@ export function WebShell({ children }: { children: ReactNode }) {
         {showSidebar && <WebSidebar />}
       </View>
       <View style={[styles.authPanelSlot, { flex: showAuthPanel ? 1 : 0 }]}>
-        {showAuthPanel && <WebAuthPanel />}
+        {showAuthPanel && <WebAuthPanel showBranding={pathname !== '/welcome' && pathname !== '/intro'} />}
       </View>
       <View style={[styles.contentOuter, isNarrow && styles.contentOuterNarrow]}>
         <View
