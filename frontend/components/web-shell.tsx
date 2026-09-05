@@ -1,41 +1,84 @@
 import type { ReactNode } from 'react';
 import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { usePathname } from 'expo-router';
 
 import { Palette } from '@/constants/theme';
-
-const MAX_CONTENT_WIDTH = 520;
+import {
+  WEB_NARROW_MAX_WIDTH,
+  DESKTOP_BREAKPOINT,
+  DESKTOP_SIDEBAR_WIDTH,
+  DESKTOP_CONTENT_MAX_WIDTH,
+  TAB_PATHNAMES,
+} from '@/constants/layout';
+import { WebSidebar } from '@/components/web-sidebar';
 
 // On native this is a total no-op passthrough — zero visual change to the
-// phone apps. On web, once the browser is wider than a phone, the app was
-// stretching edge-to-edge (every screen's spacing/type scale is tuned for a
-// phone viewport), so this centers everything into a phone-width column with
-// a hairline border — same "no shadows, hairline borders" language the rest
-// of the design system already uses — instead of a fake desktop redesign.
+// phone apps. On web, this renders ONE stable tree shape at all times (only
+// style values and the sidebar's presence toggle) so that resizing the
+// window or navigating between routes never unmounts/remounts the Stack
+// navigator underneath — that would reset navigation history and app state.
+//
+// Modes, by width:
+//  - narrow (phone-width browser): full-bleed, identical to native — no shell.
+//  - medium/desktop on a pushed detail screen (documents, chat, etc): the
+//    original centered phone-width column with a hairline border.
+//  - desktop on one of the 6 tab screens: persistent left sidebar nav
+//    (replacing the bottom tab bar — see (tabs)/_layout.tsx) + a wider
+//    centered content column, so it reads as an actual web app shell.
 export function WebShell({ children }: { children: ReactNode }) {
   const { width } = useWindowDimensions();
+  const pathname = usePathname();
 
-  if (Platform.OS !== 'web' || width <= MAX_CONTENT_WIDTH) {
+  if (Platform.OS !== 'web') {
     return <>{children}</>;
   }
 
+  const isNarrow = width <= WEB_NARROW_MAX_WIDTH;
+  const showSidebar = !isNarrow && width > DESKTOP_BREAKPOINT && TAB_PATHNAMES.includes(pathname);
+  const contentMaxWidth = isNarrow ? undefined : showSidebar ? DESKTOP_CONTENT_MAX_WIDTH : WEB_NARROW_MAX_WIDTH;
+
   return (
-    <View style={styles.backdrop}>
-      <View style={styles.column}>{children}</View>
+    <View style={styles.root}>
+      <View style={[styles.sidebarSlot, { width: showSidebar ? DESKTOP_SIDEBAR_WIDTH : 0 }]}>
+        {showSidebar && <WebSidebar />}
+      </View>
+      <View style={[styles.contentOuter, isNarrow && styles.contentOuterNarrow]}>
+        <View
+          style={[
+            styles.contentInner,
+            contentMaxWidth ? { maxWidth: contentMaxWidth } : null,
+            !isNarrow && !showSidebar && styles.contentInnerBordered,
+          ]}>
+          {children}
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  root: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: Palette.white,
+  },
+  sidebarSlot: {
+    overflow: 'hidden',
+  },
+  contentOuter: {
     flex: 1,
     alignItems: 'center',
     backgroundColor: Palette.dividerLight,
   },
-  column: {
+  contentOuterNarrow: {
+    backgroundColor: Palette.white,
+  },
+  contentInner: {
     flex: 1,
     width: '100%',
-    maxWidth: MAX_CONTENT_WIDTH,
     backgroundColor: Palette.white,
+  },
+  contentInnerBordered: {
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderColor: Palette.border,
