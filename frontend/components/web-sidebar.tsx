@@ -7,10 +7,10 @@ import {
   NewspaperIcon,
   BriefcaseIcon,
   UserIcon,
-  AirplaneLandingIcon,
   type Icon,
 } from 'phosphor-react-native';
 
+import { ArrivoLogo } from '@/components/arrivo-logo';
 import { Palette, Type } from '@/constants/theme';
 import { DESKTOP_SIDEBAR_WIDTH } from '@/constants/layout';
 
@@ -31,9 +31,7 @@ export function WebSidebar() {
   return (
     <View style={styles.root}>
       <View style={styles.logoRow}>
-        <View style={styles.logoMark}>
-          <AirplaneLandingIcon size={17} color={Palette.white} weight="fill" />
-        </View>
+        <ArrivoLogo size={28} />
         <Text style={styles.logo}>Arriv0</Text>
       </View>
       <View style={styles.nav}>
@@ -70,14 +68,6 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 28,
     paddingHorizontal: 12,
-  },
-  logoMark: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: Palette.purple,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   logo: {
     fontFamily: Type.headingBold,
