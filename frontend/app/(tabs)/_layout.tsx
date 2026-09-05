@@ -1,6 +1,6 @@
 import { Tabs, Redirect } from 'expo-router';
 import { useEffect } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import {
   HouseIcon,
@@ -14,6 +14,7 @@ import {
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Palette, Type } from '@/constants/theme';
+import { DESKTOP_BREAKPOINT } from '@/constants/layout';
 import { useAuth } from '@/AuthContext';
 import { registerForPushNotifications } from '@/utils/registerPushNotifications';
 
@@ -27,6 +28,8 @@ function TabLabel({ label, color }: { label: string; color: string }) {
 
 export default function TabLayout() {
   const { user, token, initializing } = useAuth();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === 'web' && width > DESKTOP_BREAKPOINT;
 
   useEffect(() => {
     if (user) {
@@ -49,7 +52,10 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
         tabBarActiveTintColor: Palette.purple,
         tabBarInactiveTintColor: Palette.inkDisabled,
-        tabBarStyle: styles.tabBar,
+        // On desktop web, WebSidebar (rendered by WebShell, above this
+        // navigator) replaces the bottom tab bar — hide it here so the two
+        // navigation UIs never show up stacked on top of each other.
+        tabBarStyle: isDesktopWeb ? styles.tabBarHidden : styles.tabBar,
         tabBarBackground: () => (
           <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
         ),
@@ -114,6 +120,9 @@ const styles = StyleSheet.create({
     paddingTop: 9,
     paddingBottom: 22,
     height: 78,
+  },
+  tabBarHidden: {
+    display: 'none',
   },
   tabLabel: {
     fontFamily: Type.headingSemiBold,
