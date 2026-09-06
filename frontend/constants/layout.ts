@@ -3,6 +3,7 @@ export const WEB_NARROW_MAX_WIDTH = 520;
 export const DESKTOP_BREAKPOINT = 900;
 export const DESKTOP_SIDEBAR_WIDTH = 232;
 export const DESKTOP_CONTENT_MAX_WIDTH = 1040;
+export const AUTH_CARD_MAX_WIDTH = 480;
 
 // Pushed (non-sidebar, non-auth) screens default to the narrow
 // WEB_NARROW_MAX_WIDTH column on desktop. A screen that's a real,
@@ -24,10 +25,10 @@ export const TAB_PATHNAMES = ['/', '/timeline', '/milestones', '/news', '/intern
 // open Documents or Chat from it.
 export const SIDEBAR_PATHNAMES = [...TAB_PATHNAMES, '/documents', '/dso-directory', '/chat'];
 
-// Pre-login/onboarding flow — gets a branding panel beside the form on
-// desktop instead of empty backdrop. /welcome is deliberately excluded: on
-// web it renders its own full-bleed marketing landing page (WebLandingPage)
-// that manages its own width, not a narrow form column.
+// Pre-login/onboarding flow — gets the single floating card treatment (see
+// WebShell) on desktop/tablet instead of empty backdrop. /welcome is
+// deliberately excluded: on web it renders its own full-bleed marketing
+// landing page (WebLandingPage) that manages its own width.
 export const AUTH_PATHNAMES = [
   '/intro',
   '/signup',
