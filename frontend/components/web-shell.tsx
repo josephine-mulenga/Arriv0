@@ -8,9 +8,10 @@ import {
   DESKTOP_BREAKPOINT,
   DESKTOP_SIDEBAR_WIDTH,
   DESKTOP_CONTENT_MAX_WIDTH,
-  TAB_PATHNAMES,
+  SIDEBAR_PATHNAMES,
   AUTH_PATHNAMES,
   WIDE_CONTENT_ROUTES,
+  FULL_BLEED_PATHNAMES,
 } from '@/constants/layout';
 import { WebSidebar } from '@/components/web-sidebar';
 import { WebAuthPanel } from '@/components/web-auth-panel';
@@ -24,11 +25,14 @@ import { WebAuthPanel } from '@/components/web-auth-panel';
 //
 // Modes, by width and route:
 //  - narrow (phone-width browser): full-bleed, identical to native — no shell.
-//  - medium/desktop on a pushed detail screen (documents, chat, etc): the
-//    original centered phone-width column with a hairline border.
-//  - desktop on one of the 6 tab screens: persistent left sidebar nav
-//    (replacing the bottom tab bar — see (tabs)/_layout.tsx) + a wider
-//    centered content column.
+//  - /welcome on web: full-bleed too — it renders its own marketing landing
+//    page (WebLandingPage), not the phone welcome screen.
+//  - medium/desktop on a lightweight pushed screen (settings, feedback,
+//    contact-us, etc): the centered phone-width column with a hairline
+//    border.
+//  - desktop on a SIDEBAR_PATHNAMES route (the 6 tabs, Documents, DSO
+//    Directory, Chat): persistent left sidebar nav (replacing the bottom
+//    tab bar — see (tabs)/_layout.tsx) + a wider centered content column.
 //  - desktop on the auth/onboarding flow: a branding panel fills the space
 //    beside the form instead of empty backdrop.
 export function WebShell({ children }: { children: ReactNode }) {
@@ -40,11 +44,13 @@ export function WebShell({ children }: { children: ReactNode }) {
   }
 
   const isNarrow = width <= WEB_NARROW_MAX_WIDTH;
+  const isFullBleed = FULL_BLEED_PATHNAMES.includes(pathname);
+  const isChromeless = isNarrow || isFullBleed;
   const isDesktop = !isNarrow && width > DESKTOP_BREAKPOINT;
-  const showSidebar = isDesktop && TAB_PATHNAMES.includes(pathname);
+  const showSidebar = isDesktop && SIDEBAR_PATHNAMES.includes(pathname);
   const showAuthPanel = isDesktop && !showSidebar && AUTH_PATHNAMES.includes(pathname);
   const wideContentRoute = isDesktop && WIDE_CONTENT_ROUTES.find((r) => r.pathname === pathname);
-  const contentMaxWidth = isNarrow
+  const contentMaxWidth = isChromeless
     ? undefined
     : showSidebar
       ? DESKTOP_CONTENT_MAX_WIDTH
@@ -58,14 +64,14 @@ export function WebShell({ children }: { children: ReactNode }) {
         {showSidebar && <WebSidebar />}
       </View>
       <View style={[styles.authPanelSlot, { flex: showAuthPanel ? 1 : 0 }]}>
-        {showAuthPanel && <WebAuthPanel showBranding={pathname !== '/welcome' && pathname !== '/intro'} />}
+        {showAuthPanel && <WebAuthPanel showBranding={pathname !== '/intro'} />}
       </View>
-      <View style={[styles.contentOuter, isNarrow && styles.contentOuterNarrow]}>
+      <View style={[styles.contentOuter, isChromeless && styles.contentOuterNarrow]}>
         <View
           style={[
             styles.contentInner,
             contentMaxWidth ? { maxWidth: contentMaxWidth } : null,
-            !isNarrow && !showSidebar && styles.contentInnerBordered,
+            !isChromeless && !showSidebar && styles.contentInnerBordered,
           ]}>
           {children}
         </View>
