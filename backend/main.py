@@ -550,7 +550,7 @@ def get_profile_from_db(user_id: str, correlation_id: str = None) -> dict:
         raise
     except Exception as e:
         logger.error(f"Profile fetch error: {type(e).__name__} correlation_id={correlation_id}")
-        raise HTTPException(status_code=400, detail="Failed to fetch profile.")
+        raise HTTPException(status_code=400, detail=f"TEMP-DIAG: {type(e).__name__}: {str(e)}")
 
 async def generate_morning_message(student: dict) -> str:
     today = date.today()
@@ -1305,7 +1305,7 @@ def get_documents(request: Request, authorization: Optional[str] = Header(None))
         }
     except Exception as e:
         logger.error(f"Documents fetch error: {type(e).__name__} correlation_id={correlation_id}")
-        raise HTTPException(status_code=400, detail="Failed to fetch documents.")
+        raise HTTPException(status_code=400, detail=f"TEMP-DIAG: {type(e).__name__}: {str(e)}")
 
 @app.patch("/documents/{document_id}")
 @limiter.limit("30/minute")
