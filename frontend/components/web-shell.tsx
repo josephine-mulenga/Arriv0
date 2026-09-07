@@ -15,6 +15,7 @@ import {
   FULL_BLEED_PATHNAMES,
 } from '@/constants/layout';
 import { WebSidebar } from '@/components/web-sidebar';
+import { WebCardBackdrop } from '@/components/web-card-backdrop';
 
 // On native this is a total no-op passthrough — zero visual change to the
 // phone apps. On web, this renders ONE stable tree shape at all times (only
@@ -65,6 +66,7 @@ export function WebShell({ children }: { children: ReactNode }) {
         {showSidebar && <WebSidebar />}
       </View>
       <View style={[styles.contentOuter, isChromeless && styles.contentOuterNarrow, isCard && styles.contentOuterCard]}>
+        <View style={StyleSheet.absoluteFill}>{isCard && <WebCardBackdrop />}</View>
         <View
           style={[
             styles.contentInner,
@@ -97,7 +99,7 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.white,
   },
   contentOuterCard: {
-    paddingVertical: 40,
+    paddingVertical: 32,
   },
   contentInner: {
     flex: 1,
