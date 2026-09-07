@@ -68,7 +68,6 @@ export function WebShell({ children }: { children: ReactNode }) {
         <View
           style={[
             styles.contentInner,
-            !isCard && styles.contentInnerStretch,
             contentMaxWidth ? { maxWidth: contentMaxWidth } : null,
             !isChromeless && !showSidebar && !isCard && styles.contentInnerBordered,
             isCard && styles.contentInnerCard,
@@ -98,15 +97,12 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.white,
   },
   contentOuterCard: {
-    justifyContent: 'center',
     paddingVertical: 40,
   },
   contentInner: {
+    flex: 1,
     width: '100%',
     backgroundColor: Palette.white,
-  },
-  contentInnerStretch: {
-    flex: 1,
   },
   contentInnerBordered: {
     borderLeftWidth: 1,
@@ -114,7 +110,6 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
   },
   contentInnerCard: {
-    maxHeight: '100%',
     borderRadius: 24,
     borderWidth: 1,
     borderColor: Palette.border,
