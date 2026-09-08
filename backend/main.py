@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
+from supabase import ClientOptions
 from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -38,7 +39,15 @@ ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
+
+supabase_admin: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_SECRET,
+    options=ClientOptions(
+        auto_refresh_token=False,
+        persist_session=False,
+    )
+)
 openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
