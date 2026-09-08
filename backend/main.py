@@ -1053,14 +1053,17 @@ async def shutdown_event():
 @app.get("/")
 def home():
     return {"message": "Arriv0 backend is running"}
-
 @app.get("/health")
 def health_check():
+    db_status = "unhealthy"
+    db_error = None
     try:
-        supabase_admin.table("users").select("id").limit(1).execute()
-        db_status = "healthy"
-    except Exception:
-        db_status = "unhealthy"
+        result = supabase_admin.table("users").select("id").limit(1).execute()
+        if result.data is not None:
+            db_status = "healthy"
+    except Exception as e:
+        db_error = str(e)
+        logger.error(f"Health check DB error: {type(e).__name__}: {e}")
 
     try:
         openai_client.models.list()
@@ -1078,7 +1081,8 @@ def health_check():
             "database": db_status,
             "ai": ai_status,
             "scheduler": "healthy" if scheduler.running else "unhealthy"
-        }
+        },
+        "db_error": db_error
     }
 
 @app.post("/signup")
