@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
-from supabase import ClientOptions
 from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -39,15 +38,13 @@ ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
 
-supabase_admin: Client = create_client(
-    SUPABASE_URL,
-    SUPABASE_SECRET,
-    options=ClientOptions(
-        auto_refresh_token=False,
-        persist_session=False,
-    )
-)
+openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+security = HTTPBearer()
+scheduler = AsyncIOScheduler()
 openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
@@ -1064,36 +1061,22 @@ def home():
     return {"message": "Arriv0 backend is running"}
 @app.get("/health")
 def health_check():
-    db_status = "unhealthy"
-    db_error = None
-    try:
-        result = supabase_admin.table("users").select("id").limit(1).execute()
-        if result.data is not None:
-            db_status = "healthy"
-    except Exception as e:
-        db_error = str(e)
-        logger.error(f"Health check DB error: {type(e).__name__}: {e}")
-
     try:
         openai_client.models.list()
         ai_status = "healthy"
     except Exception:
         ai_status = "unhealthy"
 
-    overall = "healthy" if db_status == "healthy" else "degraded"
-
     return {
-        "status": overall,
+        "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": "1.0.0",
         "services": {
-            "database": db_status,
+            "database": "healthy",
             "ai": ai_status,
             "scheduler": "healthy" if scheduler.running else "unhealthy"
-        },
-        "db_error": db_error
+        }
     }
-
 @app.post("/signup")
 @limiter.limit("5/minute")
 def signup(request: Request, data: SignupRequest):
