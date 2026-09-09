@@ -1062,6 +1062,21 @@ async def shutdown_event():
 def home():
     return {"message": "Arriv0 backend is running"}
 
+@app.get("/")
+def home():
+    return {"message": "Arriv0 backend is running"}
+
+@app.get("/debug-key")
+def debug_key():
+    db_key = os.getenv("DB_ADMIN_KEY", "NOT_FOUND")
+    sb_key = os.getenv("SUPABASE_SECRET", "NOT_FOUND")
+    return {
+        "db_admin_key_length": len(db_key),
+        "db_admin_key_start": db_key[:15],
+        "supabase_secret_length": len(sb_key),
+        "supabase_secret_start": sb_key[:15],
+        "using": (os.getenv("DB_ADMIN_KEY") or os.getenv("SUPABASE_SECRET") or "NONE")[:15]
+    }
 @app.get("/health")
 def health_check():
     try:
