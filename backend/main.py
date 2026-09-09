@@ -1077,6 +1077,22 @@ def health_check():
             "scheduler": "healthy" if scheduler.running else "unhealthy"
         }
     }
+
+@app.get("/debug-role")
+def debug_role():
+    try:
+        import base64
+        import json
+        parts = SUPABASE_SECRET.split(".")
+        payload = parts[1]
+        padding = 4 - len(payload) % 4
+        if padding != 4:
+            payload += "=" * padding
+        decoded = json.loads(base64.b64decode(payload).decode("utf-8"))
+        return {"role": decoded.get("role"), "ref": decoded.get("ref")}
+    except Exception as e:
+        return {"error": str(e)}
+    
 @app.post("/signup")
 @limiter.limit("5/minute")
 def signup(request: Request, data: SignupRequest):

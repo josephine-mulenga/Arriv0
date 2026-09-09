@@ -1,15 +1,19 @@
 ﻿import requests
 
-r = requests.post("http://127.0.0.1:8000/login", json={
+r = requests.post("https://arriv0-production.up.railway.app/login", json={
     "email": "prince@arriv0test.com",
     "password": "Test1234!"
 })
 token = r.json().get("access_token")
-user_id = r.json().get("user_id")
-print("User ID:", user_id)
 
-r2 = requests.get(f"http://127.0.0.1:8000/user/{user_id}",
+r2 = requests.get("https://arriv0-production.up.railway.app/news",
     headers={"authorization": "Bearer " + token}
 )
-print("Status:", r2.status_code)
-print("Response:", r2.text)
+print("News status:", r2.status_code)
+print(r2.json().get("total"))
+
+r3 = requests.get("https://arriv0-production.up.railway.app/documents",
+    headers={"authorization": "Bearer " + token}
+)
+print("Documents status:", r3.status_code)
+print(r3.text[:200])
