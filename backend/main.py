@@ -29,10 +29,7 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_SECRET = os.getenv("SUPABASE_SERVICE_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-NEWS_API_KEY = os.getenv("NEWS_API_KEY")
-EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+SUPABASE_SECRET = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SECRET")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
