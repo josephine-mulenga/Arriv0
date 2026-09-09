@@ -15,7 +15,6 @@ import { PostHogProvider } from 'posthog-react-native';
 import { AuthProvider } from '@/AuthContext';
 import { PreferencesProvider } from '@/PreferencesContext';
 import { WebShell } from '@/components/web-shell';
-import { WebChatBubble } from '@/components/web-chat-bubble';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -51,7 +50,6 @@ export default function RootLayout() {
                   <Stack.Screen name="modal" options={{ headerShown: true, presentation: 'modal', title: 'Modal' }} />
                 </Stack>
               </WebShell>
-              <WebChatBubble />
               <StatusBar style="dark" />
             </ThemeProvider>
           </PreferencesProvider>

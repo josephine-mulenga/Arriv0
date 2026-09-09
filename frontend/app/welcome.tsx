@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated, {
   BounceIn,
@@ -14,7 +14,6 @@ import Animated, {
 
 import { ArrivoLogo } from '@/components/arrivo-logo';
 import { PrimaryButton } from '@/components/ui/primary-button';
-import { WebLandingPage } from '@/components/web-landing-page';
 import { Palette, Type } from '@/constants/theme';
 
 export default function WelcomeScreen() {
@@ -34,12 +33,6 @@ export default function WelcomeScreen() {
   const floatStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: float.value }],
   }));
-
-  // Web gets a full marketing homepage (separate from the app) instead of
-  // this simple mobile welcome screen — native is completely untouched.
-  if (Platform.OS === 'web') {
-    return <WebLandingPage />;
-  }
 
   return (
     <View style={styles.root}>
