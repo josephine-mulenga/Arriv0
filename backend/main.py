@@ -532,10 +532,18 @@ def verify_token(authorization: Optional[str] = None, correlation_id: str = None
 
 def get_profile_from_db(user_id: str, correlation_id: str = None) -> dict:
     try:
-        response = supabase_admin.table("users").select("*").eq("id", user_id).execute()
-        if not response.data:
+        response = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/users",
+            params={"id": f"eq.{user_id}", "select": "*"},
+            headers={
+                "apikey": SUPABASE_SECRET,
+                "Authorization": f"Bearer {SUPABASE_SECRET}",
+                "Content-Type": "application/json"
+            }
+        )
+        if not response.json():
             raise HTTPException(status_code=404, detail="User profile not found.")
-        profile = response.data[0]
+        profile = response.json()[0]
         if profile.get("program_start_date") and profile.get("program_end_date"):
             profile["year_level"] = calculate_year_level(
                 profile["program_start_date"],
