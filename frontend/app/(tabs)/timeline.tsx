@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import {
   MagnifyingGlassIcon,
@@ -16,7 +15,7 @@ import { useAuth } from '@/AuthContext';
 import { Chip } from '@/components/ui/chip';
 import { RailRow } from '@/components/ui/rail-row';
 import { Palette, Radius, Spacing, Type } from '@/constants/theme';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getStepCompletion, setStepCompletion } from '@/utils/step-completion';
 
 interface TimelineStep {
