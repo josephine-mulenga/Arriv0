@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router, Link } from 'expo-router';
+import { router, Link, useLocalSearchParams } from 'expo-router';
 import { EnvelopeSimpleIcon, LockSimpleIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
@@ -10,6 +10,7 @@ import { resendConfirmation } from '@/api';
 
 export default function LoginScreen() {
   const { login, loading, error } = useAuth();
+  const { sessionExpired } = useLocalSearchParams<{ sessionExpired?: string }>();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -43,6 +44,10 @@ export default function LoginScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
       <View style={styles.content}>
         <Text style={styles.title}>Log in</Text>
+
+        {sessionExpired ? (
+          <Text style={styles.noticeText}>Your session expired. Please log in again.</Text>
+        ) : null}
 
         <View style={styles.inputRow}>
           <EnvelopeSimpleIcon size={17} color="#A9A7BE" />
@@ -134,6 +139,15 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyRegular,
     fontSize: 13,
     color: Palette.danger,
+  },
+  noticeText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    color: Palette.inkMuted,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    padding: 12,
+    marginBottom: 4,
   },
   successText: {
     fontFamily: Type.bodyRegular,
