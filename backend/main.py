@@ -29,19 +29,16 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_SECRET = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SECRET")
+SUPABASE_SECRET = os.getenv("SUPABASE_SECRET")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
-
-openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
-
-limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
-security = HTTPBearer()
-scheduler = AsyncIOScheduler()
 openai_client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
@@ -1056,41 +1053,34 @@ async def shutdown_event():
 @app.get("/")
 def home():
     return {"message": "Arriv0 backend is running"}
+
 @app.get("/health")
 def health_check():
+    try:
+        supabase_admin.table("users").select("id").limit(1).execute()
+        db_status = "healthy"
+    except Exception:
+        db_status = "unhealthy"
+
     try:
         openai_client.models.list()
         ai_status = "healthy"
     except Exception:
         ai_status = "unhealthy"
 
+    overall = "healthy" if db_status == "healthy" else "degraded"
+
     return {
-        "status": "healthy",
+        "status": overall,
         "timestamp": datetime.now().isoformat(),
         "version": "1.0.0",
         "services": {
-            "database": "healthy",
+            "database": db_status,
             "ai": ai_status,
             "scheduler": "healthy" if scheduler.running else "unhealthy"
         }
     }
 
-@app.get("/debug-role")
-def debug_role():
-    try:
-        import base64
-        import json
-        secret = SUPABASE_SECRET or ""
-        parts = secret.split(".")
-        return {
-            "length": len(secret),
-            "parts_count": len(parts),
-            "starts_with": secret[:10] if secret else "empty",
-            "role": None
-        }
-    except Exception as e:
-        return {"error": str(e)}
-    
 @app.post("/signup")
 @limiter.limit("5/minute")
 def signup(request: Request, data: SignupRequest):
