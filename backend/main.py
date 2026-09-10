@@ -79,8 +79,10 @@ app.add_middleware(
         "exp://localhost:19000",
     ],
     # Expo picks a different localhost port per dev session (8081, 8090, 19006, ...) —
-    # allow any of them instead of chasing whichever port is free that day.
-    allow_origin_regex=r"http://localhost:\d+",
+    # allow any of them instead of chasing whichever port is free that day. Also
+    # allow Expo's tunnel mode (`expo start --tunnel`), which serves the dev
+    # bundle from a random *.exp.direct subdomain each session.
+    allow_origin_regex=r"http://localhost:\d+|https://.*\.exp\.direct",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
