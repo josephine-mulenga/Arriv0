@@ -546,6 +546,10 @@ def get_profile_from_db(user_id: str, correlation_id: str = None) -> dict:
             },
             timeout=10.0
         )
+        logger.info(f"Profile HTTP status: {response.status_code} for user {user_id[:8]}")
+        if response.status_code != 200:
+            logger.error(f"Profile fetch failed: {response.text[:200]}")
+            raise HTTPException(status_code=400, detail="Failed to fetch profile.")
         data = response.json()
         if not data:
             raise HTTPException(status_code=404, detail="User profile not found.")
@@ -563,9 +567,9 @@ def get_profile_from_db(user_id: str, correlation_id: str = None) -> dict:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Profile fetch error: {type(e).__name__} correlation_id={correlation_id}")
+        logger.error(f"Profile fetch error: {type(e).__name__}: {str(e)} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to fetch profile.")
-
+    
 async def generate_morning_message(student: dict) -> str:
     today = date.today()
     program_end = date.fromisoformat(str(student.get("program_end_date", "2028-01-01"))[:10])
