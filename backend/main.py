@@ -1085,11 +1085,15 @@ def debug_key():
 
 @app.get("/debug-db")
 def debug_db():
-    try:
-        result = supabase_admin.table("users").select("id").limit(1).execute()
-        return {"status": "ok", "count": len(result.data), "key_start": SUPABASE_SECRET[:15] if SUPABASE_SECRET else "None"}
-    except Exception as e:
-        return {"status": "error", "error": str(e), "key_start": SUPABASE_SECRET[:15] if SUPABASE_SECRET else "None"}
+    arrivo = os.getenv("ARRIVO_ADMIN", "NOT_FOUND")
+    secret_env = os.getenv("SUPABASE_SECRET", "NOT_FOUND")
+    computed = arrivo if arrivo != "NOT_FOUND" else secret_env
+    return {
+        "ARRIVO_ADMIN": arrivo[:20],
+        "SUPABASE_SECRET_env": secret_env[:20],
+        "SUPABASE_SECRET_var": SUPABASE_SECRET[:20] if SUPABASE_SECRET else "None",
+        "computed": computed[:20]
+    }
 @app.get("/health")
 def health_check():
     try:
