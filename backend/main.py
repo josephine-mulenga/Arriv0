@@ -29,7 +29,7 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_SECRET = os.getenv("DB_ADMIN_KEY") or os.getenv("SUPABASE_SECRET")
+SUPABASE_SECRET = os.getenv("ARRIVO_ADMIN") or os.getenv("SUPABASE_SECRET")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
