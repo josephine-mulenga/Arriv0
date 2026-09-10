@@ -1079,6 +1079,14 @@ def debug_key():
         "supabase_secret_start": sb_key[:15],
         "using": (os.getenv("DB_ADMIN_KEY") or os.getenv("SUPABASE_SECRET") or "NONE")[:15]
     }
+
+@app.get("/debug-db")
+def debug_db():
+    try:
+        result = supabase_admin.table("users").select("id").limit(1).execute()
+        return {"status": "ok", "count": len(result.data), "key_start": SUPABASE_SECRET[:15] if SUPABASE_SECRET else "None"}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "key_start": SUPABASE_SECRET[:15] if SUPABASE_SECRET else "None"}
 @app.get("/health")
 def health_check():
     try:
