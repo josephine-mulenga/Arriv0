@@ -528,8 +528,10 @@ def verify_token(authorization: Optional[str] = None, correlation_id: str = None
     token = authorization.split(" ")[1]
     try:
         user = supabase.auth.get_user(token)
+        logger.info(f"Token verified successfully for user")
         return user
-    except Exception:
+    except Exception as e:
+        logger.error(f"Token verification error: {type(e).__name__}: {str(e)[:100]}")
         log_security_event("INVALID_TOKEN", "Invalid or expired token", correlation_id)
         raise HTTPException(status_code=401, detail="Invalid or expired token. Please log in again.")
 
