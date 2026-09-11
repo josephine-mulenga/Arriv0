@@ -1077,11 +1077,11 @@ def home():
 @app.get("/debug-env-keys")
 def debug_env_keys():
     matches = {
-        repr(k): {"length": len(v), "prefix": v[:6]}
+        repr(k): len(v)
         for k, v in os.environ.items()
         if "ARRIVO" in k.upper() or "SUPABASE" in k.upper()
     }
-    return {"pid": os.getpid(), "ppid": os.getppid(), "matches": matches}
+    return {"pid": os.getpid(), "ppid": os.getppid(), "key_lengths": matches}
 
 @app.get("/health")
 def health_check():
