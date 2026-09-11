@@ -29,8 +29,7 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_SECRET = os.getenv("ARRIVO_ADMIN") or os.getenv("SUPABASE_SECRET")
-logger.info(f"SUPABASE_SECRET initialized with length={len(SUPABASE_SECRET or '')} starts={( SUPABASE_SECRET or '')[:10]}")
+SUPABASE_SECRET = os.getenv("SUPABASE_SECRET")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
@@ -1073,11 +1072,6 @@ async def shutdown_event():
 @app.get("/")
 def home():
     return {"message": "Arriv0 backend is running"}
-
-@app.get("/debug-env-keys")
-def debug_env_keys():
-    all_keys = sorted(repr(k) for k in os.environ.keys())
-    return {"pid": os.getpid(), "ppid": os.getppid(), "env_key_count": len(all_keys), "env_keys": all_keys}
 
 @app.get("/health")
 def health_check():
