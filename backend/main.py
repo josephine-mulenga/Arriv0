@@ -1718,7 +1718,7 @@ Answer rules:
 - If serious legal risk always recommend consulting their DSO
 - 3 to 6 sentences maximum
 - No bullet points
-- If the question is completely unrelated to international student life use the restricted response above"""
+- If the question involves harmful, illegal, or suspicious activity use the restricted response above"""
 
     try:
         response = openai_client.responses.create(
