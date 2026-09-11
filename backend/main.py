@@ -392,6 +392,18 @@ def build_timeline(profile: dict, requested_year: Optional[int] = None) -> dict:
     grace_period_end = end_date + timedelta(days=60)
 
     timelines = {
+        0: {
+            "year": "Before You Arrive",
+            "status": "Your journey starts here. Get ready before you land.",
+            "steps": [
+                {"task": "Schedule your F-1 visa interview", "done": False, "link": "https://travel.state.gov/content/travel/en/us-visas/study.html", "date_range": f"{fmt_date(start_date - timedelta(days=120))} — {fmt_date(start_date - timedelta(days=30))}"},
+                {"task": "Pay the SEVIS I-901 fee", "done": False, "link": "https://www.fmjfee.com/", "date_range": f"{fmt_date(start_date - timedelta(days=120))} — {fmt_date(start_date - timedelta(days=30))}"},
+                {"task": "Arrange your pre-arrival fund transfer", "done": False, "date_range": f"{fmt_date(start_date - timedelta(days=45))} — {fmt_date(start_date - timedelta(days=7))}"},
+                {"task": "Find housing near campus", "done": False, "date_range": f"{fmt_date(start_date - timedelta(days=45))} — {fmt_date(start_date - timedelta(days=7))}"},
+                {"task": "Pack your I-20, passport, and visa documents for travel", "done": False, "date_range": f"{fmt_date(start_date - timedelta(days=14))} — {fmt_date(start_date)}"},
+                {"task": "Book your flight — you can enter the US up to 30 days before your I-20 start date", "done": False, "date_range": f"{fmt_date(start_date - timedelta(days=30))} — {fmt_date(start_date)}"}
+            ]
+        },
         1: {
             "year": "Freshman",
             "status": "You are settling in. Focus on your first 30 days.",
@@ -483,6 +495,13 @@ def calculate_year_level(program_start_date: str, program_end_date: str) -> int:
         start = date.fromisoformat(str(program_start_date)[:10])
         end = date.fromisoformat(str(program_end_date)[:10])
         today = date.today()
+        # Before program_start_date, a student hasn't arrived yet — that's
+        # its own phase (0 = "Before You Arrive"), not Freshman. Previously
+        # this fell into the < 0.25 progress bucket below and was silently
+        # treated as Freshman, which is why pre-arrival students never saw
+        # anything different from someone already on campus.
+        if today < start:
+            return 0
         total_days = (end - start).days
         days_completed = (today - start).days
         if total_days <= 0:
@@ -581,7 +600,7 @@ async def generate_morning_message(student: dict) -> str:
     year_level = student.get("year_level", 1)
     if student.get("program_start_date") and student.get("program_end_date"):
         year_level = calculate_year_level(student["program_start_date"], student["program_end_date"])
-    year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
+    year_names = {0: "Incoming Student", 1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(year_level, "Student")
     recent_news = get_recent_news_context()
     student_context = build_student_profile_context(student, days_until_end, opt_window_opens, year_name)
@@ -785,7 +804,7 @@ async def personalize_news_for_student(news_title: str, news_body: str, news_lin
     year_level = student.get("year_level", 1)
     if student.get("program_start_date") and student.get("program_end_date"):
         year_level = calculate_year_level(student["program_start_date"], student["program_end_date"])
-    year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
+    year_names = {0: "Incoming Student", 1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(year_level, "Student")
     safe_title = sanitize_input(news_title)
     safe_body = sanitize_input(news_body)
@@ -1599,7 +1618,7 @@ def get_ai_status(request: Request, authorization: Optional[str] = Header(None))
     day_of_week = today.strftime("%A")
     week_number = today.isocalendar()[1]
     year_level = profile.get("year_level", 1)
-    year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
+    year_names = {0: "Incoming Student", 1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(year_level, "Student")
     student_context = build_student_profile_context(profile, days_until_end, opt_window_opens, year_name)
 
@@ -1650,7 +1669,7 @@ def chat(request: Request, data: ChatRequest, authorization: Optional[str] = Hea
 
     safe_question = sanitize_input(data.question)
     year_level = profile.get("year_level", 1)
-    year_names = {1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
+    year_names = {0: "Incoming Student", 1: "Freshman", 2: "Sophomore", 3: "Junior", 4: "Senior"}
     year_name = year_names.get(year_level, "Student")
 
     today = date.today()
