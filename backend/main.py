@@ -1076,12 +1076,8 @@ def home():
 
 @app.get("/debug-env-keys")
 def debug_env_keys():
-    matches = {
-        repr(k): len(v)
-        for k, v in os.environ.items()
-        if "ARRIVO" in k.upper() or "SUPABASE" in k.upper()
-    }
-    return {"pid": os.getpid(), "ppid": os.getppid(), "key_lengths": matches}
+    all_keys = sorted(repr(k) for k in os.environ.keys())
+    return {"pid": os.getpid(), "ppid": os.getppid(), "env_key_count": len(all_keys), "env_keys": all_keys}
 
 @app.get("/health")
 def health_check():
