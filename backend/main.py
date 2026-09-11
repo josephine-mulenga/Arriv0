@@ -1074,33 +1074,15 @@ async def shutdown_event():
 def home():
     return {"message": "Arriv0 backend is running"}
 
-@app.get("/")
-def home():
-    return {"message": "Arriv0 backend is running"}
-
-@app.get("/debug-key")
-def debug_key():
-    db_key = os.getenv("DB_ADMIN_KEY", "NOT_FOUND")
-    sb_key = os.getenv("SUPABASE_SECRET", "NOT_FOUND")
-    return {
-        "db_admin_key_length": len(db_key),
-        "db_admin_key_start": db_key[:15],
-        "supabase_secret_length": len(sb_key),
-        "supabase_secret_start": sb_key[:15],
-        "using": (os.getenv("DB_ADMIN_KEY") or os.getenv("SUPABASE_SECRET") or "NONE")[:15]
+@app.get("/debug-env-keys")
+def debug_env_keys():
+    matches = {
+        repr(k): {"length": len(v), "prefix": v[:6]}
+        for k, v in os.environ.items()
+        if "ARRIVO" in k.upper() or "SUPABASE" in k.upper()
     }
+    return {"pid": os.getpid(), "ppid": os.getppid(), "matches": matches}
 
-@app.get("/debug-db")
-def debug_db():
-    arrivo = os.getenv("ARRIVO_ADMIN", "NOT_FOUND")
-    secret_env = os.getenv("SUPABASE_SECRET", "NOT_FOUND")
-    computed = arrivo if arrivo != "NOT_FOUND" else secret_env
-    return {
-        "ARRIVO_ADMIN": arrivo[:20],
-        "SUPABASE_SECRET_env": secret_env[:20],
-        "SUPABASE_SECRET_var": SUPABASE_SECRET[:20] if SUPABASE_SECRET else "None",
-        "computed": computed[:20]
-    }
 @app.get("/health")
 def health_check():
     try:
