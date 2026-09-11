@@ -4,6 +4,7 @@ import { router, Link, useLocalSearchParams } from 'expo-router';
 import { EnvelopeSimpleIcon, LockSimpleIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { SocialLoginButtons } from '@/components/social-login-buttons';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { resendConfirmation } from '@/api';
@@ -88,6 +89,8 @@ export default function LoginScreen() {
           disabled={loading}
           style={styles.submitButton}
         />
+
+        <SocialLoginButtons />
 
         <Link href="/signup" style={styles.link}>
           <Text style={styles.linkText}>Don&apos;t have an account? <Text style={styles.linkTextStrong}>Sign up</Text></Text>
