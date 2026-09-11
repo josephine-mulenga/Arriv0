@@ -871,9 +871,7 @@ async def process_and_notify():
 
     logger.info("News fetch and notification job complete")
 
-class SignupRequest(BaseModel):
-    email: EmailStr
-    password: str
+class ProfileFields(BaseModel):
     name: str
     school: str
     visa_type: str
@@ -884,20 +882,6 @@ class SignupRequest(BaseModel):
     has_bank_account: Optional[bool] = False
     cpt_months_used: Optional[int] = 0
     referral_code: Optional[str] = None
-
-    @validator('password')
-    def password_must_be_strong(cls, v):
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters')
-        if not any(c.isupper() for c in v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not any(c.isdigit() for c in v):
-            raise ValueError('Password must contain at least one number')
-        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in v):
-            raise ValueError('Password must contain at least one special character')
-        if ' ' in v:
-            raise ValueError('Password must not contain spaces')
-        return v
 
     @validator('name')
     def name_must_be_valid(cls, v):
@@ -944,6 +928,27 @@ class SignupRequest(BaseModel):
         if v is not None and (v < 0 or v > 24):
             raise ValueError('CPT months used must be between 0 and 24')
         return v
+
+class SignupRequest(ProfileFields):
+    email: EmailStr
+    password: str
+
+    @validator('password')
+    def password_must_be_strong(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in v):
+            raise ValueError('Password must contain at least one special character')
+        if ' ' in v:
+            raise ValueError('Password must not contain spaces')
+        return v
+
+class CompleteOAuthProfileRequest(ProfileFields):
+    pass
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -1100,46 +1105,51 @@ def health_check():
         }
     }
 
+def _create_user_profile(user_id: str, data: ProfileFields) -> None:
+    """Insert the users row, default documents, and referral linkage shared
+    by email/password signup and OAuth profile completion."""
+    year_level = calculate_year_level(data.program_start_date, data.program_end_date)
+    supabase_admin.table("users").insert({
+        "id": user_id,
+        "name": data.name,
+        "school": data.school,
+        "visa_type": data.visa_type,
+        "year_level": year_level,
+        "program_start_date": data.program_start_date,
+        "program_end_date": data.program_end_date,
+        "major": data.major,
+        "has_ssn": data.has_ssn,
+        "has_bank_account": data.has_bank_account,
+        "cpt_months_used": data.cpt_months_used,
+        "referred_by": data.referral_code.upper() if data.referral_code else None
+    }).execute()
+
+    for doc in DEFAULT_DOCUMENTS:
+        supabase_admin.table("documents").insert({
+            "user_id": user_id,
+            "name": doc["name"],
+            "category": doc["category"],
+            "collected": False
+        }).execute()
+
+    if data.referral_code:
+        supabase_admin.table("referrals").update({
+            "referred_user_id": user_id,
+            "status": "completed",
+            "completed_at": datetime.now().isoformat()
+        }).eq("referral_code", data.referral_code.upper()).eq("status", "pending").execute()
+
 @app.post("/signup")
 @limiter.limit("5/minute")
 def signup(request: Request, data: SignupRequest):
     correlation_id = getattr(request.state, "correlation_id", None)
     try:
-        year_level = calculate_year_level(data.program_start_date, data.program_end_date)
         response = supabase.auth.sign_up({
             "email": data.email,
             "password": data.password
         })
         auth_user_id = response.user.id
-        supabase_admin.table("users").insert({
-            "id": auth_user_id,
-            "name": data.name,
-            "school": data.school,
-            "visa_type": data.visa_type,
-            "year_level": year_level,
-            "program_start_date": data.program_start_date,
-            "program_end_date": data.program_end_date,
-            "major": data.major,
-            "has_ssn": data.has_ssn,
-            "has_bank_account": data.has_bank_account,
-            "cpt_months_used": data.cpt_months_used,
-            "referred_by": data.referral_code.upper() if data.referral_code else None
-        }).execute()
-
-        for doc in DEFAULT_DOCUMENTS:
-            supabase_admin.table("documents").insert({
-                "user_id": auth_user_id,
-                "name": doc["name"],
-                "category": doc["category"],
-                "collected": False
-            }).execute()
-
-        if data.referral_code:
-            supabase_admin.table("referrals").update({
-                "referred_user_id": auth_user_id,
-                "status": "completed",
-                "completed_at": datetime.now().isoformat()
-            }).eq("referral_code", data.referral_code.upper()).eq("status", "pending").execute()
+        _create_user_profile(auth_user_id, data)
 
         log_security_event("SIGNUP_SUCCESS", f"New user registered at {data.school}", correlation_id)
         # response.session is None when the Supabase project requires email
@@ -1166,6 +1176,30 @@ def signup(request: Request, data: SignupRequest):
     except Exception as e:
         logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
+
+@app.post("/complete-oauth-profile")
+@limiter.limit("5/minute")
+def complete_oauth_profile(request: Request, data: CompleteOAuthProfileRequest, authorization: Optional[str] = Header(None)):
+    # A Google/Apple/Microsoft sign-in creates the Supabase auth user
+    # directly on the client — there's no /signup call to create the users
+    # row alongside it. The frontend detects a missing profile after OAuth
+    # login (a 404 from /user/{id}) and routes here to collect the same
+    # onboarding fields /signup does, then finishes creating it.
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        existing = supabase_admin.table("users").select("id").eq("id", user_id).execute()
+        if existing.data:
+            raise HTTPException(status_code=409, detail="Profile already exists.")
+        _create_user_profile(user_id, data)
+        log_security_event("OAUTH_PROFILE_COMPLETED", f"OAuth user completed profile at {data.school}", correlation_id)
+        return {"message": f"Welcome to Arriv0, {data.name}."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OAuth profile completion error: {type(e).__name__}: {str(e)} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to complete profile.")
 
 @app.post("/login")
 @limiter.limit("10/minute")

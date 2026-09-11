@@ -24,7 +24,11 @@ const handleResponse = async (response) => {
     throw new Error('Session expired. Please log in again.');
   }
   const data = await response.json();
-  if (!response.ok) throw new Error(extractErrorMessage(data, 'Request failed'));
+  if (!response.ok) {
+    const err = new Error(extractErrorMessage(data, 'Request failed'));
+    err.status = response.status;
+    throw err;
+  }
   return data;
 };
 
@@ -71,6 +75,29 @@ export const resetPassword = async (email) => {
   });
   const data = await response.json();
   return data;
+};
+
+export const completeOAuthProfile = async (profile, token) => {
+  const response = await fetch(`${BASE_URL}/complete-oauth-profile`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      name: profile.name,
+      school: profile.school,
+      visa_type: profile.visaType,
+      program_start_date: profile.programStartDate,
+      program_end_date: profile.programEndDate,
+      major: profile.major,
+      has_ssn: profile.hasSsn,
+      has_bank_account: profile.hasBankAccount,
+      cpt_months_used: profile.cptMonthsUsed,
+      referral_code: profile.referralCode || undefined
+    })
+  });
+  return handleResponse(response);
 };
 
 export const resendConfirmation = async (email) => {

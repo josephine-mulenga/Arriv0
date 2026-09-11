@@ -2,7 +2,7 @@ import { Pressable } from 'react-native';
 import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 
-export function HapticTab(props: BottomTabBarButtonProps) {
+export function HapticTab({ ref, ...props }: BottomTabBarButtonProps) {
   return (
     <Pressable
       {...props}

@@ -13,6 +13,7 @@ import {
 
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { AnimatedCheck } from '@/components/ui/animated-check';
+import { SocialLoginButtons } from '@/components/social-login-buttons';
 import { Palette, Radius, Type } from '@/constants/theme';
 
 // Mirrors the backend's password_must_be_strong validator (backend/main.py) exactly —
@@ -139,6 +140,8 @@ export default function SignupScreen() {
             disabled={!canContinue}
             style={styles.submitButton}
           />
+
+          <SocialLoginButtons />
 
           <Link href="/login" style={styles.link}>
             <Text style={styles.linkText}>

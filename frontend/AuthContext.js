@@ -100,10 +100,23 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.multiRemove(['authToken', 'userId', 'userEmail']);
   };
 
+  // Google/Apple/Microsoft sign-in produces a Supabase session directly
+  // (no /login call) — this stores it the same way email/password login
+  // does, so the rest of the app can't tell the difference.
+  const loginWithOAuthSession = async (session) => {
+    setAuthToken(session.access_token);
+    setUser({ id: session.user.id, email: session.user.email });
+
+    await AsyncStorage.setItem('authToken', session.access_token);
+    await AsyncStorage.setItem('userId', String(session.user.id));
+    await AsyncStorage.setItem('userEmail', session.user.email || '');
+  };
+
   setLogoutHandler(logout);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, initializing, error, login, signup, logout }}>
+    <AuthContext.Provider
+      value={{ user, token, loading, initializing, error, login, signup, logout, loginWithOAuthSession }}>
       {children}
     </AuthContext.Provider>
   );
