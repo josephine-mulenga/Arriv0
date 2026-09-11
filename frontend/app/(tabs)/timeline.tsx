@@ -116,10 +116,10 @@ export default function TimelineScreen() {
           showsHorizontalScrollIndicator={false}
           style={styles.chipScroll}
           contentContainerStyle={styles.chipRow}>
-          {[1, 2, 3, 4].map((year) => (
+          {[0, 1, 2, 3, 4].map((year) => (
             <Chip
               key={year}
-              label={`Year ${year}`}
+              label={year === 0 ? 'Before Arrival' : `Year ${year}`}
               selected={selectedYear === year}
               onPress={() => setSelectedYear(year)}
             />
