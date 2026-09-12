@@ -67,11 +67,11 @@ export const login = async (email, password) => {
   return data;
 };
 
-export const resetPassword = async (email) => {
+export const resetPassword = async (email, redirectTo) => {
   const response = await fetch(`${BASE_URL}/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email })
+    body: JSON.stringify({ email, redirect_to: redirectTo })
   });
   const data = await response.json();
   return data;

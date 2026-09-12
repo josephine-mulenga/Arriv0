@@ -1,24 +1,27 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
+import * as Linking from 'expo-linking';
+import { EnvelopeSimpleIcon } from 'phosphor-react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { Palette, Radius, Type } from '@/constants/theme';
 import { resetPassword } from '@/api';
 
 export default function ResetPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleReset = async () => {
     try {
       setLoading(true);
       setError(null);
-      await resetPassword(email);
+      const redirectTo = Linking.createURL('reset-password-confirm');
+      await resetPassword(email, redirectTo);
       setSubmitted(true);
-    } catch (err) {
+    } catch {
       setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
@@ -27,76 +30,114 @@ export default function ResetPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
-      <ThemedView style={styles.container}>
-      <ThemedText type="title">Reset your password</ThemedText>
+      <View style={styles.content}>
+        <Text style={styles.title}>Reset your password</Text>
 
-      {submitted ? (
-        <ThemedText style={styles.successText}>
-          If an account exists for {email}, we&apos;ve sent instructions to reset your password.
-        </ThemedText>
-      ) : (
-        <>
-          <ThemedText>Enter your email and we&apos;ll send you a link to reset your password.</ThemedText>
+        {submitted ? (
+          <Text style={styles.successText}>
+            If an account exists for {email}, we've sent instructions to reset your password.
+          </Text>
+        ) : (
+          <>
+            <Text style={styles.subtitle}>
+              Enter your email and we'll send you a link to reset your password.
+            </Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-          />
+            <View style={styles.inputRow}>
+              <EnvelopeSimpleIcon size={17} color="#A9A7BE" />
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor={Palette.inkPlaceholder}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
 
-          {error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          <TouchableOpacity style={styles.button} onPress={handleReset} disabled={loading}>
-            <ThemedText style={styles.buttonText}>{loading ? 'Sending...' : 'Send reset link'}</ThemedText>
-          </TouchableOpacity>
-        </>
-      )}
+            <PrimaryButton
+              label={loading ? 'Sending...' : 'Send reset link'}
+              onPress={handleReset}
+              disabled={loading || !email.trim()}
+              style={styles.submitButton}
+            />
+          </>
+        )}
 
-      <TouchableOpacity onPress={() => router.push('/login')} style={styles.link}>
-        <ThemedText>Back to log in</ThemedText>
-      </TouchableOpacity>
-      </ThemedView>
+        <Text style={styles.link} onPress={() => router.push('/login')}>
+          Back to log in
+        </Text>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
+    flex: 1,
+    backgroundColor: Palette.white,
+  },
+  content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
-    gap: 12,
+    padding: 26,
+    gap: 11,
+  },
+  title: {
+    fontFamily: Type.headingBold,
+    fontSize: 28,
+    color: Palette.ink,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.inkFaint,
+    marginBottom: 4,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.surfaceSubtle,
+    borderRadius: Radius.input,
+    paddingHorizontal: 14,
+    height: 50,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-  },
-  button: {
-    backgroundColor: '#6C63FF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
+    flex: 1,
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.ink,
   },
   errorText: {
-    color: 'red',
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    color: Palette.danger,
   },
   successText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: 'center',
+    color: Palette.inkBody,
+  },
+  submitButton: {
+    marginTop: 8,
   },
   link: {
-    marginTop: 12,
+    marginTop: 18,
     alignSelf: 'center',
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    color: Palette.inkFaint,
   },
 });

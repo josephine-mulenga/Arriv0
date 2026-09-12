@@ -975,6 +975,7 @@ class LoginRequest(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
+    redirect_to: Optional[str] = None
 
 class ChatRequest(BaseModel):
     question: str
@@ -1260,7 +1261,8 @@ def resend_confirmation(request: Request, data: PasswordResetRequest):
 def reset_password(request: Request, data: PasswordResetRequest):
     correlation_id = getattr(request.state, "correlation_id", None)
     try:
-        supabase.auth.reset_password_email(data.email)
+        options = {"redirect_to": data.redirect_to} if data.redirect_to else None
+        supabase.auth.reset_password_email(data.email, options)
         log_security_event("PASSWORD_RESET_REQUESTED", f"Reset requested email={data.email[:3]}***", correlation_id)
         return {"message": "If an account exists with that email a password reset link has been sent."}
     except Exception as e:
