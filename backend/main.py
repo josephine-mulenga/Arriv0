@@ -36,6 +36,7 @@ EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
+ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
@@ -552,6 +553,12 @@ def verify_token(authorization: Optional[str] = None, correlation_id: str = None
         logger.error(f"Token verification error: {type(e).__name__}: {str(e)[:100]}")
         log_security_event("INVALID_TOKEN", "Invalid or expired token", correlation_id)
         raise HTTPException(status_code=401, detail="Invalid or expired token. Please log in again.")
+
+def require_admin(verified, correlation_id: str = None):
+    email = (getattr(verified.user, "email", None) or "").lower()
+    if email not in ADMIN_EMAILS:
+        log_security_event("ACCESS_DENIED", "Non-admin user attempted to access an admin endpoint", correlation_id)
+        raise HTTPException(status_code=403, detail="Access denied.")
 
 def get_profile_from_db(user_id: str, correlation_id: str = None) -> dict:
     try:
@@ -2078,7 +2085,8 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
 @limiter.limit("10/minute")
 def get_usage_stats(request: Request, authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
-    verify_token(authorization, correlation_id)
+    verified = verify_token(authorization, correlation_id)
+    require_admin(verified, correlation_id)
     try:
         response = supabase_admin.table("api_usage").select("endpoint, model, created_at").order("created_at", desc=True).limit(100).execute()
         records = response.data or []
