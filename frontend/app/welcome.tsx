@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated, {
   BounceIn,
@@ -14,9 +14,15 @@ import Animated, {
 
 import { ArrivoLogo } from '@/components/arrivo-logo';
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { WebLandingPage } from '@/components/web-landing-page';
 import { Palette, Type } from '@/constants/theme';
+import { useAuth } from '@/AuthContext';
+import { supabase } from '@/supabase';
+import { finishOAuthSignIn } from '@/utils/oauth';
 
 export default function WelcomeScreen() {
+  const { user, initializing, loginWithOAuthSession } = useAuth();
+  const [checkingOAuth, setCheckingOAuth] = useState(Platform.OS === 'web');
   const float = useSharedValue(0);
 
   useEffect(() => {
@@ -30,9 +36,49 @@ export default function WelcomeScreen() {
     );
   }, []);
 
+  // Google/Apple/Microsoft sign-in is supposed to land back on
+  // /auth-callback, but if Supabase's redirect-URL allowlist doesn't
+  // exactly match that path, it silently falls back to the Site URL
+  // instead — which is this screen. supabase-js still auto-detects the
+  // session from the URL hash either way (detectSessionInUrl), so finish
+  // the login here too rather than stranding the user on the marketing page.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || user) return;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          await finishOAuthSignIn(data.session, loginWithOAuthSession);
+          return;
+        }
+      } catch {
+        // no pending OAuth session — fall through to the normal landing page
+      }
+      setCheckingOAuth(false);
+    })();
+  }, [user]);
+
   const floatStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: float.value }],
   }));
+
+  // An already-authenticated session landing here — e.g. a bookmark, a
+  // refresh — should never show the marketing/welcome screen. Send them
+  // straight into the app.
+  if (!initializing && user) {
+    router.replace('/(tabs)');
+    return null;
+  }
+
+  if (checkingOAuth) {
+    return <View style={styles.root} />;
+  }
+
+  // Web gets a full marketing homepage (separate from the app) instead of
+  // this simple mobile welcome screen — native is completely untouched.
+  if (Platform.OS === 'web') {
+    return <WebLandingPage />;
+  }
 
   return (
     <View style={styles.root}>
