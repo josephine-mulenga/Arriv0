@@ -712,9 +712,8 @@ async def generate_morning_message(student: dict) -> str:
     student_context = build_student_profile_context(student, days_until_end, opt_window_opens, year_name)
 
     cpt_months_used = student.get("cpt_months_used") or 0
-    opt_window_open_now = opt_window_opens <= 0 and days_until_end > 0
-    opt_window_opens_soon = 0 < opt_window_opens <= 7
-    is_urgent = opt_window_open_now or opt_window_opens_soon or cpt_months_used >= 9
+    opt_window_under_30_days = opt_window_opens <= 30 and days_until_end > 0
+    is_urgent = opt_window_under_30_days or cpt_months_used >= 9
 
     if is_urgent:
         day_theme = "URGENT: an OPT or CPT deadline needs this student's attention right now. This message MUST lead with that urgency — ignore the day-of-week theme below entirely and focus the whole message on it."
@@ -822,7 +821,7 @@ async def send_opt_countdown_alerts():
             try:
                 cpt_months_used = user.get("cpt_months_used") or 0
                 if cpt_months_used >= 9:
-                    cpt_message = f"Hey {user['name']}! You've used {cpt_months_used} months of full-time CPT. Reaching 12 months permanently ends your OPT eligibility — talk to your DSO before authorizing any more CPT."
+                    cpt_message = f"You have used {cpt_months_used} months of full-time CPT. Using 12 months makes you permanently ineligible for OPT. Contact your DSO now."
                     await send_push_notification(user["push_token"], "Arriv0 CPT Risk Alert", cpt_message)
                     logger.info(f"CPT risk alert sent to {user['name']} — {cpt_months_used} months used")
 
