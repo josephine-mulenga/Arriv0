@@ -132,3 +132,11 @@ ALTER TABLE users
 
 ALTER TABLE news
   ADD COLUMN IF NOT EXISTS urgent boolean DEFAULT false;
+
+-- Migration: company watch list (2026-09-13, already applied)
+-- Backs GET/POST/DELETE /internships/watch* and the check_watched_companies
+-- job — a user's watched companies get checked against Adzuna every 30
+-- minutes, reusing internships_seen for dedup the same way
+-- send_internship_notifications does for major-based matches.
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS watched_companies text[] DEFAULT '{}';

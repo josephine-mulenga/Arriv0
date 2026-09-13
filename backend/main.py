@@ -918,6 +918,76 @@ async def send_internship_notifications():
     except Exception as e:
         logger.error(f"Internship notification job failed: {e}")
 
+async def check_watched_companies():
+    """Runs every 30 minutes. For each user with a non-empty watched_companies
+    list and a push token, searches Adzuna per watched company (using the
+    same company= filter get_internships uses for company searches) and
+    notifies about postings not already in internships_seen — the same
+    dedup table send_internship_notifications uses, so a job a user has
+    already been told about isn't re-sent whether it was found via their
+    major or a company watch."""
+    logger.info("Running watched-company internship check")
+    if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
+        logger.info("Adzuna not configured — skipping watched-company check")
+        return
+    try:
+        users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
+        if not users.data:
+            return
+
+        for user in users.data:
+            watched = user.get("watched_companies") or []
+            if not watched:
+                continue
+            try:
+                seen = supabase_admin.table("internships_seen").select("job_id").eq("user_id", user["id"]).execute()
+                seen_ids = {row["job_id"] for row in (seen.data or [])}
+
+                for company in watched:
+                    try:
+                        async with httpx.AsyncClient(timeout=10.0) as client:
+                            response = await client.get(
+                                "https://api.adzuna.com/v1/api/jobs/us/search/1",
+                                params={
+                                    "app_id": ADZUNA_APP_ID,
+                                    "app_key": ADZUNA_APP_KEY,
+                                    "results_per_page": 20,
+                                    "company": company,
+                                    "what": "intern",
+                                    "sort_by": "date",
+                                    "content-type": "application/json",
+                                },
+                            )
+                        if response.status_code != 200:
+                            logger.error(f"Adzuna error watching {company} for user {user['id'][:8]}: {response.status_code}")
+                            continue
+
+                        jobs = [j for j in response.json().get("results", []) if j.get("id")]
+                        new_jobs = [j for j in jobs if j["id"] not in seen_ids]
+
+                        if new_jobs:
+                            top = new_jobs[0]
+                            title = top.get("title") or "a new internship"
+                            if len(new_jobs) == 1:
+                                message = f"{company} just posted: {title}. Check it out in Arriv0."
+                            else:
+                                message = f"{company} posted {len(new_jobs)} new internships, including {title}."
+                            await send_push_notification(user["push_token"], f"New at {company}", message)
+                            log_security_event("WATCHED_COMPANY_NOTIFICATION_SENT", f"{len(new_jobs)} new {company} postings sent to user {user['id'][:8]}***")
+
+                        if jobs:
+                            supabase_admin.table("internships_seen").upsert(
+                                [{"user_id": user["id"], "job_id": j["id"]} for j in jobs],
+                                on_conflict="user_id,job_id"
+                            ).execute()
+                            seen_ids.update(j["id"] for j in jobs)
+                    except Exception as e:
+                        logger.error(f"Failed to check watched company {company} for {user.get('name')}: {e}")
+            except Exception as e:
+                logger.error(f"Failed to process watched companies for {user.get('name')}: {e}")
+    except Exception as e:
+        logger.error(f"Watched company check job failed: {e}")
+
 async def fetch_news_for_queries(queries: list, page_size: int = 3, max_items: int = 8) -> list:
     try:
         news_items = []
@@ -1377,6 +1447,18 @@ class BookmarkRequest(BaseModel):
 class ReferralRequest(BaseModel):
     referred_email: EmailStr
 
+class WatchCompanyRequest(BaseModel):
+    company: str
+
+    @validator('company')
+    def company_must_be_valid(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError('Company name cannot be blank')
+        if len(v) > 200:
+            raise ValueError('Company name must be under 200 characters')
+        return v
+
 class FeedbackRequest(BaseModel):
     category: str = "general"
     message: str
@@ -1403,12 +1485,14 @@ async def startup_event():
     scheduler.add_job(check_urgent_news, CronTrigger(hour="*/2"))
     scheduler.add_job(send_opt_countdown_alerts, CronTrigger(hour=9, minute=0))
     scheduler.add_job(send_internship_notifications, CronTrigger(hour=10, minute=0))
+    scheduler.add_job(check_watched_companies, CronTrigger(minute="*/30"))
     scheduler.start()
     logger.info("Morning notification scheduler started — checking every minute")
     logger.info("News fetch scheduler started — running every 3 hours")
     logger.info("Urgent news scheduler started — checking every 2 hours")
     logger.info("OPT countdown alert scheduler started — running daily at 9am UTC")
     logger.info("Internship match scheduler started — running daily at 10am UTC")
+    logger.info("Company watch scheduler started — checking every 30 minutes")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -2418,6 +2502,116 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
     except Exception as e:
         logger.error(f"Internship search error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to search internships.")
+
+@app.get("/internships/company-search")
+@limiter.limit("20/minute")
+async def search_companies(request: Request, q: str, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verify_token(authorization, correlation_id)
+
+    if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
+        raise HTTPException(status_code=503, detail="Internship search isn't set up yet — check back soon.")
+
+    q = q.strip()
+    if not q:
+        return {"companies": []}
+
+    try:
+        # No dedicated company-autocomplete endpoint on this Adzuna tier —
+        # reuse the same company= filter get_internships already relies on,
+        # then dedupe the employer names of whatever real postings match.
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://api.adzuna.com/v1/api/jobs/us/search/1",
+                params={
+                    "app_id": ADZUNA_APP_ID,
+                    "app_key": ADZUNA_APP_KEY,
+                    "results_per_page": 50,
+                    "company": q,
+                    "content-type": "application/json",
+                },
+            )
+        if response.status_code != 200:
+            logger.error(f"Adzuna company-search error: {response.status_code} correlation_id={correlation_id}")
+            raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
+
+        seen_lower = set()
+        companies = []
+        for job in response.json().get("results", []):
+            name = (job.get("company") or {}).get("display_name")
+            if name and name.lower() not in seen_lower:
+                seen_lower.add(name.lower())
+                companies.append(name)
+
+        return {"companies": companies[:10]}
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Company search timed out. Try again shortly.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Company search error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to search companies.")
+
+@app.get("/internships/watched")
+@limiter.limit("30/minute")
+def get_watched_companies(request: Request, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        response = supabase_admin.table("users").select("watched_companies").eq("id", user_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+        return {"watched_companies": response.data[0].get("watched_companies") or []}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Watched companies fetch error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to fetch watched companies.")
+
+@app.post("/internships/watch")
+@limiter.limit("20/minute")
+def watch_company(request: Request, data: WatchCompanyRequest, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        response = supabase_admin.table("users").select("watched_companies").eq("id", user_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+        current = response.data[0].get("watched_companies") or []
+        if any(c.lower() == data.company.lower() for c in current):
+            return {"message": f"{data.company} is already on your watch list.", "watched_companies": current}
+        updated = current + [data.company]
+        supabase_admin.table("users").update({"watched_companies": updated}).eq("id", user_id).execute()
+        return {"message": f"Now watching {data.company} for new internships.", "watched_companies": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Watch company error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to add company to watch list.")
+
+@app.delete("/internships/watch/{company}")
+@limiter.limit("20/minute")
+def unwatch_company(request: Request, company: str, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        response = supabase_admin.table("users").select("watched_companies").eq("id", user_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+        current = response.data[0].get("watched_companies") or []
+        updated = [c for c in current if c.lower() != company.lower()]
+        if len(updated) == len(current):
+            raise HTTPException(status_code=404, detail=f"{company} is not on your watch list.")
+        supabase_admin.table("users").update({"watched_companies": updated}).eq("id", user_id).execute()
+        return {"message": f"Stopped watching {company}.", "watched_companies": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unwatch company error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to remove company from watch list.")
 
 @app.get("/admin/usage")
 @limiter.limit("10/minute")
