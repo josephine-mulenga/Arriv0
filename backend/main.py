@@ -737,7 +737,7 @@ async def send_internship_notifications():
                             "app_id": ADZUNA_APP_ID,
                             "app_key": ADZUNA_APP_KEY,
                             "results_per_page": 20,
-                            "what_or": search_terms,
+                            "what": search_terms,
                             "sort_by": "date",
                             "content-type": "application/json",
                         },
@@ -2097,14 +2097,17 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
     search_terms = f"{base_query} intern"
     page = max(page, 1)
 
-    # Adzuna's what/what_or only search job title + description text — never
-    # the structured employer field — so no amount of broadening finds a
+    # Adzuna's `what` only searches job title + description text — never the
+    # structured employer field — so no amount of broadening finds a
     # company's own postings unless they happen to repeat the company name in
-    # free text. A typed-in search like "Microsoft" is almost always a company
-    # name, so route it through Adzuna's dedicated `company` filter and
-    # require "intern" via `what` to stay on-topic. With no custom query
-    # (major-driven default) there's no single company to target, so broaden
-    # across title/description with what_or instead.
+    # free text. A typed-in search like "Microsoft" is almost always a
+    # company name, so route it through Adzuna's dedicated `company` filter
+    # (verified against production: returns only genuine Microsoft postings)
+    # and require "intern" via `what` to stay on-topic. `what_or` was tried
+    # here first per the original plan, but live testing showed it applies
+    # no filtering at all on this API tier (100k+ unrelated results either
+    # way) — so the major-driven default keeps using plain `what`, which is
+    # what this endpoint used successfully before this change.
     adzuna_params = {
         "app_id": ADZUNA_APP_ID,
         "app_key": ADZUNA_APP_KEY,
@@ -2116,7 +2119,7 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
         adzuna_params["company"] = base_query
         adzuna_params["what"] = "intern"
     else:
-        adzuna_params["what_or"] = search_terms
+        adzuna_params["what"] = search_terms
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
