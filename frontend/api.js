@@ -98,7 +98,11 @@ export const completeOAuthProfile = async (profile, token) => {
       has_ssn: profile.hasSsn,
       has_bank_account: profile.hasBankAccount,
       cpt_months_used: profile.cptMonthsUsed,
-      referral_code: profile.referralCode || undefined
+      referral_code: profile.referralCode || undefined,
+      biggest_concern: profile.biggestConcern || undefined,
+      has_job_offer: profile.hasJobOffer,
+      plans_after_graduation: profile.plansAfterGraduation || undefined,
+      work_experience_months: profile.workExperienceMonths
     })
   });
   return handleResponse(response);
