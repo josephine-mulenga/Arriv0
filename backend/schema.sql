@@ -98,3 +98,20 @@ CREATE POLICY "Users can view their own feedback"
 ON feedback
 FOR SELECT
 USING (auth.uid() = user_id);
+
+-- Migration: internships_seen table (2026-09-12)
+-- Backs the daily internship-match notification job — records which Adzuna
+-- job IDs a user has already been notified about so the job only pushes
+-- newly-matching roles instead of re-sending the same listings every day.
+-- Written/read only by the backend via the service role key; no user-facing
+-- endpoint reads this table, so RLS is enabled with no policies (service
+-- role bypasses RLS entirely, anon/authenticated access is fully blocked).
+CREATE TABLE IF NOT EXISTS internships_seen (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id),
+  job_id text NOT NULL,
+  seen_at timestamp DEFAULT now(),
+  UNIQUE (user_id, job_id)
+);
+
+ALTER TABLE internships_seen ENABLE ROW LEVEL SECURITY;

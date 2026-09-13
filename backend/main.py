@@ -712,6 +712,72 @@ async def send_opt_countdown_alerts():
     except Exception as e:
         logger.error(f"OPT countdown alert job failed: {e}")
 
+async def send_internship_notifications():
+    logger.info("Running daily internship match check")
+    if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
+        logger.info("Adzuna not configured — skipping internship match check")
+        return
+    try:
+        users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
+        if not users.data:
+            logger.info("No users with push tokens found")
+            return
+
+        for user in users.data:
+            try:
+                major = (user.get("major") or "").strip()
+                if not major:
+                    continue
+                search_terms = f"{major} intern"
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        "https://api.adzuna.com/v1/api/jobs/us/search/1",
+                        params={
+                            "app_id": ADZUNA_APP_ID,
+                            "app_key": ADZUNA_APP_KEY,
+                            "results_per_page": 20,
+                            "what_or": search_terms,
+                            "sort_by": "date",
+                            "content-type": "application/json",
+                        },
+                    )
+                if response.status_code != 200:
+                    logger.error(f"Adzuna error for user {user['id'][:8]}: {response.status_code}")
+                    continue
+
+                jobs = [j for j in response.json().get("results", []) if j.get("id")]
+                if not jobs:
+                    continue
+
+                seen = supabase_admin.table("internships_seen").select("job_id").eq("user_id", user["id"]).execute()
+                seen_ids = {row["job_id"] for row in (seen.data or [])}
+                new_jobs = [j for j in jobs if j["id"] not in seen_ids]
+
+                if new_jobs:
+                    top = new_jobs[0]
+                    company = (top.get("company") or {}).get("display_name") or "a company"
+                    title = top.get("title") or "a new internship"
+                    if len(new_jobs) == 1:
+                        message = f"New internship match: {title} at {company}. Check it out in Arriv0."
+                    else:
+                        message = f"{len(new_jobs)} new internships match your major, including {title} at {company}."
+                    await send_push_notification(user["push_token"], "New Internship Match", message)
+                    log_security_event("INTERNSHIP_NOTIFICATION_SENT", f"{len(new_jobs)} new matches sent to user {user['id'][:8]}***")
+
+                # Record every job seen this run (not just the ones just notified
+                # about) so a listing that later drops off the first page of
+                # results doesn't get re-notified if it ever reappears.
+                supabase_admin.table("internships_seen").upsert(
+                    [{"user_id": user["id"], "job_id": j["id"]} for j in jobs],
+                    on_conflict="user_id,job_id"
+                ).execute()
+
+            except Exception as e:
+                logger.error(f"Failed to process internship matches for {user.get('name')}: {e}")
+    except Exception as e:
+        logger.error(f"Internship notification job failed: {e}")
+
 async def fetch_uscis_news():
     try:
         news_items = []
@@ -1091,10 +1157,12 @@ async def startup_event():
     scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
     scheduler.add_job(process_and_notify, CronTrigger(hour="*/3"))
     scheduler.add_job(send_opt_countdown_alerts, CronTrigger(hour=9, minute=0))
+    scheduler.add_job(send_internship_notifications, CronTrigger(hour=10, minute=0))
     scheduler.start()
     logger.info("Morning notification scheduler started — checking every minute")
     logger.info("News fetch scheduler started — running every hour")
     logger.info("OPT countdown alert scheduler started — running daily at 9am UTC")
+    logger.info("Internship match scheduler started — running daily at 10am UTC")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -2024,7 +2092,8 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
 
     profile = get_profile_from_db(user_id, correlation_id)
     major = (profile.get("major") or "").strip()
-    search_terms = query.strip() if query and query.strip() else (f"{major} intern" if major else "internship")
+    base_query = query.strip() if query and query.strip() else (major if major else "internship")
+    search_terms = f"{base_query} intern"
     page = max(page, 1)
 
     try:
@@ -2035,7 +2104,11 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
                     "app_id": ADZUNA_APP_ID,
                     "app_key": ADZUNA_APP_KEY,
                     "results_per_page": 20,
-                    "what": search_terms,
+                    # what_or OR-matches each word across title, description, and
+                    # company — plain "what" was requiring the literal phrase in
+                    # the title, so searching "Microsoft" missed real Microsoft
+                    # postings whose title didn't contain the word.
+                    "what_or": search_terms,
                     "sort_by": "date",
                     "content-type": "application/json",
                 },
