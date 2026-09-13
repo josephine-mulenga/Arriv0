@@ -36,26 +36,41 @@ export default function WelcomeScreen() {
     );
   }, []);
 
-  // Google/Apple/Microsoft sign-in is supposed to land back on
-  // /auth-callback, but if Supabase's redirect-URL allowlist doesn't
-  // exactly match that path, it silently falls back to the Site URL
-  // instead — which is this screen. supabase-js still auto-detects the
-  // session from the URL hash either way (detectSessionInUrl), so finish
-  // the login here too rather than stranding the user on the marketing page.
+  // Google/Apple/Microsoft sign-in (and password-recovery links) are
+  // supposed to land back on /auth-callback or /reset-password-confirm, but
+  // if Supabase's redirect-URL allowlist doesn't exactly match those paths,
+  // it silently falls back to the Site URL instead — which is this screen.
+  // onAuthStateChange is the reliable way to tell the two apart: a recovery
+  // link fires PASSWORD_RECOVERY specifically, and treating it as a normal
+  // login (the previous version of this check did) would silently log the
+  // user in with their OLD password instead of ever prompting for a new
+  // one. INITIAL_SESSION fires once on subscribe with whatever session
+  // already exists, so no separate getSession() call is needed.
   useEffect(() => {
     if (Platform.OS !== 'web' || user) return;
-    (async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          await finishOAuthSignIn(data.session, loginWithOAuthSession);
-          return;
-        }
-      } catch {
-        // no pending OAuth session — fall through to the normal landing page
+    let handled = false;
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (handled) return;
+      if (event === 'PASSWORD_RECOVERY') {
+        handled = true;
+        router.replace('/reset-password-confirm');
+        return;
       }
-      setCheckingOAuth(false);
-    })();
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+        handled = true;
+        finishOAuthSignIn(session, loginWithOAuthSession).catch(() => setCheckingOAuth(false));
+        return;
+      }
+      if (event === 'INITIAL_SESSION' && !session) {
+        handled = true;
+        setCheckingOAuth(false);
+      }
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, [user]);
 
   const floatStyle = useAnimatedStyle(() => ({
