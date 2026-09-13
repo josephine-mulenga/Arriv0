@@ -231,6 +231,17 @@ def classify_news(title: str, summary: str) -> tuple:
     else:
         return False, "General news"
 
+URGENT_NEWS_KEYWORDS = [
+    "executive order", "effective immediately", "effective today", "immediate effect",
+    "suspend", "suspended", "suspension", "travel ban", "revoked", "revocation",
+    "emergency", "shut down", "shutdown", "terminated", "termination",
+    "deadline moved", "new deadline", "expedited", "urgent", "immediately halt"
+]
+
+def is_urgent_news(title: str, summary: str) -> bool:
+    content = (title + " " + summary).lower()
+    return any(kw in content for kw in URGENT_NEWS_KEYWORDS)
+
 def get_recent_news_context() -> str:
     try:
         response = supabase_admin.table("news").select("title, body, link").order("created_at", desc=True).limit(5).execute()
@@ -247,7 +258,7 @@ def get_recent_news_context() -> str:
         logger.error(f"Failed to fetch news context: {e}")
         return ""
 
-def get_chat_history(user_id: str, limit: int = 10) -> str:
+def get_chat_history(user_id: str, limit: int = 20) -> str:
     try:
         response = supabase_admin.table("chat_messages").select("role, content").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
         if not response.data:
@@ -321,11 +332,53 @@ def get_document_context(user_id: str) -> str:
         logger.error(f"Failed to fetch document context: {e}")
         return ""
 
+CRITICAL_DOCUMENTS = {"Passport", "I-20 Form", "SEVIS Fee Receipt"}
+
+def get_missing_critical_documents(user_id: str) -> list:
+    try:
+        response = supabase_admin.table("documents").select("name, collected").eq("user_id", user_id).execute()
+        docs = response.data or []
+        return [d["name"] for d in docs if d["name"] in CRITICAL_DOCUMENTS and not d["collected"]]
+    except Exception as e:
+        logger.error(f"Failed to check critical documents: {e}")
+        return []
+
+def calculate_onboarding_score_quick(profile: dict, user_id: str) -> int:
+    """Mirrors the point weights in GET /onboarding-score, without the
+    per-item breakdown — used where only the total is needed (e.g. deciding
+    whether to nudge in the morning message)."""
+    score = 10
+    if profile.get("major"):
+        score += 10
+    if profile.get("has_ssn"):
+        score += 15
+    if profile.get("has_bank_account"):
+        score += 15
+    if profile.get("push_token"):
+        score += 10
+    if profile.get("notification_time"):
+        score += 5
+    try:
+        docs = supabase_admin.table("documents").select("collected").eq("user_id", user_id).execute().data or []
+        if docs:
+            score += round((len([d for d in docs if d["collected"]]) / len(docs)) * 20)
+    except Exception as e:
+        logger.error(f"Failed to score documents for onboarding nudge: {e}")
+    if profile.get("avatar_url"):
+        score += 5
+    if profile.get("program_start_date") and profile.get("program_end_date"):
+        score += 10
+    return score
+
 def build_student_profile_context(profile: dict, days_until_end: int, opt_window_opens: int, year_name: str) -> str:
     major = profile.get("major") or "Not specified"
     has_ssn = profile.get("has_ssn", False)
     has_bank_account = profile.get("has_bank_account", False)
     cpt_months_used = profile.get("cpt_months_used", 0)
+    biggest_concern = profile.get("biggest_concern")
+    has_job_offer = profile.get("has_job_offer", False)
+    plans_after_graduation = profile.get("plans_after_graduation")
+    work_experience_months = profile.get("work_experience_months")
 
     stem_keywords = ["computer", "science", "engineering", "technology", "mathematics", "biology", "chemistry", "physics", "cybersecurity", "data", "information"]
     is_likely_stem = any(kw in major.lower() for kw in stem_keywords) if major != "Not specified" else False
@@ -352,6 +405,10 @@ Student profile:
 - Has US bank account: {'Yes' if has_bank_account else 'No — may need guidance on opening a bank account'}
 - Full-time CPT months used: {cpt_months_used} months
 - Likely STEM OPT eligible: {'Yes — qualifies for 24-month STEM OPT extension' if is_likely_stem else 'Check with DSO — major may not qualify for STEM OPT'}
+- Biggest concern: {biggest_concern or 'Not specified'}
+- Has a job offer lined up: {'Yes' if has_job_offer else 'No'}
+- Plans after graduation: {plans_after_graduation or 'Not specified'}
+- Prior US work experience: {f'{work_experience_months} months' if work_experience_months else 'None specified'}
 {cpt_risk}"""
 
     return context
@@ -540,6 +597,49 @@ def calculate_program_progress(program_start_date: str, program_end_date: str) -
 def log_security_event(event_type: str, details: str, correlation_id: str = None):
     logger.info(f"SECURITY_EVENT type={event_type} details={details} correlation_id={correlation_id}")
 
+STREAK_MILESTONES = {7, 14, 30, 60}
+
+def update_daily_streak(user_id: str, correlation_id: str = None) -> None:
+    try:
+        today = date.today()
+        resp = supabase_admin.table("users").select("streak_days, last_active_date, push_token, name").eq("id", user_id).execute()
+        if not resp.data:
+            return
+        row = resp.data[0]
+        last_active = row.get("last_active_date")
+        current_streak = row.get("streak_days") or 0
+
+        if last_active:
+            last_date = date.fromisoformat(str(last_active)[:10])
+            if last_date == today:
+                return
+            new_streak = current_streak + 1 if (today - last_date).days == 1 else 1
+        else:
+            new_streak = 1
+
+        supabase_admin.table("users").update({
+            "streak_days": new_streak,
+            "last_active_date": today.isoformat()
+        }).eq("id", user_id).execute()
+
+        if new_streak in STREAK_MILESTONES and row.get("push_token"):
+            try:
+                httpx.post(
+                    EXPO_PUSH_URL,
+                    json={
+                        "to": row["push_token"],
+                        "title": "Arriv0 Streak",
+                        "body": f"You're on a {new_streak}-day streak, {row.get('name') or 'there'}! Keep it up.",
+                        "sound": "default"
+                    },
+                    headers={"Content-Type": "application/json"},
+                    timeout=5.0
+                )
+            except Exception as e:
+                logger.error(f"Failed to send streak milestone notification: {e}")
+    except Exception as e:
+        logger.error(f"Streak update failed: {type(e).__name__}: {e} correlation_id={correlation_id}")
+
 def verify_token(authorization: Optional[str] = None, correlation_id: str = None):
     if not authorization or not authorization.startswith("Bearer "):
         log_security_event("UNAUTHORIZED", "Missing or malformed token", correlation_id)
@@ -548,6 +648,7 @@ def verify_token(authorization: Optional[str] = None, correlation_id: str = None
     try:
         user = supabase.auth.get_user(token)
         logger.info(f"Token verified successfully for user")
+        update_daily_streak(user.user.id, correlation_id)
         return user
     except Exception as e:
         logger.error(f"Token verification error: {type(e).__name__}: {str(e)[:100]}")
@@ -612,6 +713,38 @@ async def generate_morning_message(student: dict) -> str:
     recent_news = get_recent_news_context()
     student_context = build_student_profile_context(student, days_until_end, opt_window_opens, year_name)
 
+    cpt_months_used = student.get("cpt_months_used") or 0
+    opt_window_open_now = opt_window_opens <= 0 and days_until_end > 0
+    opt_window_opens_soon = 0 < opt_window_opens <= 7
+    is_urgent = opt_window_open_now or opt_window_opens_soon or cpt_months_used >= 9
+
+    if is_urgent:
+        day_theme = "URGENT: an OPT or CPT deadline needs this student's attention right now. This message MUST lead with that urgency — ignore the day-of-week theme below entirely and focus the whole message on it."
+    elif day_of_week == "Monday":
+        day_theme = "It's Monday — open with a motivating, energizing tone for the week ahead."
+    elif day_of_week == "Friday":
+        day_theme = "It's Friday — recap the progress the student has made this week and encourage them into the weekend."
+    else:
+        day_theme = "A normal weekday — keep the usual warm, practical tone."
+
+    user_id = student.get("id")
+    nudges = []
+    if user_id:
+        created_at = student.get("created_at")
+        if created_at:
+            try:
+                signup_date = date.fromisoformat(str(created_at)[:10])
+                days_since_signup = (today - signup_date).days
+                if days_since_signup >= 7 and calculate_onboarding_score_quick(student, user_id) < 50:
+                    nudges.append("This student's Arriv0 profile is still under 50% complete a week after signing up. Gently nudge them to finish setting up their profile in the app.")
+            except ValueError:
+                pass
+        missing_docs = get_missing_critical_documents(user_id)
+        if missing_docs:
+            nudges.append(f"This student is still missing these critical documents: {', '.join(missing_docs)}. Remind them to upload or check these off in the Documents tab.")
+
+    nudge_block = ("\n" + "\n".join(nudges)) if nudges else ""
+
     prompt = f"""You are Arriv0, a knowledgeable and friendly AI companion for international students on F1 visas in the United States.
 
 Use this official immigration knowledge to ground your response:
@@ -620,6 +753,9 @@ Use this official immigration knowledge to ground your response:
 {student_context}
 - Today is: {day_of_week}
 - Week number: {week_number}
+
+TONE FOR TODAY: {day_theme}
+{nudge_block}
 
 Write a short warm personalized morning notification message under 100 words. Use the student's specific situation to give genuinely useful advice. If there are recent immigration updates that affect this student mention the most important one briefly. Address by first name. No bullet points. Plain English."""
 
@@ -686,6 +822,12 @@ async def send_opt_countdown_alerts():
             return
         for user in users.data:
             try:
+                cpt_months_used = user.get("cpt_months_used") or 0
+                if cpt_months_used >= 9:
+                    cpt_message = f"Hey {user['name']}! You've used {cpt_months_used} months of full-time CPT. Reaching 12 months permanently ends your OPT eligibility — talk to your DSO before authorizing any more CPT."
+                    await send_push_notification(user["push_token"], "Arriv0 CPT Risk Alert", cpt_message)
+                    logger.info(f"CPT risk alert sent to {user['name']} — {cpt_months_used} months used")
+
                 if not user.get("program_end_date"):
                     continue
                 end_date = date.fromisoformat(str(user["program_end_date"])[:10])
@@ -927,13 +1069,15 @@ async def process_and_notify():
     for item in news_items:
         summary = await summarize_news_item(item["title"], item["summary"], item["link"])
         affects_f1, tag = classify_news(item["title"], item["summary"])
+        urgent = is_urgent_news(item["title"], item["summary"])
         summarized_news.append({
             "title": item["title"],
             "body": summary,
             "link": item["link"],
             "affects_f1": affects_f1,
             "tag": tag,
-            "image_url": item.get("image_url", "")
+            "image_url": item.get("image_url", ""),
+            "urgent": urgent
         })
         if affects_f1:
             existing = supabase_admin.table("news").select("id").eq("title", item["title"]).execute()
@@ -944,7 +1088,8 @@ async def process_and_notify():
                     "affects_f1": affects_f1,
                     "tag": tag,
                     "link": item["link"],
-                    "image_url": item.get("image_url", "")
+                    "image_url": item.get("image_url", ""),
+                    "urgent": urgent
                 }).execute()
 
     users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
@@ -963,6 +1108,51 @@ async def process_and_notify():
 
     logger.info("News fetch and notification job complete")
 
+async def check_urgent_news():
+    """Runs every 30 minutes, independently of the 3-hour process_and_notify
+    job, so genuinely urgent articles reach affected students fast instead of
+    waiting for the next regular cycle. Only ever acts on articles not
+    already in the news table, so the same urgent item is inserted and
+    pushed exactly once, not re-blasted every 30 minutes it keeps showing up
+    in NewsAPI's results."""
+    logger.info("Running urgent news check")
+    try:
+        news_items = await fetch_uscis_news()
+        if not news_items:
+            return
+
+        for item in news_items:
+            affects_f1, tag = classify_news(item["title"], item["summary"])
+            if not affects_f1 or not is_urgent_news(item["title"], item["summary"]):
+                continue
+
+            existing = supabase_admin.table("news").select("id").eq("title", item["title"]).execute()
+            if existing.data:
+                continue
+
+            summary = await summarize_news_item(item["title"], item["summary"], item["link"])
+            supabase_admin.table("news").insert({
+                "title": item["title"],
+                "body": summary,
+                "affects_f1": affects_f1,
+                "tag": tag,
+                "link": item["link"],
+                "image_url": item.get("image_url", ""),
+                "urgent": True
+            }).execute()
+            logger.info(f"Urgent news item found: {item['title']}")
+
+            users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
+            if not users.data:
+                continue
+            for user in users.data:
+                personalized = await personalize_news_for_student(item["title"], summary, item["link"], user)
+                if personalized:
+                    await send_push_notification(user["push_token"], "Arriv0 Urgent Immigration Update", personalized)
+                    logger.info(f"Urgent news notification sent to {user['name']}")
+    except Exception as e:
+        logger.error(f"Urgent news check failed: {e}")
+
 class ProfileFields(BaseModel):
     name: str
     school: str
@@ -974,6 +1164,10 @@ class ProfileFields(BaseModel):
     has_bank_account: Optional[bool] = False
     cpt_months_used: Optional[int] = 0
     referral_code: Optional[str] = None
+    biggest_concern: Optional[str] = None
+    has_job_offer: Optional[bool] = False
+    plans_after_graduation: Optional[str] = None
+    work_experience_months: Optional[int] = 0
 
     @validator('name')
     def name_must_be_valid(cls, v):
@@ -1020,6 +1214,24 @@ class ProfileFields(BaseModel):
         if v is not None and (v < 0 or v > 24):
             raise ValueError('CPT months used must be between 0 and 24')
         return v
+
+    @validator('work_experience_months')
+    def work_experience_must_be_valid(cls, v):
+        if v is not None and (v < 0 or v > 120):
+            raise ValueError('Work experience months must be between 0 and 120')
+        return v
+
+    @validator('biggest_concern')
+    def biggest_concern_must_be_valid(cls, v):
+        if v and len(v) > 500:
+            raise ValueError('Biggest concern must be under 500 characters')
+        return v.strip() if v else v
+
+    @validator('plans_after_graduation')
+    def plans_after_graduation_must_be_valid(cls, v):
+        if v and len(v) > 500:
+            raise ValueError('Plans after graduation must be under 500 characters')
+        return v.strip() if v else v
 
 class SignupRequest(ProfileFields):
     email: EmailStr
@@ -1094,12 +1306,34 @@ class UpdateProfileRequest(BaseModel):
     has_i765_submitted: Optional[bool] = None
     citizenship_country: Optional[str] = None
     visa_expiry_date: Optional[str] = None
+    biggest_concern: Optional[str] = None
+    has_job_offer: Optional[bool] = None
+    plans_after_graduation: Optional[str] = None
+    work_experience_months: Optional[int] = None
 
     @validator('name')
     def name_must_be_valid(cls, v):
         if v and len(v) > 100:
             raise ValueError('Name must be under 100 characters')
         return v.strip() if v else v
+
+    @validator('biggest_concern')
+    def biggest_concern_must_be_valid(cls, v):
+        if v and len(v) > 500:
+            raise ValueError('Biggest concern must be under 500 characters')
+        return v.strip() if v else v
+
+    @validator('plans_after_graduation')
+    def plans_after_graduation_must_be_valid(cls, v):
+        if v and len(v) > 500:
+            raise ValueError('Plans after graduation must be under 500 characters')
+        return v.strip() if v else v
+
+    @validator('work_experience_months')
+    def work_experience_must_be_valid(cls, v):
+        if v is not None and (v < 0 or v > 120):
+            raise ValueError('Work experience months must be between 0 and 120')
+        return v
 
     @validator('school')
     def school_must_be_valid(cls, v):
@@ -1156,11 +1390,13 @@ class FeedbackRequest(BaseModel):
 async def startup_event():
     scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
     scheduler.add_job(process_and_notify, CronTrigger(hour="*/3"))
+    scheduler.add_job(check_urgent_news, CronTrigger(minute="*/30"))
     scheduler.add_job(send_opt_countdown_alerts, CronTrigger(hour=9, minute=0))
     scheduler.add_job(send_internship_notifications, CronTrigger(hour=10, minute=0))
     scheduler.start()
     logger.info("Morning notification scheduler started — checking every minute")
-    logger.info("News fetch scheduler started — running every hour")
+    logger.info("News fetch scheduler started — running every 3 hours")
+    logger.info("Urgent news scheduler started — checking every 30 minutes")
     logger.info("OPT countdown alert scheduler started — running daily at 9am UTC")
     logger.info("Internship match scheduler started — running daily at 10am UTC")
 
@@ -1216,7 +1452,11 @@ def _create_user_profile(user_id: str, data: ProfileFields) -> None:
         "has_ssn": data.has_ssn,
         "has_bank_account": data.has_bank_account,
         "cpt_months_used": data.cpt_months_used,
-        "referred_by": data.referral_code.upper() if data.referral_code else None
+        "referred_by": data.referral_code.upper() if data.referral_code else None,
+        "biggest_concern": data.biggest_concern,
+        "has_job_offer": data.has_job_offer,
+        "plans_after_graduation": data.plans_after_graduation,
+        "work_experience_months": data.work_experience_months
     }).execute()
 
     for doc in DEFAULT_DOCUMENTS:
@@ -1608,6 +1848,7 @@ def get_news(request: Request, authorization: Optional[str] = Header(None), page
     except Exception as e:
         logger.error(f"News fetch error: {type(e).__name__} correlation_id={correlation_id}")
 
+    logger.error("NEWS_FALLBACK_TRIGGERED: Supabase query failed, serving placeholder articles")
     today_str = date.today().strftime("%B %d %Y")
     news = [
         {"title": "USCIS OPT processing times now 3 to 4 months", "body": "New data shows average processing has increased. Submit your application on the first day your window opens to avoid gaps in work authorization.", "affects_f1": True, "tag": "OPT", "link": "https://www.uscis.gov/tools/processing-times", "image_url": ""},

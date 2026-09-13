@@ -115,3 +115,20 @@ CREATE TABLE IF NOT EXISTS internships_seen (
 );
 
 ALTER TABLE internships_seen ENABLE ROW LEVEL SECURITY;
+
+-- Migration: streak tracking, urgent news (2026-09-12)
+-- (biggest_concern/has_job_offer/plans_after_graduation/work_experience_months
+-- already exist on the live users table — SignupRequest/UpdateProfileRequest
+-- and build_student_profile_context() were updated in main.py to use them,
+-- no migration needed for those.)
+-- streak_days/last_active_date back the daily-streak feature: updated on
+-- every authenticated request (see update_daily_streak() in main.py), reset
+-- to 1 after a missed day, milestone push at 7/14/30/60 days.
+-- news.urgent flags articles the 30-minute urgent-news job should push
+-- immediately, independent of the regular 3-hour news cycle.
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS streak_days integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS last_active_date date;
+
+ALTER TABLE news
+  ADD COLUMN IF NOT EXISTS urgent boolean DEFAULT false;
