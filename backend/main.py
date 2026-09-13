@@ -2092,26 +2092,37 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
 
     profile = get_profile_from_db(user_id, correlation_id)
     major = (profile.get("major") or "").strip()
-    base_query = query.strip() if query and query.strip() else (major if major else "internship")
+    has_custom_query = bool(query and query.strip())
+    base_query = query.strip() if has_custom_query else (major if major else "internship")
     search_terms = f"{base_query} intern"
     page = max(page, 1)
+
+    # Adzuna's what/what_or only search job title + description text — never
+    # the structured employer field — so no amount of broadening finds a
+    # company's own postings unless they happen to repeat the company name in
+    # free text. A typed-in search like "Microsoft" is almost always a company
+    # name, so route it through Adzuna's dedicated `company` filter and
+    # require "intern" via `what` to stay on-topic. With no custom query
+    # (major-driven default) there's no single company to target, so broaden
+    # across title/description with what_or instead.
+    adzuna_params = {
+        "app_id": ADZUNA_APP_ID,
+        "app_key": ADZUNA_APP_KEY,
+        "results_per_page": 20,
+        "sort_by": "date",
+        "content-type": "application/json",
+    }
+    if has_custom_query:
+        adzuna_params["company"] = base_query
+        adzuna_params["what"] = "intern"
+    else:
+        adzuna_params["what_or"] = search_terms
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 f"https://api.adzuna.com/v1/api/jobs/us/search/{page}",
-                params={
-                    "app_id": ADZUNA_APP_ID,
-                    "app_key": ADZUNA_APP_KEY,
-                    "results_per_page": 20,
-                    # what_or OR-matches each word across title, description, and
-                    # company — plain "what" was requiring the literal phrase in
-                    # the title, so searching "Microsoft" missed real Microsoft
-                    # postings whose title didn't contain the word.
-                    "what_or": search_terms,
-                    "sort_by": "date",
-                    "content-type": "application/json",
-                },
+                params=adzuna_params,
             )
         if response.status_code != 200:
             logger.error(f"Adzuna error: {response.status_code} correlation_id={correlation_id}")
