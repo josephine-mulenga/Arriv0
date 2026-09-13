@@ -69,12 +69,23 @@ export async function finishOAuthSignIn(
   loginWithOAuthSession: (session: Session) => Promise<void>
 ) {
   await loginWithOAuthSession(session);
+  const name = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '';
+
   try {
-    await getUserProfile(session.user.id, session.access_token);
-    router.replace('/(tabs)');
+    const profile = await getUserProfile(session.user.id, session.access_token);
+    // A row existing isn't the same as onboarding being done — a profile
+    // created before school/program dates were required (or from an
+    // earlier partial attempt) would otherwise skip straight to Home with
+    // that information missing. Only treat it as complete once the fields
+    // oauth-complete-profile.tsx actually requires are all present.
+    const isComplete = !!(profile?.school && profile?.program_start_date && profile?.program_end_date);
+    if (isComplete) {
+      router.replace('/(tabs)');
+    } else {
+      router.replace({ pathname: '/oauth-complete-profile', params: { name } });
+    }
   } catch (err: any) {
     if (err?.status === 404) {
-      const name = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '';
       router.replace({ pathname: '/oauth-complete-profile', params: { name } });
     } else {
       throw err;
