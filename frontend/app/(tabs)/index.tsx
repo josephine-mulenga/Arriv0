@@ -12,6 +12,7 @@ import {
   CheckCircleIcon,
   CircleIcon,
   ClockIcon,
+  FireIcon,
 } from 'phosphor-react-native';
 
 import { getAIStatus, getUserProfile, getTimeline, getDocuments } from '@/api';
@@ -25,6 +26,7 @@ interface Profile {
   name?: string;
   program_start_date?: string;
   program_end_date?: string;
+  streak_days?: number;
 }
 
 function greeting(): string {
@@ -79,7 +81,15 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>
               {greeting()}{profile?.name ? `, ${profile.name.split(' ')[0]}` : ''} 👋
             </Text>
-            <Text style={styles.subtitle}>Here&apos;s your journey for today.</Text>
+            <View style={styles.subtitleRow}>
+              <Text style={styles.subtitle}>Here&apos;s your journey for today.</Text>
+              {!!profile?.streak_days && profile.streak_days > 0 && (
+                <View style={styles.streakBadge}>
+                  <FireIcon size={12} color={Palette.amber} weight="fill" />
+                  <Text style={styles.streakText}>{profile.streak_days}</Text>
+                </View>
+              )}
+            </View>
           </View>
           <Pressable style={styles.iconButton} onPress={() => setMenuOpen(true)}>
             <ListIcon size={19} color={Palette.inkBody} />
@@ -189,11 +199,30 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: Palette.ink,
   },
-  subtitle: {
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginTop: 2,
+  },
+  subtitle: {
     fontFamily: Type.bodyRegular,
     fontSize: 13,
     color: Palette.inkFaint,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Palette.amberTint,
+    borderRadius: 8,
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+  },
+  streakText: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11.5,
+    color: Palette.amber,
   },
   iconButton: {
     width: 36,

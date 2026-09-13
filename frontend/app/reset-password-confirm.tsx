@@ -6,6 +6,7 @@ import { LockSimpleIcon, EyeIcon, EyeSlashIcon } from 'phosphor-react-native';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { supabase } from '@/supabase';
+import { useAuth } from '@/AuthContext';
 
 // Mirrors the backend's password_must_be_strong validator (backend/main.py)
 // for consistent UX — this submission goes straight to Supabase, not
@@ -18,6 +19,7 @@ const passwordRules = [
 ];
 
 export default function ResetPasswordConfirmScreen() {
+  const { login } = useAuth();
   const { code } = useLocalSearchParams<{ code?: string }>();
   const [checking, setChecking] = useState(true);
   const [linkValid, setLinkValid] = useState(false);
@@ -59,8 +61,20 @@ export default function ResetPasswordConfirmScreen() {
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
+
+      // Grab the email before signing out of the Supabase client session —
+      // our own backend session (AuthContext) is a separate token exchange,
+      // not something Supabase's updateUser gives us directly.
+      const { data: userData } = await supabase.auth.getUser();
+      const email = userData.user?.email;
       await supabase.auth.signOut();
-      setDone(true);
+
+      if (email) {
+        await login(email, password);
+        router.replace('/(tabs)');
+      } else {
+        setDone(true);
+      }
     } catch (err: any) {
       setError(err?.message || 'Could not update your password. Please try again.');
     } finally {
@@ -147,7 +161,7 @@ export default function ResetPasswordConfirmScreen() {
           </Pressable>
         </View>
         {confirmPassword.length > 0 && !passwordsMatch && (
-          <Text style={styles.fieldError}>Passwords don't match</Text>
+          <Text style={styles.fieldError}>Passwords don&apos;t match</Text>
         )}
 
         <View style={styles.checklist}>

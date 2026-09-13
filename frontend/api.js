@@ -32,7 +32,7 @@ const handleResponse = async (response) => {
   return data;
 };
 
-export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate, major, hasSsn, hasBankAccount, cptMonthsUsed, referralCode) => {
+export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate, major, hasSsn, hasBankAccount, cptMonthsUsed, referralCode, biggestConcern, hasJobOffer, plansAfterGraduation, workExperienceMonths) => {
   const response = await fetch(`${BASE_URL}/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -48,7 +48,11 @@ export const signup = async (email, password, name, school, visaType, programSta
       has_ssn: hasSsn,
       has_bank_account: hasBankAccount,
       cpt_months_used: cptMonthsUsed,
-      referral_code: referralCode || undefined
+      referral_code: referralCode || undefined,
+      biggest_concern: biggestConcern || undefined,
+      has_job_offer: hasJobOffer,
+      plans_after_graduation: plansAfterGraduation || undefined,
+      work_experience_months: workExperienceMonths
     })
   });
   const data = await response.json();
@@ -365,6 +369,40 @@ export const getInternships = async (token, { query, page } = {}) => {
   if (page) params.set('page', String(page));
   const search = params.toString();
   const response = await fetch(`${BASE_URL}/internships${search ? `?${search}` : ''}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const searchInternshipCompanies = async (q, token) => {
+  const response = await fetch(`${BASE_URL}/internships/company-search?q=${encodeURIComponent(q)}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const watchCompany = async (company, token) => {
+  const response = await fetch(`${BASE_URL}/internships/watch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ company })
+  });
+  return handleResponse(response);
+};
+
+export const getWatchedCompanies = async (token) => {
+  const response = await fetch(`${BASE_URL}/internships/watched`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const unwatchCompany = async (company, token) => {
+  const response = await fetch(`${BASE_URL}/internships/watch/${encodeURIComponent(company)}`, {
+    method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return handleResponse(response);

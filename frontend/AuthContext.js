@@ -66,7 +66,11 @@ export const AuthProvider = ({ children }) => {
     hasSsn,
     hasBankAccount,
     cptMonthsUsed,
-    referralCode
+    referralCode,
+    biggestConcern,
+    hasJobOffer,
+    plansAfterGraduation,
+    workExperienceMonths
   ) => {
     try {
       setLoading(true);
@@ -83,7 +87,11 @@ export const AuthProvider = ({ children }) => {
         hasSsn,
         hasBankAccount,
         cptMonthsUsed,
-        referralCode
+        referralCode,
+        biggestConcern,
+        hasJobOffer,
+        plansAfterGraduation,
+        workExperienceMonths
       );
       return data;
     } catch (err) {

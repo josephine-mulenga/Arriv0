@@ -23,8 +23,24 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { PressableScale } from '@/components/ui/pressable-scale';
 import { AnimatedCheck } from '@/components/ui/animated-check';
 import { DatePickerField } from '@/components/ui/date-picker-field';
+import { Chip } from '@/components/ui/chip';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
+
+const concernOptions = [
+  'Finding a job or internship',
+  'Meeting visa deadlines',
+  'Affording tuition or living costs',
+  'Adjusting to a new culture',
+  'Something else',
+];
+
+const afterGraduationOptions = [
+  'Apply for OPT and work in the US',
+  'Continue to graduate school',
+  'Return to my home country',
+  'Not sure yet',
+];
 
 const visaTypes: { label: string; value: 'F1' | 'J1' | 'M1' }[] = [
   { label: 'F-1', value: 'F1' },
@@ -99,6 +115,11 @@ export default function PersonalizeProfileScreen() {
   const [endDay, setEndDay] = useState('');
   const [endYear, setEndYear] = useState('');
 
+  const [biggestConcern, setBiggestConcern] = useState<string | null>(null);
+  const [hasJobOffer, setHasJobOffer] = useState<boolean | null>(null);
+  const [plansAfterGraduation, setPlansAfterGraduation] = useState<string | null>(null);
+  const [workExperienceMonths, setWorkExperienceMonths] = useState('');
+
   const [referralCode, setReferralCode] = useState('');
 
   const programStartDate = startYear && startMonth && startDay ? `${startYear}-${startMonth}-${startDay}` : '';
@@ -119,7 +140,11 @@ export default function PersonalizeProfileScreen() {
         undefined,
         undefined,
         undefined,
-        referralCode.trim() || undefined
+        referralCode.trim() || undefined,
+        biggestConcern ?? undefined,
+        hasJobOffer ?? false,
+        plansAfterGraduation ?? undefined,
+        workExperienceMonths ? Number(workExperienceMonths) : 0
       );
       await login(email, password);
       router.replace('/notification-permission');
@@ -247,6 +272,62 @@ export default function PersonalizeProfileScreen() {
         </View>
 
         <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>What&apos;s your biggest concern right now?</Text>
+          <View style={styles.chipWrap}>
+            {concernOptions.map((option) => (
+              <Chip
+                key={option}
+                label={option}
+                selected={biggestConcern === option}
+                onPress={() => setBiggestConcern(option)}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Do you already have a job or internship offer?</Text>
+          <View style={styles.segmentRow}>
+            <PressableScale
+              style={[styles.segment, hasJobOffer === true && styles.segmentSelected]}
+              onPress={() => setHasJobOffer(true)}>
+              <Text style={[styles.segmentText, hasJobOffer === true && styles.segmentTextSelected]}>Yes</Text>
+            </PressableScale>
+            <PressableScale
+              style={[styles.segment, hasJobOffer === false && styles.segmentSelected]}
+              onPress={() => setHasJobOffer(false)}>
+              <Text style={[styles.segmentText, hasJobOffer === false && styles.segmentTextSelected]}>No</Text>
+            </PressableScale>
+          </View>
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>What are your plans after graduation?</Text>
+          <View style={styles.chipWrap}>
+            {afterGraduationOptions.map((option) => (
+              <Chip
+                key={option}
+                label={option}
+                selected={plansAfterGraduation === option}
+                onPress={() => setPlansAfterGraduation(option)}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Months of US work experience (if any)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="0"
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={workExperienceMonths}
+            onChangeText={(v) => setWorkExperienceMonths(v.replace(/[^0-9]/g, ''))}
+            keyboardType="number-pad"
+          />
+        </View>
+
+        <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Referral code (optional)</Text>
           <TextInput
             style={styles.input}
@@ -343,6 +424,11 @@ const styles = StyleSheet.create({
   },
   segmentRow: {
     flexDirection: 'row',
+    gap: 8,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   segment: {

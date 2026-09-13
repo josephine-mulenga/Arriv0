@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   BriefcaseIcon,
@@ -6,9 +6,11 @@ import {
   MapPinIcon,
   BuildingsIcon,
   WarningCircleIcon,
+  BellIcon,
+  XIcon,
 } from 'phosphor-react-native';
 
-import { getInternships } from '@/api';
+import { getInternships, searchInternshipCompanies, watchCompany, getWatchedCompanies, unwatchCompany } from '@/api';
 import { useAuth } from '@/AuthContext';
 import { IconTile } from '@/components/ui/icon-tile';
 import { Palette, Spacing, Type } from '@/constants/theme';
@@ -48,8 +50,74 @@ export default function InternshipsScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
 
+  const [companyQuery, setCompanyQuery] = useState('');
+  const [companySuggestions, setCompanySuggestions] = useState<string[]>([]);
+  const [watchedCompanies, setWatchedCompanies] = useState<string[]>([]);
+  const [watching, setWatching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const data = await getWatchedCompanies(token);
+        setWatchedCompanies(data.watched_companies ?? []);
+      } catch {
+        // leave last-known list on failure
+      }
+    })();
+  }, [token]);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const trimmed = companyQuery.trim();
+    debounceRef.current = setTimeout(async () => {
+      if (!token || trimmed.length < 2) {
+        setCompanySuggestions([]);
+        return;
+      }
+      try {
+        const data = await searchInternshipCompanies(trimmed, token);
+        setCompanySuggestions(data.companies ?? []);
+      } catch {
+        setCompanySuggestions([]);
+      }
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [companyQuery, token]);
+
+  const handleWatchCompany = async (company: string) => {
+    if (!token || watching) return;
+    setWatching(true);
+    try {
+      const result = await watchCompany(company, token);
+      setWatchedCompanies(result.watched_companies ?? []);
+      setCompanyQuery('');
+      setCompanySuggestions([]);
+    } catch {
+      // leave the search box as-is so the user can retry
+    } finally {
+      setWatching(false);
+    }
+  };
+
+  const handleUnwatch = async (company: string) => {
+    if (!token) return;
+    const previous = watchedCompanies;
+    setWatchedCompanies((prev) => prev.filter((c) => c !== company));
+    try {
+      const result = await unwatchCompany(company, token);
+      setWatchedCompanies(result.watched_companies ?? []);
+    } catch {
+      setWatchedCompanies(previous);
+    }
+  };
+
   const fetchInternships = async (searchQuery: string, targetPage: number, append: boolean) => {
     if (!token) return;
+    if (!append) setItems(null);
     try {
       const data = await getInternships(token, { query: searchQuery || undefined, page: targetPage });
       setItems((prev) => (append && prev ? [...prev, ...(data.results ?? [])] : data.results ?? []));
@@ -71,12 +139,10 @@ export default function InternshipsScreen() {
 
   useEffect(() => {
     if (!token) return;
-    setItems(null);
     fetchInternships('', 1, false);
   }, [token]);
 
   const handleSearch = () => {
-    setItems(null);
     fetchInternships(query.trim(), 1, false);
   };
 
@@ -119,6 +185,55 @@ export default function InternshipsScreen() {
             eligibility for any specific role. Check your own authorization status with your DSO
             or in Timeline before applying.
           </Text>
+        </View>
+
+        <View style={styles.watchSection}>
+          <View style={styles.watchSectionHeader}>
+            <BellIcon size={16} color={Palette.purple} weight="fill" />
+            <Text style={styles.sectionTitle}>Watch Companies</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>
+            You&apos;ll be notified within 30 minutes of new postings from companies you watch.
+          </Text>
+
+          <View style={styles.watchSearchBar}>
+            <MagnifyingGlassIcon size={16} color={Palette.inkFaint} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for a company to watch"
+              placeholderTextColor={Palette.inkPlaceholder}
+              value={companyQuery}
+              onChangeText={setCompanyQuery}
+            />
+          </View>
+
+          {companySuggestions.length > 0 && (
+            <View style={styles.suggestionDropdown}>
+              {companySuggestions.map((name, index) => (
+                <Pressable
+                  key={name}
+                  style={[styles.suggestionRow, index === companySuggestions.length - 1 && styles.rowLast]}
+                  disabled={watching}
+                  onPress={() => handleWatchCompany(name)}>
+                  <BuildingsIcon size={15} color={Palette.inkFaint} />
+                  <Text style={styles.suggestionText}>{name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {watchedCompanies.length > 0 && (
+            <View style={styles.watchedChipsRow}>
+              {watchedCompanies.map((company) => (
+                <View key={company} style={styles.watchedChip}>
+                  <Text style={styles.watchedChipText}>{company}</Text>
+                  <Pressable onPress={() => handleUnwatch(company)} hitSlop={8}>
+                    <XIcon size={12} color={Palette.purple} weight="bold" />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {notConfigured && (
@@ -257,6 +372,81 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: Palette.inkMuted,
+  },
+  watchSection: {
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+  },
+  watchSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 15,
+    color: Palette.ink,
+  },
+  sectionSubtitle: {
+    marginTop: 4,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: Palette.inkMuted,
+  },
+  watchSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    backgroundColor: Palette.dividerLight,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 42,
+  },
+  suggestionDropdown: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: Palette.divider,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.divider,
+  },
+  suggestionText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 13.5,
+    color: Palette.ink,
+  },
+  watchedChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  watchedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Palette.purpleTint,
+    borderRadius: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  watchedChipText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 12.5,
+    color: Palette.purple,
   },
   loadingText: {
     fontFamily: Type.bodyRegular,
