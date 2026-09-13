@@ -232,10 +232,8 @@ def classify_news(title: str, summary: str) -> tuple:
         return False, "General news"
 
 URGENT_NEWS_KEYWORDS = [
-    "executive order", "effective immediately", "effective today", "immediate effect",
-    "suspend", "suspended", "suspension", "travel ban", "revoked", "revocation",
-    "emergency", "shut down", "shutdown", "terminated", "termination",
-    "deadline moved", "new deadline", "expedited", "urgent", "immediately halt"
+    "urgent", "emergency", "immediate", "suspended", "terminated",
+    "revoked", "deadline", "policy change", "effective immediately"
 ]
 
 def is_urgent_news(title: str, summary: str) -> bool:
@@ -920,17 +918,9 @@ async def send_internship_notifications():
     except Exception as e:
         logger.error(f"Internship notification job failed: {e}")
 
-async def fetch_uscis_news():
+async def fetch_news_for_queries(queries: list, page_size: int = 3, max_items: int = 8) -> list:
     try:
         news_items = []
-        queries = [
-            "USCIS OPT optional practical training international student",
-            "F1 visa student immigration SEVIS work authorization",
-            "STEM OPT extension international student employment",
-            "CPT curricular practical training F1 student",
-            "international student visa United States university",
-            "immigration policy student visa 2026",
-        ]
         async with httpx.AsyncClient(timeout=10.0) as client:
             for query in queries:
                 try:
@@ -940,7 +930,7 @@ async def fetch_uscis_news():
                             "q": query,
                             "language": "en",
                             "sortBy": "publishedAt",
-                            "pageSize": 3,
+                            "pageSize": page_size,
                             "apiKey": NEWS_API_KEY
                         },
                         headers={"User-Agent": "Arriv0/1.0"}
@@ -984,7 +974,7 @@ async def fetch_uscis_news():
                 unique_items.append(item)
 
         logger.info(f"Fetched {len(unique_items)} relevant news items")
-        return unique_items[:8]
+        return unique_items[:max_items]
 
     except httpx.TimeoutException:
         logger.error("NewsAPI request timed out")
@@ -992,6 +982,25 @@ async def fetch_uscis_news():
     except Exception as e:
         logger.error(f"Failed to fetch news: {e}")
         return []
+
+async def fetch_uscis_news():
+    return await fetch_news_for_queries([
+        "USCIS OPT optional practical training international student",
+        "F1 visa student immigration SEVIS work authorization",
+        "STEM OPT extension international student employment",
+        "CPT curricular practical training F1 student",
+        "international student visa United States university",
+        "immigration policy student visa 2026",
+    ], page_size=3, max_items=8)
+
+async def fetch_urgent_news():
+    # Free-tier NewsAPI budget: 2 queries here every 2 hours (24/day) plus
+    # fetch_uscis_news's 6 queries every 3 hours (48/day) = 72/day, safely
+    # under the 100/day free-tier cap.
+    return await fetch_news_for_queries([
+        "USCIS F1 visa urgent policy change",
+        "OPT CPT SEVIS emergency update",
+    ], page_size=5, max_items=6)
 
 async def summarize_news_item(title: str, summary: str, link: str):
     safe_title = sanitize_input(title)
@@ -1109,15 +1118,16 @@ async def process_and_notify():
     logger.info("News fetch and notification job complete")
 
 async def check_urgent_news():
-    """Runs every 30 minutes, independently of the 3-hour process_and_notify
-    job, so genuinely urgent articles reach affected students fast instead of
-    waiting for the next regular cycle. Only ever acts on articles not
-    already in the news table, so the same urgent item is inserted and
-    pushed exactly once, not re-blasted every 30 minutes it keeps showing up
-    in NewsAPI's results."""
+    """Runs every 2 hours, independently of the 3-hour process_and_notify
+    job, so genuinely urgent articles reach affected students faster than
+    waiting for the next regular cycle. Uses only 2 narrowly-targeted
+    NewsAPI queries (fetch_urgent_news) to stay within the free tier's
+    100 requests/day. Only ever acts on articles not already in the news
+    table, so the same urgent item is inserted and pushed exactly once, not
+    re-blasted every run it keeps showing up in NewsAPI's results."""
     logger.info("Running urgent news check")
     try:
-        news_items = await fetch_uscis_news()
+        news_items = await fetch_urgent_news()
         if not news_items:
             return
 
@@ -1390,13 +1400,13 @@ class FeedbackRequest(BaseModel):
 async def startup_event():
     scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
     scheduler.add_job(process_and_notify, CronTrigger(hour="*/3"))
-    scheduler.add_job(check_urgent_news, CronTrigger(minute="*/30"))
+    scheduler.add_job(check_urgent_news, CronTrigger(hour="*/2"))
     scheduler.add_job(send_opt_countdown_alerts, CronTrigger(hour=9, minute=0))
     scheduler.add_job(send_internship_notifications, CronTrigger(hour=10, minute=0))
     scheduler.start()
     logger.info("Morning notification scheduler started — checking every minute")
     logger.info("News fetch scheduler started — running every 3 hours")
-    logger.info("Urgent news scheduler started — checking every 30 minutes")
+    logger.info("Urgent news scheduler started — checking every 2 hours")
     logger.info("OPT countdown alert scheduler started — running daily at 9am UTC")
     logger.info("Internship match scheduler started — running daily at 10am UTC")
 
