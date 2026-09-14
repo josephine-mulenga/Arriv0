@@ -26,6 +26,7 @@ import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Chip } from '@/components/ui/chip';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
+import { takePendingPassword } from '@/utils/signupDraft';
 
 const concernOptions = [
   'Finding a job or internship',
@@ -91,11 +92,11 @@ function InlineDropdown({
 }
 
 export default function PersonalizeProfileScreen() {
-  const { name, email, password } = useLocalSearchParams<{
+  const { name, email } = useLocalSearchParams<{
     name: string;
     email: string;
-    password: string;
   }>();
+  const [password] = useState(() => takePendingPassword() ?? '');
   const { signup, login, loading, error } = useAuth();
 
   const [school, setSchool] = useState('');

@@ -14,6 +14,7 @@ import {
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { AnimatedCheck } from '@/components/ui/animated-check';
 import { Palette, Radius, Type } from '@/constants/theme';
+import { setPendingPassword } from '@/utils/signupDraft';
 
 // Mirrors the backend's password_must_be_strong validator (backend/main.py) exactly —
 // the design spec shows only the first three rows, but the API rejects a password
@@ -40,9 +41,10 @@ export default function SignupScreen() {
   const canContinue = name.trim().length > 0 && isEmailValid && isPasswordValid;
 
   const handleContinue = () => {
+    setPendingPassword(password);
     router.push({
       pathname: '/personalize-profile',
-      params: { name, email, password },
+      params: { name, email },
     });
   };
 

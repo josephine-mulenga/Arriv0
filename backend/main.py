@@ -2193,7 +2193,8 @@ def clear_chat_history(request: Request, authorization: Optional[str] = Header(N
 @limiter.limit("5/minute")
 async def trigger_news_fetch(request: Request, background_tasks: BackgroundTasks, authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
-    verify_token(authorization, correlation_id)
+    verified = verify_token(authorization, correlation_id)
+    require_admin(verified, correlation_id)
     background_tasks.add_task(process_and_notify)
     return {"message": "News fetch and notification job started in background"}
 
