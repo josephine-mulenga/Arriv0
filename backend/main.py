@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Header, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -373,9 +373,9 @@ def build_student_profile_context(profile: dict, days_until_end: int, opt_window
     has_ssn = profile.get("has_ssn", False)
     has_bank_account = profile.get("has_bank_account", False)
     cpt_months_used = profile.get("cpt_months_used", 0)
-    biggest_concern = profile.get("biggest_concern")
+    biggest_concern = sanitize_input(profile.get("biggest_concern"))
     has_job_offer = profile.get("has_job_offer", False)
-    plans_after_graduation = profile.get("plans_after_graduation")
+    plans_after_graduation = sanitize_input(profile.get("plans_after_graduation"))
     work_experience_months = profile.get("work_experience_months")
 
     stem_keywords = ["computer", "science", "engineering", "technology", "mathematics", "biology", "chemistry", "physics", "cybersecurity", "data", "information"]
@@ -1833,7 +1833,7 @@ def get_dso_directory(request: Request, authorization: Optional[str] = Header(No
 
 @app.get("/dso-search")
 @limiter.limit("10/minute")
-def search_dso(request: Request, school: str, authorization: Optional[str] = Header(None)):
+def search_dso(request: Request, school: str = Query(..., max_length=200), authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
     verify_token(authorization, correlation_id)
     school_lower = school.lower().strip()
@@ -1906,16 +1906,26 @@ def delete_bookmark(request: Request, bookmark_id: str, authorization: Optional[
 
 @app.get("/news/search")
 @limiter.limit("20/minute")
-def search_news(request: Request, q: str, authorization: Optional[str] = Header(None)):
+def search_news(request: Request, q: str = Query(..., max_length=200), authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
     verify_token(authorization, correlation_id)
     try:
-        response = supabase_admin.table("news").select("*").or_(
-            f"title.ilike.%{q}%,body.ilike.%{q}%"
-        ).order("created_at", desc=True).limit(20).execute()
+        # Passing q through .ilike(column, value) rather than interpolating it
+        # into a raw .or_() filter string means it's sent as a parameterized
+        # value, not filter grammar - a comma or parenthesis in q used to be
+        # able to inject extra clauses into the filter; now it's just a
+        # literal character being searched for.
+        title_matches = supabase_admin.table("news").select("*").ilike("title", f"%{q}%").execute()
+        body_matches = supabase_admin.table("news").select("*").ilike("body", f"%{q}%").execute()
+
+        merged = {}
+        for row in (title_matches.data or []) + (body_matches.data or []):
+            merged[row["id"]] = row
+        results = sorted(merged.values(), key=lambda r: r.get("created_at") or "", reverse=True)[:20]
+
         return {
-            "news": response.data or [],
-            "count": len(response.data or []),
+            "news": results,
+            "count": len(results),
             "query": q
         }
     except Exception as e:
@@ -2424,7 +2434,7 @@ def submit_feedback(request: Request, data: FeedbackRequest, authorization: Opti
 
 @app.get("/internships")
 @limiter.limit("20/minute")
-async def get_internships(request: Request, authorization: Optional[str] = Header(None), query: Optional[str] = None, page: int = 1):
+async def get_internships(request: Request, authorization: Optional[str] = Header(None), query: Optional[str] = Query(None, max_length=200), page: int = 1):
     correlation_id = getattr(request.state, "correlation_id", None)
     verified = verify_token(authorization, correlation_id)
     user_id = verified.user.id
@@ -2554,7 +2564,7 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
 
 @app.get("/internships/company-search")
 @limiter.limit("20/minute")
-async def search_companies(request: Request, q: str, authorization: Optional[str] = Header(None)):
+async def search_companies(request: Request, q: str = Query(..., max_length=200), authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
     verify_token(authorization, correlation_id)
 
