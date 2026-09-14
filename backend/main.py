@@ -851,6 +851,12 @@ async def send_opt_countdown_alerts():
     except Exception as e:
         logger.error(f"OPT countdown alert job failed: {e}")
 
+def ensure_intern_keyword(text: str) -> str:
+    """Appends 'intern' to keep an Adzuna search internship-relevant, unless
+    the text already contains the word (e.g. a user searching "software
+    engineering intern" shouldn't get "...intern intern")."""
+    return text if "intern" in text.lower() else f"{text} intern"
+
 async def send_internship_notifications():
     logger.info("Running daily internship match check")
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
@@ -867,7 +873,7 @@ async def send_internship_notifications():
                 major = (user.get("major") or "").strip()
                 if not major:
                     continue
-                search_terms = f"{major} intern"
+                search_terms = ensure_intern_keyword(major)
 
                 async with httpx.AsyncClient(timeout=20.0) as client:
                     response = await client.get(
@@ -919,10 +925,10 @@ async def send_internship_notifications():
 
 async def check_watched_companies():
     """Runs every 30 minutes. For each user with a non-empty watched_companies
-    list and a push token, searches Adzuna per watched company (using
-    what="{company} intern" - Adzuna's company= filter only recognizes a
-    curated set of larger employers and errors out for smaller ones, same
-    issue fixed in /internships/company-search) and notifies about postings
+    list and a push token, searches Adzuna per watched company via
+    ensure_intern_keyword(company) - Adzuna's company= filter only recognizes
+    a curated set of larger employers and errors out for smaller ones, same
+    issue fixed in /internships/company-search - and notifies about postings
     not already in internships_seen — the same dedup table
     send_internship_notifications uses, so a job a user has already been
     told about isn't re-sent whether it was found via their major or a
@@ -953,7 +959,7 @@ async def check_watched_companies():
                                     "app_id": ADZUNA_APP_ID,
                                     "app_key": ADZUNA_APP_KEY,
                                     "results_per_page": 20,
-                                    "what": f"{company} intern",
+                                    "what": ensure_intern_keyword(company),
                                     "sort_by": "date",
                                     "content-type": "application/json",
                                 },
@@ -2429,7 +2435,7 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
     major = (profile.get("major") or "").strip()
     has_custom_query = bool(query and query.strip())
     base_query = query.strip() if has_custom_query else (major if major else "internship")
-    search_terms = f"{base_query} intern"
+    search_terms = ensure_intern_keyword(base_query)
     page = max(page, 1)
 
     base_adzuna_params = {
@@ -2473,7 +2479,7 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
                 # request, so a company-filter error doesn't also break the
                 # title/description results that would have succeeded fine.
                 title_response = await client.get(
-                    url, params={**base_adzuna_params, "what": f"{base_query} intern"}
+                    url, params={**base_adzuna_params, "what": search_terms}
                 )
                 company_response = await client.get(
                     url, params={**base_adzuna_params, "company": base_query, "what": "intern"}
@@ -2572,7 +2578,7 @@ async def search_companies(request: Request, q: str, authorization: Optional[str
                     "app_id": ADZUNA_APP_ID,
                     "app_key": ADZUNA_APP_KEY,
                     "results_per_page": 50,
-                    "what": f"{q} intern",
+                    "what": ensure_intern_keyword(q),
                     "content-type": "application/json",
                 },
             )
