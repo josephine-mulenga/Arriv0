@@ -2431,66 +2431,93 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
     search_terms = f"{base_query} intern"
     page = max(page, 1)
 
-    # Adzuna's `what` only searches job title + description text — never the
-    # structured employer field — so no amount of broadening finds a
-    # company's own postings unless they happen to repeat the company name in
-    # free text. A typed-in search like "Microsoft" is almost always a
-    # company name, so route it through Adzuna's dedicated `company` filter
-    # (verified against production: returns only genuine Microsoft postings)
-    # and require "intern" via `what` to stay on-topic. `what_or` was tried
-    # here first per the original plan, but live testing showed it applies
-    # no filtering at all on this API tier (100k+ unrelated results either
-    # way) — so the major-driven default keeps using plain `what`, which is
-    # what this endpoint used successfully before this change.
-    adzuna_params = {
+    base_adzuna_params = {
         "app_id": ADZUNA_APP_ID,
         "app_key": ADZUNA_APP_KEY,
         "results_per_page": 20,
         "sort_by": "date",
         "content-type": "application/json",
     }
-    if has_custom_query:
-        adzuna_params["company"] = base_query
-        adzuna_params["what"] = "intern"
-    else:
-        adzuna_params["what"] = search_terms
+
+    def extract_job(job: dict) -> dict:
+        company = job.get("company") or {}
+        location = job.get("location") or {}
+        return {
+            "id": job.get("id"),
+            "title": job.get("title"),
+            "company": company.get("display_name"),
+            "location": location.get("display_name"),
+            "description": job.get("description"),
+            "url": job.get("redirect_url"),
+            "created": job.get("created"),
+            "salary_min": job.get("salary_min"),
+            "salary_max": job.get("salary_max"),
+        }
 
     try:
+        url = f"https://api.adzuna.com/v1/api/jobs/us/search/{page}"
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                f"https://api.adzuna.com/v1/api/jobs/us/search/{page}",
-                params=adzuna_params,
-            )
-        if response.status_code != 200:
-            logger.error(f"Adzuna error: {response.status_code} correlation_id={correlation_id}")
-            raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
+            if has_custom_query:
+                # A typed query could be a job title/keyword ("software
+                # engineering intern") or a company name ("Microsoft").
+                # Adzuna's `what` filter only searches title+description text
+                # (a company rarely repeats its own name there), while
+                # `company` only matches the structured employer field
+                # (useless for a job-title phrase) — so query both and merge,
+                # rather than guessing which kind of search the user meant.
+                title_response = await client.get(
+                    url, params={**base_adzuna_params, "what": f"{base_query} intern"}
+                )
+                company_response = await client.get(
+                    url, params={**base_adzuna_params, "company": base_query, "what": "intern"}
+                )
+                for resp in (title_response, company_response):
+                    if resp.status_code != 200:
+                        logger.error(f"Adzuna error: {resp.status_code} correlation_id={correlation_id}")
+                        raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
 
-        data = response.json()
-        results = []
-        for job in data.get("results", []):
-            company = job.get("company") or {}
-            location = job.get("location") or {}
-            results.append({
-                "id": job.get("id"),
-                "title": job.get("title"),
-                "company": company.get("display_name"),
-                "location": location.get("display_name"),
-                "description": job.get("description"),
-                "url": job.get("redirect_url"),
-                "created": job.get("created"),
-                "salary_min": job.get("salary_min"),
-                "salary_max": job.get("salary_max"),
-            })
+                title_data = title_response.json()
+                company_data = company_response.json()
 
-        total = data.get("count", 0)
-        per_page = 20
-        total_pages = -(-total // per_page) if total else 1
+                merged: dict = {}
+                for source in (title_data, company_data):
+                    for job in source.get("results", []):
+                        job_id = job.get("id")
+                        if job_id and job_id not in merged:
+                            merged[job_id] = extract_job(job)
+
+                results = sorted(merged.values(), key=lambda j: j.get("created") or "", reverse=True)[:20]
+                total = max(title_data.get("count", 0), company_data.get("count", 0))
+                # Pagination across a merged, deduped, two-source result set
+                # can't be tracked exactly the way a single query's can — this
+                # treats "either source still has more past this page" as
+                # good enough signal to offer a next page.
+                per_page = 20
+                has_more = any(
+                    d.get("count", 0) > page * per_page for d in (title_data, company_data)
+                )
+                total_pages = -(-total // per_page) if total else 1
+            else:
+                response = await client.get(
+                    url, params={**base_adzuna_params, "what": search_terms}
+                )
+                if response.status_code != 200:
+                    logger.error(f"Adzuna error: {response.status_code} correlation_id={correlation_id}")
+                    raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
+
+                data = response.json()
+                results = [extract_job(job) for job in data.get("results", [])]
+                total = data.get("count", 0)
+                per_page = 20
+                total_pages = -(-total // per_page) if total else 1
+                has_more = page < total_pages
+
         return {
             "results": results,
             "count": total,
             "page": page,
             "total_pages": total_pages,
-            "has_more": page < total_pages,
+            "has_more": has_more,
             "query": search_terms,
             "major_matched": bool(major) and not (query and query.strip()),
         }
