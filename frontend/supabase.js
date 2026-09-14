@@ -2,8 +2,8 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://rbhupvfnxxcrezxobjbz.supabase.co';
-const supabaseAnonKey = 'sb_publishable_2xj1XVBVNKXCJ5bj4WiQMw_HQ82rdrL';
+export const supabaseUrl = 'https://rbhupvfnxxcrezxobjbz.supabase.co';
+export const supabaseAnonKey = 'sb_publishable_2xj1XVBVNKXCJ5bj4WiQMw_HQ82rdrL';
 
 // AsyncStorage's web shim reaches for `window` directly with no guard,
 // which crashes expo-router's web build during its initial Node-side
@@ -18,9 +18,13 @@ const authStorage = Platform.OS === 'web' && typeof window === 'undefined' ? noo
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Only used for the Google/Apple/Microsoft OAuth handshake below — the
-    // rest of the app manages its own session via AuthContext/AsyncStorage
-    // against the custom backend, not this client's session.
+    // This client never holds a logged-in session for email/password users —
+    // login only talks to the custom FastAPI backend, which manages its own
+    // session via AuthContext/AsyncStorage. This client's own auth state is
+    // only exercised by the password-reset code exchange
+    // (reset-password-confirm.tsx). Storage uploads (api.js uploadAvatar)
+    // authenticate by attaching the backend-issued JWT directly to the
+    // request instead of relying on this client's session.
     storage: authStorage,
     autoRefreshToken: true,
     persistSession: true,

@@ -60,7 +60,7 @@ export default function ProfileScreen() {
     if (!user || !token) return;
     setUploading(true);
     try {
-      const publicUrl = await uploadAvatar(user.id, imageUri);
+      const publicUrl = await uploadAvatar(user.id, imageUri, token);
       await updateProfile(user.id, { avatar_url: publicUrl }, token);
       setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
     } catch {

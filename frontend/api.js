@@ -1,5 +1,5 @@
 import { triggerLogout } from './authEvents';
-import { supabase } from './supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 
 const BASE_URL = 'https://arriv0-production.up.railway.app';
 
@@ -397,15 +397,32 @@ export const submitFeedback = async (category, message, token) => {
   return handleResponse(response);
 };
 
-export const uploadAvatar = async (userId, imageUri) => {
+export const uploadAvatar = async (userId, imageUri, token) => {
   const response = await fetch(imageUri);
   const blob = await response.blob();
   const fileExt = imageUri.split('.').pop();
   const filePath = `${userId}/avatar.${fileExt}`;
-  const { error } = await supabase.storage
-    .from('Avatar')
-    .upload(filePath, blob, { upsert: true });
-  if (error) throw error;
+  // supabase.storage's own .upload() sends requests using this client's
+  // session, which is never established for email/password users (see
+  // supabase.js) - it always went out unauthenticated. Now that the Avatar
+  // bucket's policies require auth.uid() to match the upload path, an
+  // unauthenticated request gets rejected. Upload via a raw request instead,
+  // attaching the same Supabase-issued JWT the backend already returned at
+  // login, so the bucket can identify the caller.
+  const uploadResponse = await fetch(`${supabaseUrl}/storage/v1/object/Avatar/${filePath}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'apikey': supabaseAnonKey,
+      'x-upsert': 'true',
+      'Content-Type': blob.type || 'application/octet-stream',
+    },
+    body: blob,
+  });
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(`Avatar upload failed: ${errorText}`);
+  }
   const { data } = supabase.storage
     .from('Avatar')
     .getPublicUrl(filePath);
