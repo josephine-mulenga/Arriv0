@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import Animated, { FadeInUp } from 'react-native-reanimated';
@@ -43,13 +43,21 @@ export default function HomeScreen() {
   const [steps, setSteps] = useState<{ task: string; done: boolean; date_range?: string }[]>([]);
   const [missingDocs, setMissingDocs] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const lastFetchedAt = useRef(0);
 
   // Refetch on every focus, not just on mount — tabs stay mounted when you
   // switch away, so a plain useEffect would keep showing stale data after
   // answering questions elsewhere (e.g. Complete Your Profile, Documents).
+  // Throttled to 15s so quickly flicking between tabs doesn't re-fire all
+  // four calls (including an OpenAI-backed one) every single time —
+  // anything that could actually change this data (leaving the tab bar to
+  // edit a setting, save a profile field, etc.) always takes longer than
+  // that to do, so freshness after a real change is unaffected.
   useFocusEffect(
     useCallback(() => {
       if (!token || !user) return;
+      if (Date.now() - lastFetchedAt.current < 15000) return;
+      lastFetchedAt.current = Date.now();
       getUserProfile(user.id, token).then(setProfile).catch(() => {});
       getAIStatus(token)
         .then((data) => setAiMessage(data.ai_message))

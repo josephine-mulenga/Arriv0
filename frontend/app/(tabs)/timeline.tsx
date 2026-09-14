@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import {
@@ -54,21 +54,7 @@ export default function TimelineScreen() {
   // never auto-marked done just because time has passed.
   const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
 
-  // Refetch on every focus, not just on mount — tabs stay mounted when you
-  // switch away, so a plain useEffect would keep showing stale done/locked
-  // status after answering questions elsewhere (e.g. Complete Your Profile).
-  useFocusEffect(
-    useCallback(() => {
-      if (!token) return;
-      fetchTimeline(selectedYear ?? undefined);
-    }, [token])
-  );
-
-  useEffect(() => {
-    if (!token || selectedYear === null) return;
-    if (data && data.viewing_year_level === selectedYear) return;
-    fetchTimeline(selectedYear);
-  }, [selectedYear]);
+  const lastFetchedAt = useRef(0);
 
   const fetchTimeline = async (year?: number) => {
     try {
@@ -80,6 +66,30 @@ export default function TimelineScreen() {
       setOffline(true);
     }
   };
+
+  // Refetch on every focus, not just on mount — tabs stay mounted when you
+  // switch away, so a plain useEffect would keep showing stale done/locked
+  // status after answering questions elsewhere (e.g. Complete Your Profile).
+  // Throttled to 15s so quickly flicking between tabs doesn't refetch every
+  // time — the separate year-selection effect below is untouched, so
+  // switching year chips always fetches immediately regardless.
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      if (Date.now() - lastFetchedAt.current < 15000) return;
+      lastFetchedAt.current = Date.now();
+      fetchTimeline(selectedYear ?? undefined);
+    }, [token])
+  );
+
+  useEffect(() => {
+    if (!token || selectedYear === null) return;
+    if (data && data.viewing_year_level === selectedYear) return;
+    (async () => {
+      await Promise.resolve();
+      fetchTimeline(selectedYear);
+    })();
+  }, [selectedYear]);
 
   const deadlineKey = data ? `timeline-year-${data.viewing_year_level}` : null;
 
