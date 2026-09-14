@@ -18,11 +18,10 @@ import { WebLandingPage } from '@/components/web-landing-page';
 import { Palette, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { supabase } from '@/supabase';
-import { finishOAuthSignIn } from '@/utils/oauth';
 
 export default function WelcomeScreen() {
-  const { user, initializing, loginWithOAuthSession } = useAuth();
-  const [checkingOAuth, setCheckingOAuth] = useState(Platform.OS === 'web');
+  const { user, initializing } = useAuth();
+  const [checkingRecovery, setCheckingRecovery] = useState(Platform.OS === 'web');
   const float = useSharedValue(0);
 
   useEffect(() => {
@@ -36,35 +35,27 @@ export default function WelcomeScreen() {
     );
   }, []);
 
-  // Google/Apple/Microsoft sign-in (and password-recovery links) are
-  // supposed to land back on /auth-callback or /reset-password-confirm, but
-  // if Supabase's redirect-URL allowlist doesn't exactly match those paths,
-  // it silently falls back to the Site URL instead — which is this screen.
-  // onAuthStateChange is the reliable way to tell the two apart: a recovery
-  // link fires PASSWORD_RECOVERY specifically, and treating it as a normal
-  // login (the previous version of this check did) would silently log the
-  // user in with their OLD password instead of ever prompting for a new
-  // one. INITIAL_SESSION fires once on subscribe with whatever session
-  // already exists, so no separate getSession() call is needed.
+  // A password-reset link is supposed to land on /reset-password-confirm,
+  // but if Supabase's redirect-URL allowlist doesn't exactly match that
+  // path, it silently falls back to the Site URL instead — which is this
+  // screen. onAuthStateChange fires PASSWORD_RECOVERY specifically for a
+  // recovery-link session, and treating it as a normal login would silently
+  // log the user in with their OLD password instead of ever prompting for a
+  // new one.
   useEffect(() => {
     if (Platform.OS !== 'web' || user) return;
     let handled = false;
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (handled) return;
       if (event === 'PASSWORD_RECOVERY') {
         handled = true;
         router.replace('/reset-password-confirm');
         return;
       }
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+      if (event === 'INITIAL_SESSION') {
         handled = true;
-        finishOAuthSignIn(session, loginWithOAuthSession).catch(() => setCheckingOAuth(false));
-        return;
-      }
-      if (event === 'INITIAL_SESSION' && !session) {
-        handled = true;
-        setCheckingOAuth(false);
+        setCheckingRecovery(false);
       }
     });
 
@@ -85,7 +76,7 @@ export default function WelcomeScreen() {
     return null;
   }
 
-  if (checkingOAuth) {
+  if (checkingRecovery) {
     return <View style={styles.root} />;
   }
 

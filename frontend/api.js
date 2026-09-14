@@ -81,33 +81,6 @@ export const resetPassword = async (email, redirectTo) => {
   return data;
 };
 
-export const completeOAuthProfile = async (profile, token) => {
-  const response = await fetch(`${BASE_URL}/complete-oauth-profile`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      name: profile.name,
-      school: profile.school,
-      visa_type: profile.visaType,
-      program_start_date: profile.programStartDate,
-      program_end_date: profile.programEndDate,
-      major: profile.major,
-      has_ssn: profile.hasSsn,
-      has_bank_account: profile.hasBankAccount,
-      cpt_months_used: profile.cptMonthsUsed,
-      referral_code: profile.referralCode || undefined,
-      biggest_concern: profile.biggestConcern || undefined,
-      has_job_offer: profile.hasJobOffer,
-      plans_after_graduation: profile.plansAfterGraduation || undefined,
-      work_experience_months: profile.workExperienceMonths
-    })
-  });
-  return handleResponse(response);
-};
-
 export const resendConfirmation = async (email) => {
   const response = await fetch(`${BASE_URL}/resend-confirmation`, {
     method: 'POST',
