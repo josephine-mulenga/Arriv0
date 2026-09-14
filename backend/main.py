@@ -869,7 +869,7 @@ async def send_internship_notifications():
                     continue
                 search_terms = f"{major} intern"
 
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=20.0) as client:
                     response = await client.get(
                         "https://api.adzuna.com/v1/api/jobs/us/search/1",
                         params={
@@ -882,7 +882,7 @@ async def send_internship_notifications():
                         },
                     )
                 if response.status_code != 200:
-                    logger.error(f"Adzuna error for user {user['id'][:8]}: {response.status_code}")
+                    logger.error(f"Adzuna error for user {user['id'][:8]}: status={response.status_code} body={response.text[:300]}")
                     continue
 
                 jobs = [j for j in response.json().get("results", []) if j.get("id")]
@@ -913,18 +913,20 @@ async def send_internship_notifications():
                 ).execute()
 
             except Exception as e:
-                logger.error(f"Failed to process internship matches for {user.get('name')}: {e}")
+                logger.error(f"Failed to process internship matches for {user.get('name')}: {type(e).__name__}: {e}")
     except Exception as e:
         logger.error(f"Internship notification job failed: {e}")
 
 async def check_watched_companies():
     """Runs every 30 minutes. For each user with a non-empty watched_companies
-    list and a push token, searches Adzuna per watched company (using the
-    same company= filter get_internships uses for company searches) and
-    notifies about postings not already in internships_seen — the same
-    dedup table send_internship_notifications uses, so a job a user has
-    already been told about isn't re-sent whether it was found via their
-    major or a company watch."""
+    list and a push token, searches Adzuna per watched company (using
+    what="{company} intern" - Adzuna's company= filter only recognizes a
+    curated set of larger employers and errors out for smaller ones, same
+    issue fixed in /internships/company-search) and notifies about postings
+    not already in internships_seen — the same dedup table
+    send_internship_notifications uses, so a job a user has already been
+    told about isn't re-sent whether it was found via their major or a
+    company watch."""
     logger.info("Running watched-company internship check")
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
         logger.info("Adzuna not configured — skipping watched-company check")
@@ -944,21 +946,20 @@ async def check_watched_companies():
 
                 for company in watched:
                     try:
-                        async with httpx.AsyncClient(timeout=10.0) as client:
+                        async with httpx.AsyncClient(timeout=20.0) as client:
                             response = await client.get(
                                 "https://api.adzuna.com/v1/api/jobs/us/search/1",
                                 params={
                                     "app_id": ADZUNA_APP_ID,
                                     "app_key": ADZUNA_APP_KEY,
                                     "results_per_page": 20,
-                                    "company": company,
-                                    "what": "intern",
+                                    "what": f"{company} intern",
                                     "sort_by": "date",
                                     "content-type": "application/json",
                                 },
                             )
                         if response.status_code != 200:
-                            logger.error(f"Adzuna error watching {company} for user {user['id'][:8]}: {response.status_code}")
+                            logger.error(f"Adzuna error watching {company} for user {user['id'][:8]}: status={response.status_code} body={response.text[:300]}")
                             continue
 
                         jobs = [j for j in response.json().get("results", []) if j.get("id")]
@@ -981,7 +982,7 @@ async def check_watched_companies():
                             ).execute()
                             seen_ids.update(j["id"] for j in jobs)
                     except Exception as e:
-                        logger.error(f"Failed to check watched company {company} for {user.get('name')}: {e}")
+                        logger.error(f"Failed to check watched company {company} for {user.get('name')}: {type(e).__name__}: {e}")
             except Exception as e:
                 logger.error(f"Failed to process watched companies for {user.get('name')}: {e}")
     except Exception as e:
@@ -2456,7 +2457,7 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
 
     try:
         url = f"https://api.adzuna.com/v1/api/jobs/us/search/{page}"
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=20.0) as client:
             if has_custom_query:
                 # A typed query could be a job title/keyword ("software
                 # engineering intern") or a company name ("Microsoft").
@@ -2465,19 +2466,33 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
                 # `company` only matches the structured employer field
                 # (useless for a job-title phrase) — so query both and merge,
                 # rather than guessing which kind of search the user meant.
+                # Adzuna's company= filter only recognizes a curated set of
+                # larger employers and errors out for smaller ones (e.g.
+                # "duolingo") — treat a failure on either source as "no
+                # results from that source" rather than failing the whole
+                # request, so a company-filter error doesn't also break the
+                # title/description results that would have succeeded fine.
                 title_response = await client.get(
                     url, params={**base_adzuna_params, "what": f"{base_query} intern"}
                 )
                 company_response = await client.get(
                     url, params={**base_adzuna_params, "company": base_query, "what": "intern"}
                 )
-                for resp in (title_response, company_response):
-                    if resp.status_code != 200:
-                        logger.error(f"Adzuna error: {resp.status_code} correlation_id={correlation_id}")
-                        raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
 
-                title_data = title_response.json()
-                company_data = company_response.json()
+                title_data = {}
+                if title_response.status_code == 200:
+                    title_data = title_response.json()
+                else:
+                    logger.error(f"Adzuna title-search error: status={title_response.status_code} body={title_response.text[:300]} correlation_id={correlation_id}")
+
+                company_data = {}
+                if company_response.status_code == 200:
+                    company_data = company_response.json()
+                else:
+                    logger.error(f"Adzuna company-search error: status={company_response.status_code} body={company_response.text[:300]} correlation_id={correlation_id}")
+
+                if title_response.status_code != 200 and company_response.status_code != 200:
+                    raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
 
                 merged: dict = {}
                 for source in (title_data, company_data):
@@ -2502,7 +2517,7 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
                     url, params={**base_adzuna_params, "what": search_terms}
                 )
                 if response.status_code != 200:
-                    logger.error(f"Adzuna error: {response.status_code} correlation_id={correlation_id}")
+                    logger.error(f"Adzuna error: status={response.status_code} body={response.text[:300]} correlation_id={correlation_id}")
                     raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
 
                 data = response.json()
@@ -2521,12 +2536,13 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
             "query": search_terms,
             "major_matched": bool(major) and not (query and query.strip()),
         }
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as e:
+        logger.error(f"Adzuna internship search timed out: {type(e).__name__}: {e} correlation_id={correlation_id}")
         raise HTTPException(status_code=504, detail="Internship search timed out. Try again shortly.")
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Internship search error: {type(e).__name__} correlation_id={correlation_id}")
+        logger.error(f"Internship search error: {type(e).__name__}: {e} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to search internships.")
 
 @app.get("/internships/company-search")
@@ -2543,39 +2559,56 @@ async def search_companies(request: Request, q: str, authorization: Optional[str
         return {"companies": []}
 
     try:
-        # No dedicated company-autocomplete endpoint on this Adzuna tier —
-        # reuse the same company= filter get_internships already relies on,
-        # then dedupe the employer names of whatever real postings match.
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        # No dedicated company-autocomplete endpoint on this Adzuna tier.
+        # Adzuna's company= filter only recognizes a curated set of larger
+        # employers and errors out for smaller ones (e.g. "duolingo" 502'd
+        # outright) - search title+description for "{q} intern" instead,
+        # which finds any company that has actually posted an internship
+        # regardless of whether Adzuna's employer taxonomy knows it.
+        async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.get(
                 "https://api.adzuna.com/v1/api/jobs/us/search/1",
                 params={
                     "app_id": ADZUNA_APP_ID,
                     "app_key": ADZUNA_APP_KEY,
                     "results_per_page": 50,
-                    "company": q,
+                    "what": f"{q} intern",
                     "content-type": "application/json",
                 },
             )
         if response.status_code != 200:
-            logger.error(f"Adzuna company-search error: {response.status_code} correlation_id={correlation_id}")
+            logger.error(f"Adzuna company-search error: status={response.status_code} body={response.text[:300]} correlation_id={correlation_id}")
             raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
 
-        seen_lower = set()
-        companies = []
+        q_lower = q.lower()
+        counts: dict = {}
+        display_names: dict = {}
         for job in response.json().get("results", []):
             name = (job.get("company") or {}).get("display_name")
-            if name and name.lower() not in seen_lower:
-                seen_lower.add(name.lower())
-                companies.append(name)
+            # what= is a full-text search over title+description, so a
+            # posting can match just because the query word appears
+            # somewhere in that text (e.g. searching "stripe" surfaced
+            # postings from unrelated companies that merely mention Stripe
+            # as a payment processor). Restrict results to companies whose
+            # own name actually contains the query, since this is an
+            # autocomplete endpoint - showing unrelated company names isn't
+            # useful no matter how it was found.
+            if name and q_lower in name.lower():
+                key = name.lower()
+                counts[key] = counts.get(key, 0) + 1
+                display_names.setdefault(key, name)
+
+        ranked = sorted(counts.keys(), key=lambda k: counts[k], reverse=True)
+        companies = [display_names[k] for k in ranked]
 
         return {"companies": companies[:10]}
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as e:
+        logger.error(f"Adzuna company-search timed out: {type(e).__name__}: {e} correlation_id={correlation_id}")
         raise HTTPException(status_code=504, detail="Company search timed out. Try again shortly.")
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Company search error: {type(e).__name__} correlation_id={correlation_id}")
+        logger.error(f"Company search error: {type(e).__name__}: {e} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to search companies.")
 
 @app.get("/internships/watched")
