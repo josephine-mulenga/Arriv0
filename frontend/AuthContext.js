@@ -102,6 +102,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Used where we already hold a valid Supabase access token but not the
+  // user's password (email confirmation, magic links) - stores it exactly
+  // like login() does, just skipping the backend /login call since there's
+  // no password to exchange.
+  const loginWithToken = async (accessToken, userId, email) => {
+    setAuthToken(accessToken);
+    setUser({ id: userId, email: email || null });
+
+    await AsyncStorage.setItem('authToken', accessToken);
+    await AsyncStorage.setItem('userId', String(userId));
+    if (email) {
+      await AsyncStorage.setItem('userEmail', email);
+    }
+  };
+
   const logout = async () => {
     setUser(null);
     setAuthToken(null);
@@ -112,7 +127,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, initializing, error, login, signup, logout }}>
+      value={{ user, token, loading, initializing, error, login, loginWithToken, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
