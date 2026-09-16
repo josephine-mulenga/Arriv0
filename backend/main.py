@@ -1581,7 +1581,8 @@ def signup(request: Request, data: SignupRequest):
     try:
         response = supabase.auth.sign_up({
             "email": data.email,
-            "password": data.password
+            "password": data.password,
+            "options": {"email_redirect_to": "https://arriv0.com/auth-callback"}
         })
         auth_user_id = response.user.id
         _create_user_profile(auth_user_id, data)
@@ -1665,7 +1666,11 @@ def login(request: Request, data: LoginRequest):
 def resend_confirmation(request: Request, data: PasswordResetRequest):
     correlation_id = getattr(request.state, "correlation_id", None)
     try:
-        supabase.auth.resend({"type": "signup", "email": data.email})
+        supabase.auth.resend({
+            "type": "signup",
+            "email": data.email,
+            "options": {"email_redirect_to": "https://arriv0.com/auth-callback"}
+        })
     except Exception as e:
         logger.error(f"Resend confirmation error: {type(e).__name__} correlation_id={correlation_id}")
     # Always return success — never reveal whether an email is registered.
@@ -1676,8 +1681,8 @@ def resend_confirmation(request: Request, data: PasswordResetRequest):
 def reset_password(request: Request, data: PasswordResetRequest):
     correlation_id = getattr(request.state, "correlation_id", None)
     try:
-        options = {"redirect_to": data.redirect_to} if data.redirect_to else None
-        supabase.auth.reset_password_email(data.email, options)
+        redirect_to = data.redirect_to or "https://arriv0.com/reset-password-confirm"
+        supabase.auth.reset_password_email(data.email, {"redirect_to": redirect_to})
         log_security_event("PASSWORD_RESET_REQUESTED", f"Reset requested email={data.email[:3]}***", correlation_id)
         return {"message": "If an account exists with that email a password reset link has been sent."}
     except Exception as e:
