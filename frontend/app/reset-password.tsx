@@ -18,7 +18,15 @@ export default function ResetPasswordScreen() {
     try {
       setLoading(true);
       setError(null);
-      const redirectTo = Linking.createURL('reset-password-confirm');
+      // Linking.createURL('reset-password-confirm') resolves correctly
+      // against window.location.origin when tested directly, but the
+      // actual email link was still landing on the bare domain - hardcode
+      // the known-good absolute URL for web instead of depending on that
+      // resolution happening correctly in every deployed context. Native
+      // keeps its deep link, since https://arriv0.com wouldn't reopen the
+      // app there.
+      const redirectTo =
+        Platform.OS === 'web' ? 'https://arriv0.com/reset-password-confirm' : Linking.createURL('reset-password-confirm');
       await resetPassword(email, redirectTo);
       setSubmitted(true);
     } catch {
