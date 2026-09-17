@@ -122,6 +122,7 @@ export default function PersonalizeProfileScreen() {
   const [workExperienceMonths, setWorkExperienceMonths] = useState('');
 
   const [referralCode, setReferralCode] = useState('');
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
 
   const programStartDate = startYear && startMonth && startDay ? `${startYear}-${startMonth}-${startDay}` : '';
   const programEndDate = endYear && endMonth && endDay ? `${endYear}-${endMonth}-${endDay}` : '';
@@ -129,7 +130,7 @@ export default function PersonalizeProfileScreen() {
 
   const handleCreateAccount = async () => {
     try {
-      await signup(
+      const result = await signup(
         email,
         password,
         name,
@@ -147,12 +148,33 @@ export default function PersonalizeProfileScreen() {
         plansAfterGraduation ?? undefined,
         workExperienceMonths ? Number(workExperienceMonths) : 0
       );
+      // When email confirmation is required there's no session to log into
+      // yet - logging in here would just fail with an unrelated "Invalid
+      // email or password" (the account exists but isn't confirmed), which
+      // buried the fact that signup itself actually succeeded.
+      if (result?.email_confirmation_required) {
+        setNeedsEmailConfirmation(true);
+        return;
+      }
       await login(email, password);
       router.replace('/notification-permission');
     } catch {
       // error is already captured by useAuth's error state
     }
   };
+
+  if (needsEmailConfirmation) {
+    return (
+      <View style={styles.confirmationRoot}>
+        <CheckCircleIcon size={48} color={Palette.green} weight="fill" />
+        <Text style={styles.confirmationTitle}>Account created!</Text>
+        <Text style={styles.confirmationSubtitle}>
+          Please check your email and click the confirmation link to get started.
+        </Text>
+        <PrimaryButton label="Back to log in" onPress={() => router.replace('/login')} style={styles.confirmationButton} />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -373,6 +395,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Palette.white,
     paddingTop: 62,
+  },
+  confirmationRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: 26,
+    backgroundColor: Palette.white,
+  },
+  confirmationTitle: {
+    fontFamily: Type.headingBold,
+    fontSize: 24,
+    textAlign: 'center',
+    color: Palette.ink,
+  },
+  confirmationSubtitle: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 14,
+    textAlign: 'center',
+    color: Palette.inkFaint,
+    marginBottom: 4,
+  },
+  confirmationButton: {
+    marginTop: 8,
   },
   progressTrack: {
     height: 5,

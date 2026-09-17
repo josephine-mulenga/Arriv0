@@ -1584,6 +1584,18 @@ def signup(request: Request, data: SignupRequest):
             "password": data.password,
             "options": {"email_redirect_to": "https://arriv0.com/auth-callback"}
         })
+        # Supabase doesn't raise an error for sign_up on an email that
+        # already has a CONFIRMED account - as an anti-enumeration measure
+        # it returns a 200 with a synthetic user (a fresh random id, empty
+        # identities) instead. Left unchecked, this look like a real success:
+        # _create_user_profile would insert an orphaned users row under that
+        # throwaway id, the frontend would think signup worked, and its
+        # follow-up login attempt (with whatever new password was just
+        # typed) would then fail with an unrelated, confusing "Invalid email
+        # or password" instead of ever surfacing that the email was taken.
+        if not response.user.identities:
+            logger.error(f"Signup error: duplicate email (empty identities) correlation_id={correlation_id}")
+            raise HTTPException(status_code=409, detail="An account with this email already exists. Try logging in instead.")
         auth_user_id = response.user.id
         _create_user_profile(auth_user_id, data)
 
@@ -1609,6 +1621,12 @@ def signup(request: Request, data: SignupRequest):
             raise HTTPException(status_code=429, detail="We're sending too many confirmation emails right now — please try again in a few minutes.")
         logger.error(f"Signup error: {e.code} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")
+    except HTTPException:
+        # Without this, HTTPExceptions raised above (e.g. the 409 duplicate-
+        # email response) fall through to the generic handler below and get
+        # rewritten into the generic "Signup failed" message - since
+        # HTTPException is itself an Exception subclass.
+        raise
     except Exception as e:
         logger.error(f"Signup error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Signup failed. Please check your details and try again.")

@@ -58,12 +58,12 @@ export default function SignupScreen() {
       </Pressable>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Animated.View entering={FadeInDown.duration(400)}>
+        <Animated.View key="header" entering={FadeInDown.duration(400)}>
           <Text style={styles.title}>Create your account</Text>
           <Text style={styles.subtitle}>Let&apos;s get you started.</Text>
         </Animated.View>
 
-        <Animated.View entering={FadeInUp.delay(80).duration(350)}>
+        <Animated.View key="name-row" entering={FadeInUp.delay(80).duration(350)}>
           <View style={styles.inputRow}>
             <UserIcon size={17} color="#A9A7BE" />
             <TextInput
@@ -76,7 +76,7 @@ export default function SignupScreen() {
           </View>
         </Animated.View>
 
-        <Animated.View entering={FadeInUp.delay(140).duration(350)}>
+        <Animated.View key="email-row" entering={FadeInUp.delay(140).duration(350)}>
           <View style={styles.inputRow}>
             <EnvelopeSimpleIcon size={17} color="#A9A7BE" />
             <TextInput
@@ -90,13 +90,19 @@ export default function SignupScreen() {
             />
           </View>
         </Animated.View>
-        {email.trim().length > 0 && !isEmailValid && (
-          <Animated.Text entering={FadeInDown.duration(200)} style={styles.fieldError}>
-            Enter a valid email address, like you@example.com
-          </Animated.Text>
-        )}
+        {/* Always rendered (never conditionally mounted) so this never shifts
+            the sibling rows below it — a conditionally-present element here
+            would shift every later sibling's position in React's
+            reconciliation, causing them to unmount/remount (and replay their
+            entering animation) every time email validity flips mid-typing.
+            Reserving the height and toggling opacity keeps the layout and
+            every row below it completely stable while typing. */}
+        <Text
+          style={[styles.fieldError, !(email.trim().length > 0 && !isEmailValid) && styles.fieldErrorHidden]}>
+          Enter a valid email address, like you@example.com
+        </Text>
 
-        <Animated.View entering={FadeInUp.delay(200).duration(350)}>
+        <Animated.View key="password-row" entering={FadeInUp.delay(200).duration(350)}>
           <View style={styles.inputRow}>
             <LockSimpleIcon size={17} color="#A9A7BE" />
             <TextInput
@@ -117,7 +123,7 @@ export default function SignupScreen() {
           </View>
         </Animated.View>
 
-        <View style={styles.checklist}>
+        <View key="checklist" style={styles.checklist}>
           {passwordRules.map((rule, index) => {
             const passed = rule.test(password);
             return (
@@ -134,7 +140,7 @@ export default function SignupScreen() {
           })}
         </View>
 
-        <Animated.View entering={FadeInUp.delay(400).duration(350)}>
+        <Animated.View key="actions" entering={FadeInUp.delay(400).duration(350)}>
           <PrimaryButton
             label="Sign Up"
             onPress={handleContinue}
@@ -210,6 +216,9 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyRegular,
     fontSize: 12.5,
     color: Palette.danger,
+  },
+  fieldErrorHidden: {
+    opacity: 0,
   },
   checklist: {
     gap: 7,
