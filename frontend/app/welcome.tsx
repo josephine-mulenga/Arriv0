@@ -35,25 +35,17 @@ export default function WelcomeScreen() {
     );
   }, []);
 
-  // A password-reset link is supposed to land on /reset-password-confirm,
-  // but if Supabase's redirect-URL allowlist doesn't exactly match that
-  // path, it silently falls back to the Site URL instead — which is this
-  // screen. onAuthStateChange fires PASSWORD_RECOVERY specifically for a
-  // recovery-link session, and treating it as a normal login would silently
-  // log the user in with their OLD password instead of ever prompting for a
-  // new one.
+  // If a password-reset link falls back to this screen (root layout's own
+  // listener is what actually redirects it onward to
+  // /reset-password-confirm), briefly hold off rendering the marketing page
+  // so that redirect can happen before the user ever sees a flash of it.
   useEffect(() => {
     if (Platform.OS !== 'web' || user) return;
     let handled = false;
 
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (handled) return;
-      if (event === 'PASSWORD_RECOVERY') {
-        handled = true;
-        router.replace('/reset-password-confirm');
-        return;
-      }
-      if (event === 'INITIAL_SESSION') {
+      if (event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION') {
         handled = true;
         setCheckingRecovery(false);
       }
