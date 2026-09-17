@@ -62,9 +62,17 @@ export default function WelcomeScreen() {
 
   // An already-authenticated session landing here — e.g. a bookmark, a
   // refresh — should never show the marketing/welcome screen. Send them
-  // straight into the app.
+  // straight into the app. Navigating has to happen in an effect, not
+  // directly in the render body — calling router.replace during render
+  // triggers React's setState-during-render warning, since navigation
+  // updates routing state the same way a setState call would.
+  useEffect(() => {
+    if (!initializing && user) {
+      router.replace('/(tabs)');
+    }
+  }, [initializing, user]);
+
   if (!initializing && user) {
-    router.replace('/(tabs)');
     return null;
   }
 

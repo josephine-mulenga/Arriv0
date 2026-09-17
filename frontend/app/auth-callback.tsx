@@ -84,13 +84,15 @@ export default function AuthCallbackScreen() {
 
   // confirmedNoSession — the email is confirmed, this client just didn't
   // come away with a session (e.g. the link was opened in a different
-  // browser than the one used to sign up).
+  // browser than the one used to sign up). No button here on purpose - this
+  // page is opened in whatever browser handles email links, not the app
+  // itself, so a "Log in" button would just open a web login the user isn't
+  // meant to use. They need to go back to the native app to log in.
   return (
     <View style={styles.centered}>
       <CheckCircleIcon size={48} color={Palette.green} weight="fill" />
-      <Text style={styles.title}>Email confirmed</Text>
-      <Text style={styles.subtitle}>Your email is confirmed. Log in to continue.</Text>
-      <PrimaryButton label="Log in" onPress={() => router.replace('/login')} style={styles.button} />
+      <Text style={styles.title}>Email Confirmed</Text>
+      <Text style={styles.subtitle}>Your email has been confirmed. You can now log in on the app.</Text>
     </View>
   );
 }
