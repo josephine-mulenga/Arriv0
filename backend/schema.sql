@@ -140,3 +140,19 @@ ALTER TABLE news
 -- send_internship_notifications does for major-based matches.
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS watched_companies text[] DEFAULT '{}';
+
+-- Migration: news source + published_at (2026-09-18)
+-- (image_url already exists on the live news table from earlier work that
+-- predates this file being kept in sync — no migration needed for that
+-- one, it's just missing from this history.)
+-- Backs the new RSS/HTML-scrape sources added in this change (ICE SEVP,
+-- Inside Higher Ed, DHS, NAFSA) alongside the existing NewsAPI/RSS ones -
+-- source records which of them an article came from, and published_at is
+-- the article's own publish date (distinct from created_at, which is when
+-- Arriv0 inserted the row). _insert_new_relevant_articles() in main.py
+-- falls back to inserting without these two columns if this migration
+-- hasn't been run yet, so news insertion won't break in the meantime, but
+-- source/published_at won't be populated until it has.
+ALTER TABLE news
+  ADD COLUMN IF NOT EXISTS source text,
+  ADD COLUMN IF NOT EXISTS published_at timestamp;
