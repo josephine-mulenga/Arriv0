@@ -34,6 +34,14 @@ const visaTypes = [
   { label: 'J-1', value: 'J1' },
   { label: 'M-1', value: 'M1' },
 ];
+const locationPreferences = [
+  { label: 'Any location', value: 'Any location' },
+  { label: 'Remote only', value: 'Remote only' },
+  { label: 'East Coast', value: 'East Coast' },
+  { label: 'West Coast', value: 'West Coast' },
+  { label: 'Midwest', value: 'Midwest' },
+  { label: 'South', value: 'South' },
+];
 
 function splitDate(dateStr) {
   if (!dateStr) return { month: '', day: '', year: '' };
@@ -121,6 +129,8 @@ export default function EditProfileScreen() {
   const [major, setMajor] = useState('');
   const [visaType, setVisaType] = useState('F1');
   const [hasBankAccount, setHasBankAccount] = useState(false);
+  const [careerInterests, setCareerInterests] = useState('');
+  const [locationPreference, setLocationPreference] = useState('');
 
   const [startMonth, setStartMonth] = useState('');
   const [startDay, setStartDay] = useState('');
@@ -139,6 +149,8 @@ export default function EditProfileScreen() {
         setMajor(data.major || '');
         setVisaType(data.visa_type || 'F1');
         setHasBankAccount(!!data.has_bank_account);
+        setCareerInterests((data.career_interests || []).join(', '));
+        setLocationPreference(data.location_preference || '');
 
         const start = splitDate(data.program_start_date);
         setStartMonth(start.month);
@@ -167,6 +179,10 @@ export default function EditProfileScreen() {
       setSaving(true);
       setError(null);
       setSaved(false);
+      const careerInterestsList = careerInterests
+        .split(',')
+        .map((interest) => interest.trim())
+        .filter(Boolean);
       await updateProfile(
         user.id,
         {
@@ -177,6 +193,8 @@ export default function EditProfileScreen() {
           program_start_date: programStartDate,
           program_end_date: programEndDate,
           has_bank_account: hasBankAccount,
+          career_interests: careerInterestsList,
+          location_preference: locationPreference || null,
         },
         token
       );
@@ -263,6 +281,30 @@ export default function EditProfileScreen() {
               />
             </View>
 
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Career interests</Text>
+              <TextInput
+                style={styles.input}
+                value={careerInterests}
+                onChangeText={setCareerInterests}
+                placeholder="e.g. cybersecurity, AI, cloud computing"
+                placeholderTextColor={Palette.inkPlaceholder}
+              />
+              <Text style={styles.fieldHint}>Separate multiple interests with commas. Used to match you with relevant internships.</Text>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Location preference</Text>
+              <Dropdown
+                label="Location preference"
+                options={locationPreferences}
+                value={locationPreference}
+                onSelect={setLocationPreference}
+                getLabel={(o) => o.label}
+                getValue={(o) => o.value}
+              />
+            </View>
+
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
             {saved ? <Text style={styles.successText}>Saved!</Text> : null}
 
@@ -308,6 +350,11 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyBold,
     fontSize: 12.5,
     color: Palette.inkMuted,
+  },
+  fieldHint: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 11.5,
+    color: Palette.inkPlaceholder,
   },
   input: {
     borderWidth: 1,

@@ -26,6 +26,7 @@ interface NewsItem {
   image_url?: string;
   affects_f1?: boolean;
   created_at?: string;
+  source?: string;
 }
 
 interface Bookmark {
@@ -208,6 +209,7 @@ export default function NewsScreen() {
                 <Text style={styles.meta}>
                   {formatDate(item.created_at)}
                   {item.created_at ? ` · ${relativeAge(item.created_at)}` : ''}
+                  {item.source ? ` · ${item.source}` : ''}
                 </Text>
                 {item.tag ? (
                   <View style={[styles.badge, { backgroundColor: visual.tint }]}>

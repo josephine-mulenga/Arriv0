@@ -21,6 +21,7 @@ import logging
 import httpx
 import uuid
 import re
+import json
 import feedparser
 import difflib
 import asyncio
@@ -28,6 +29,12 @@ from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+# httpx logs the full request URL at INFO level by default, which leaked
+# ADZUNA_APP_ID/ADZUNA_APP_KEY/NEWS_API_KEY into application logs on every
+# call (all three are sent as URL query params, not headers) - verified
+# directly. Raised to WARNING so httpx still logs real errors, just not
+# every outgoing URL.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 load_dotenv()
 
@@ -1071,6 +1078,79 @@ def company_logo_url(name: str) -> str:
         domain = re.sub(r"[^a-z0-9]", "", name.lower()) + ".com"
     return f"https://logo.clearbit.com/{domain}"
 
+async def _fetch_adzuna_candidates(query: str) -> list:
+    """Same Adzuna call send_internship_notifications/check_watched_companies
+    always made, normalized to the same {job_id, title, company, source}
+    shape fetch_supplementary_internships's results get below, so both can
+    be merged and deduped together. job_id is Adzuna's raw numeric id with
+    no source prefix, unlike the other three sources, so rows already in
+    internships_seen from before those sources existed stay valid."""
+    candidates = []
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(
+                "https://api.adzuna.com/v1/api/jobs/us/search/1",
+                params={
+                    "app_id": ADZUNA_APP_ID,
+                    "app_key": ADZUNA_APP_KEY,
+                    "results_per_page": 20,
+                    "what": ensure_intern_keyword(query),
+                    "sort_by": "date",
+                    "content-type": "application/json",
+                },
+            )
+        if response.status_code != 200:
+            logger.error(f"Adzuna error for query '{query}': status={response.status_code} body={response.text[:300]}")
+            return candidates
+        for job in response.json().get("results", []):
+            title = job.get("title") or ""
+            # Adzuna's what= is a full-text search over title+description,
+            # so a senior/full-time posting that merely mentions "intern"
+            # somewhere in its text can surface here too - only genuinely
+            # internship-shaped titles are worth a push notification.
+            if not job.get("id") or not _looks_like_internship(title):
+                continue
+            candidates.append({
+                "job_id": str(job["id"]),
+                "title": title,
+                "company": (job.get("company") or {}).get("display_name") or "",
+                "source": "Adzuna",
+            })
+    except Exception as e:
+        logger.error(f"Adzuna fetch error for query '{query}': {type(e).__name__}: {e}")
+    return candidates
+
+async def find_new_internships(query: str, seen_ids: set) -> tuple:
+    """Shared by send_internship_notifications and check_watched_companies:
+    fetches Adzuna plus the 3 free supplementary sources for one query,
+    cross-source dedupes them (Adzuna is fetched first, so it wins when the
+    same posting is cross-listed on e.g. both Adzuna and Arbeitnow - reuses
+    _dedupe_internships, the same company+fuzzy-title check /internships
+    uses), then splits out only what isn't already in seen_ids. Returns
+    (all_candidates, new_candidates) - callers upsert all_candidates'
+    job_ids into internships_seen regardless of whether they were new, the
+    same "record everything seen, notify only about what's new" pattern
+    both jobs already used before these sources existed."""
+    candidates = await _fetch_adzuna_candidates(query)
+
+    try:
+        supplementary = await fetch_supplementary_internships(query)
+        for item in supplementary:
+            if not item.get("id"):
+                continue
+            candidates.append({
+                "job_id": f"{item['source'].lower()}:{item['id']}",
+                "title": item.get("title") or "",
+                "company": item.get("company") or "",
+                "source": item["source"],
+            })
+    except Exception as e:
+        logger.error(f"Supplementary internship fetch failed for query '{query}': {type(e).__name__}: {e}")
+
+    all_candidates = _dedupe_internships(candidates)
+    new_candidates = [c for c in all_candidates if c["job_id"] not in seen_ids]
+    return all_candidates, new_candidates
+
 async def send_internship_notifications():
     logger.info("Running internship match check")
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
@@ -1087,40 +1167,21 @@ async def send_internship_notifications():
                 major = (user.get("major") or "").strip()
                 if not major:
                     continue
-                search_terms = ensure_intern_keyword(major)
-
-                async with httpx.AsyncClient(timeout=20.0) as client:
-                    response = await client.get(
-                        "https://api.adzuna.com/v1/api/jobs/us/search/1",
-                        params={
-                            "app_id": ADZUNA_APP_ID,
-                            "app_key": ADZUNA_APP_KEY,
-                            "results_per_page": 20,
-                            "what": search_terms,
-                            "sort_by": "date",
-                            "content-type": "application/json",
-                        },
-                    )
-                if response.status_code != 200:
-                    logger.error(f"Adzuna error for user {user['id'][:8]}: status={response.status_code} body={response.text[:300]}")
-                    continue
-
-                jobs = [j for j in response.json().get("results", []) if j.get("id")]
-                if not jobs:
-                    continue
 
                 seen = supabase_admin.table("internships_seen").select("job_id").eq("user_id", user["id"]).execute()
                 seen_ids = {row["job_id"] for row in (seen.data or [])}
-                new_jobs = [j for j in jobs if j["id"] not in seen_ids]
+                all_jobs, new_jobs = await find_new_internships(major, seen_ids)
+                if not all_jobs:
+                    continue
 
                 if new_jobs:
                     top = new_jobs[0]
-                    company = (top.get("company") or {}).get("display_name") or "a company"
-                    title = top.get("title") or "a new internship"
+                    company = top["company"] or "a company"
+                    title = top["title"] or "a new internship"
                     if len(new_jobs) == 1:
-                        message = f"New internship match: {title} at {company}. Check it out in Arriv0."
+                        message = f"New internship match: {title} at {company} ({top['source']}). Check it out in Arriv0."
                     else:
-                        message = f"{len(new_jobs)} new internships match your major, including {title} at {company}."
+                        message = f"{len(new_jobs)} new internships match your major, including {title} at {company} ({top['source']})."
                     await send_push_notification(user["push_token"], "New Internship Match", message)
                     log_security_event("INTERNSHIP_NOTIFICATION_SENT", f"{len(new_jobs)} new matches sent to user {user['id'][:8]}***")
 
@@ -1128,7 +1189,7 @@ async def send_internship_notifications():
                 # about) so a listing that later drops off the first page of
                 # results doesn't get re-notified if it ever reappears.
                 supabase_admin.table("internships_seen").upsert(
-                    [{"user_id": user["id"], "job_id": j["id"]} for j in jobs],
+                    [{"user_id": user["id"], "job_id": j["job_id"]} for j in all_jobs],
                     on_conflict="user_id,job_id"
                 ).execute()
 
@@ -1139,14 +1200,15 @@ async def send_internship_notifications():
 
 async def check_watched_companies():
     """Runs every 30 minutes. For each user with a non-empty watched_companies
-    list and a push token, searches Adzuna per watched company via
-    ensure_intern_keyword(company) - Adzuna's company= filter only recognizes
-    a curated set of larger employers and errors out for smaller ones, same
-    issue fixed in /internships/company-search - and notifies about postings
-    not already in internships_seen — the same dedup table
-    send_internship_notifications uses, so a job a user has already been
-    told about isn't re-sent whether it was found via their major or a
-    company watch."""
+    list and a push token, searches Adzuna plus the 3 free supplementary
+    sources per watched company (find_new_internships) - Adzuna's company=
+    filter only recognizes a curated set of larger employers and errors out
+    for smaller ones, same issue fixed in /internships/company-search - and
+    notifies about postings not already in internships_seen — the same
+    dedup table send_internship_notifications uses, so a job a user has
+    already been told about isn't re-sent whether it was found via their
+    major or a company watch, and cross-source dedup means the same posting
+    cross-listed on e.g. Adzuna and Arbeitnow only triggers one notification."""
     logger.info("Running watched-company internship check")
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
         logger.info("Adzuna not configured — skipping watched-company check")
@@ -1166,41 +1228,24 @@ async def check_watched_companies():
 
                 for company in watched:
                     try:
-                        async with httpx.AsyncClient(timeout=20.0) as client:
-                            response = await client.get(
-                                "https://api.adzuna.com/v1/api/jobs/us/search/1",
-                                params={
-                                    "app_id": ADZUNA_APP_ID,
-                                    "app_key": ADZUNA_APP_KEY,
-                                    "results_per_page": 20,
-                                    "what": ensure_intern_keyword(company),
-                                    "sort_by": "date",
-                                    "content-type": "application/json",
-                                },
-                            )
-                        if response.status_code != 200:
-                            logger.error(f"Adzuna error watching {company} for user {user['id'][:8]}: status={response.status_code} body={response.text[:300]}")
-                            continue
-
-                        jobs = [j for j in response.json().get("results", []) if j.get("id")]
-                        new_jobs = [j for j in jobs if j["id"] not in seen_ids]
+                        all_jobs, new_jobs = await find_new_internships(company, seen_ids)
 
                         if new_jobs:
                             top = new_jobs[0]
-                            title = top.get("title") or "a new internship"
+                            title = top["title"] or "a new internship"
                             if len(new_jobs) == 1:
-                                message = f"{company} just posted: {title}. Check it out in Arriv0."
+                                message = f"{company} just posted: {title} ({top['source']}). Check it out in Arriv0."
                             else:
                                 message = f"{company} posted {len(new_jobs)} new internships, including {title}."
                             await send_push_notification(user["push_token"], f"New at {company}", message)
                             log_security_event("WATCHED_COMPANY_NOTIFICATION_SENT", f"{len(new_jobs)} new {company} postings sent to user {user['id'][:8]}***")
 
-                        if jobs:
+                        if all_jobs:
                             supabase_admin.table("internships_seen").upsert(
-                                [{"user_id": user["id"], "job_id": j["id"]} for j in jobs],
+                                [{"user_id": user["id"], "job_id": j["job_id"]} for j in all_jobs],
                                 on_conflict="user_id,job_id"
                             ).execute()
-                            seen_ids.update(j["id"] for j in jobs)
+                            seen_ids.update(j["job_id"] for j in all_jobs)
                     except Exception as e:
                         logger.error(f"Failed to check watched company {company} for {user.get('name')}: {type(e).__name__}: {e}")
             except Exception as e:
@@ -1313,6 +1358,7 @@ async def fetch_usajobs_internships(query: str, max_items: int = 8) -> list:
         description = " ".join(filter(None, [details.get("JobSummary"), job.get("QualificationSummary"), details.get("Requirements")]))
         apply_urls = job.get("ApplyURI") or []
         results.append({
+            "id": entry.get("MatchedObjectId") or job.get("PositionID"),
             "title": title,
             "company": job.get("OrganizationName", ""),
             "description": description[:1000],
@@ -1351,6 +1397,7 @@ async def fetch_remotive_internships(query: str, max_items: int = 8) -> list:
             continue
         description = _strip_html(job.get("description", ""))
         results.append({
+            "id": job.get("id"),
             "title": title,
             "company": job.get("company_name", ""),
             "description": description[:1000],
@@ -1394,6 +1441,7 @@ async def fetch_arbeitnow_internships(query: str, max_items: int = 8) -> list:
         if query_words and not any(w in content_check for w in query_words):
             continue
         results.append({
+            "id": job.get("slug"),
             "title": title,
             "company": job.get("company_name", ""),
             "description": description[:1000],
@@ -1443,6 +1491,55 @@ def _dedupe_internships(items: list) -> list:
 
 _SEASON_YEAR_PATTERN = re.compile(r"\b(spring|summer|fall|autumn|winter)\s+(20\d{2})\b", re.IGNORECASE)
 
+def _as_string_list(value) -> list:
+    """career_interests should already be a list (it's a text[] column per
+    schema.sql), but PostgREST/postgrest-py have been observed returning a
+    JSON-encoded string instead if the live column's actual type doesn't
+    match (verified directly against this project's database) - this
+    tolerates either so match reasons don't end up iterating a string
+    character-by-character."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+    return []
+
+# Non-overlapping US region groupings for the Edit Profile location
+# preference dropdown ("East Coast", "West Coast", "Midwest", "South") -
+# these are curated category labels a student picks, not literal strings
+# that would ever appear in a job's own location text, so matching needs
+# state names/abbreviations rather than a plain substring check.
+_US_REGIONS = {
+    "east coast": ["maine", " me,", " me ", "new hampshire", " nh,", "vermont", " vt,", "massachusetts", " ma,",
+                   "rhode island", " ri,", "connecticut", " ct,", "new york", " ny,", "new jersey", " nj,",
+                   "delaware", " de,", "maryland", " md,", "washington, d.c.", " dc,", "washington dc"],
+    "west coast": ["california", " ca,", "oregon", " or,", "washington", " wa,", "alaska", " ak,", "hawaii", " hi,"],
+    "midwest": ["ohio", " oh,", "indiana", " in,", "illinois", " il,", "michigan", " mi,", "wisconsin", " wi,",
+                "minnesota", " mn,", "iowa", " ia,", "missouri", " mo,", "north dakota", "south dakota",
+                " nd,", " sd,", "nebraska", " ne,", "kansas", " ks,"],
+    "south": ["texas", " tx,", "oklahoma", " ok,", "arkansas", " ar,", "louisiana", " la,", "mississippi", " ms,",
+              "alabama", " al,", "tennessee", " tn,", "kentucky", " ky,", "west virginia", "virginia", " va,",
+              "north carolina", "south carolina", " nc,", " sc,", "georgia", " ga,", "florida", " fl,"],
+}
+
+def _location_matches_preference(location_pref: str, item_location: str, remote: bool) -> bool:
+    pref = location_pref.strip().lower()
+    if pref in ("", "any location"):
+        return False
+    if pref == "remote only":
+        return bool(remote)
+    region_terms = _US_REGIONS.get(pref)
+    if region_terms:
+        return any(term in item_location for term in region_terms)
+    # Anything outside the dropdown's known values (shouldn't normally
+    # happen, but the field accepts arbitrary text via the API) falls back
+    # to a plain substring check.
+    return pref in item_location
+
 def compute_match_reasons(item: dict, profile: dict) -> list:
     """Surfaces WHY a posting was matched, using only what's already on the
     student's profile - major, program end date (graduation year), and the
@@ -1458,14 +1555,14 @@ def compute_match_reasons(item: dict, profile: dict) -> list:
         if any(w in content for w in major_words):
             reasons.append(f"Matches your {major} background")
 
-    for interest in (profile.get("career_interests") or []):
+    for interest in _as_string_list(profile.get("career_interests")):
         interest_clean = interest.strip()
         if interest_clean and interest_clean.lower() in content:
             reasons.append(f"Matches your {interest_clean} interest")
 
     location_pref = (profile.get("location_preference") or "").strip()
     item_location = (item.get("location") or "").lower()
-    if location_pref and (location_pref.lower() in item_location or item.get("remote")):
+    if location_pref and _location_matches_preference(location_pref, item_location, bool(item.get("remote"))):
         reasons.append(f"Fits your preference for {location_pref}")
 
     season_match = _SEASON_YEAR_PATTERN.search(content)
@@ -1820,7 +1917,12 @@ async def _notify_users_of_news(newly_inserted: list, log_label: str):
         for news in newly_inserted:
             personalized = await personalize_news_for_student(news["title"], news["body"], news["link"], user)
             if personalized:
-                title = "Arriv0 Urgent Immigration Update" if news["urgent"] else "Arriv0 Immigration Update"
+                # The push title is the article's own headline (not a
+                # generic "Arriv0 Immigration Update" label) so it's always
+                # clear which article this is about even before reading the
+                # AI-personalized body text.
+                headline = news["title"] if len(news["title"]) <= 65 else news["title"][:62] + "..."
+                title = f"Urgent: {headline}" if news["urgent"] else headline
                 await send_push_notification(user["push_token"], title, personalized)
                 logger.info(f"{log_label} sent to {user['name']}")
                 break

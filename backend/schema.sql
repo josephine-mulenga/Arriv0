@@ -162,9 +162,32 @@ ALTER TABLE news
 -- "Uses Python from your profile") in GET /internships - major and
 -- graduation year already existed, but interests/skills and a preferred
 -- location didn't. Settable via POST /profile/{user_id} (UpdateProfileRequest)
--- like citizenship_country was; no dedicated signup or edit-profile UI field
--- yet, so these stay empty until the frontend adds one. compute_match_reasons()
--- in main.py treats both as optional and just skips those reasons if empty.
+-- like citizenship_country was, and editable in the app via the Career
+-- interests text field and Location preference dropdown on Edit Profile.
+-- compute_match_reasons() in main.py treats both as optional and just skips
+-- those reasons if empty (e.g. before this migration has been run).
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS career_interests text[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS location_preference text;
+
+-- Fix: career_interests column type (2026-09-18)
+-- Found by testing directly against the live database: career_interests
+-- already existed as plain `text` (not `text[]`) by the time this session
+-- ran the ADD COLUMN IF NOT EXISTS above, which is a no-op when the column
+-- already exists regardless of type - so every write has actually been
+-- storing a JSON-encoded string ('["Python","cybersecurity"]') inside a
+-- text column instead of a real array. main.py's compute_match_reasons()
+-- now tolerates either shape (_as_string_list() parses the string form),
+-- so matching still works either way, but the column itself should still
+-- be corrected so it matches schema.sql and any other tooling that reads
+-- it directly. Existing string values are parsed back into a real array
+-- rather than discarded.
+ALTER TABLE users
+  ALTER COLUMN career_interests TYPE text[]
+  USING (
+    CASE
+      WHEN career_interests IS NULL OR career_interests::text IN ('', '{}', '[]') THEN '{}'::text[]
+      ELSE ARRAY(SELECT jsonb_array_elements_text(career_interests::text::jsonb))
+    END
+  ),
+  ALTER COLUMN career_interests SET DEFAULT '{}';

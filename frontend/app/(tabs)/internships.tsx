@@ -15,6 +15,11 @@ import { useAuth } from '@/AuthContext';
 import { IconTile } from '@/components/ui/icon-tile';
 import { Palette, Spacing, Type } from '@/constants/theme';
 
+interface SponsorshipSignal {
+  label: string;
+  sentiment: 'positive' | 'negative' | 'info';
+}
+
 interface InternshipItem {
   id?: string;
   title: string;
@@ -25,6 +30,17 @@ interface InternshipItem {
   created?: string;
   salary_min?: number;
   salary_max?: number;
+  source?: string;
+  application_url?: string;
+  sponsorship_language?: SponsorshipSignal[];
+  match_reasons?: string[];
+}
+
+function sponsorshipSummary(signals?: SponsorshipSignal[]): { label: string; kind: 'positive' | 'negative' } | null {
+  if (!signals || signals.length === 0) return null;
+  if (signals.some((s) => s.sentiment === 'negative')) return { label: 'No sponsorship', kind: 'negative' };
+  if (signals.some((s) => s.sentiment === 'positive')) return { label: 'Sponsors F1/CPT', kind: 'positive' };
+  return null;
 }
 
 interface CompanyResult {
@@ -287,14 +303,23 @@ export default function InternshipsScreen() {
 
         {items?.map((item, index) => {
           const salary = formatSalary(item.salary_min, item.salary_max);
+          const applyUrl = item.application_url || item.url;
+          const sponsorship = sponsorshipSummary(item.sponsorship_language);
           return (
             <Pressable
               key={item.id ?? index}
               style={[styles.row, index === items.length - 1 && styles.rowLast]}
-              onPress={() => item.url && Linking.openURL(item.url)}>
+              onPress={() => applyUrl && Linking.openURL(applyUrl)}>
               <IconTile icon={BriefcaseIcon} tint={Palette.purpleTint} color={Palette.purple} size={44} iconSize={20} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.jobTitle} numberOfLines={2}>{item.title}</Text>
+                <View style={styles.titleRow}>
+                  <Text style={styles.jobTitle} numberOfLines={2}>{item.title}</Text>
+                  {item.source ? (
+                    <View style={styles.sourceBadge}>
+                      <Text style={styles.sourceBadgeText}>{item.source}</Text>
+                    </View>
+                  ) : null}
+                </View>
                 {item.company ? (
                   <View style={styles.metaRow}>
                     <BuildingsIcon size={13} color={Palette.inkFaint} />
@@ -311,6 +336,22 @@ export default function InternshipsScreen() {
                   <Text style={styles.description} numberOfLines={2}>{stripHtml(item.description)}</Text>
                 ) : null}
                 {salary ? <Text style={styles.salary}>{salary}</Text> : null}
+                {sponsorship ? (
+                  <View style={[styles.sponsorshipBadge, sponsorship.kind === 'negative' ? styles.sponsorshipBadgeNegative : styles.sponsorshipBadgePositive]}>
+                    <Text style={[styles.sponsorshipBadgeText, sponsorship.kind === 'negative' ? styles.sponsorshipBadgeTextNegative : styles.sponsorshipBadgeTextPositive]}>
+                      {sponsorship.kind === 'negative' ? `⚠ ${sponsorship.label}` : sponsorship.label}
+                    </Text>
+                  </View>
+                ) : null}
+                {item.match_reasons && item.match_reasons.length > 0 ? (
+                  <View style={styles.matchReasonsBlock}>
+                    {item.match_reasons.map((reason, reasonIndex) => (
+                      <Text key={reasonIndex} style={styles.matchReasonText} numberOfLines={2}>
+                        • {reason}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             </Pressable>
           );
@@ -494,11 +535,62 @@ const styles = StyleSheet.create({
   rowLast: {
     borderBottomWidth: 0,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   jobTitle: {
+    flex: 1,
     fontFamily: Type.bodyBold,
     fontSize: 14.5,
     lineHeight: 20,
     color: Palette.ink,
+  },
+  sourceBadge: {
+    backgroundColor: Palette.dividerLight,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  sourceBadgeText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 10.5,
+    color: Palette.inkFaint,
+  },
+  sponsorshipBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  sponsorshipBadgePositive: {
+    backgroundColor: Palette.greenTint,
+  },
+  sponsorshipBadgeNegative: {
+    backgroundColor: Palette.redTint,
+  },
+  sponsorshipBadgeText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 11.5,
+  },
+  sponsorshipBadgeTextPositive: {
+    color: Palette.green,
+  },
+  sponsorshipBadgeTextNegative: {
+    color: Palette.danger,
+  },
+  matchReasonsBlock: {
+    marginTop: 6,
+    gap: 2,
+  },
+  matchReasonText: {
+    fontFamily: Type.bodyRegular,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: Palette.purple,
   },
   metaRow: {
     flexDirection: 'row',
