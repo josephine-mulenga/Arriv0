@@ -23,6 +23,7 @@ import uuid
 import re
 import feedparser
 import difflib
+import asyncio
 from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,8 @@ EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
+USAJOBS_API_KEY = os.getenv("USAJOBS_API_KEY")
+USAJOBS_EMAIL = os.getenv("USAJOBS_EMAIL")
 ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -1205,6 +1208,285 @@ async def check_watched_companies():
     except Exception as e:
         logger.error(f"Watched company check job failed: {e}")
 
+# (pattern, label, sentiment) - checked in order against a job's combined
+# title+description text. "must be authorized to work in the US" alone is
+# near-universal boilerplate (true for sponsored and unsponsored hires
+# alike), so it's kept "info" rather than "negative" - only an explicit "no
+# sponsorship"/"citizens only" statement counts as a real warning.
+SPONSORSHIP_LANGUAGE_PATTERNS = [
+    (r"no\s+(?:visa\s+)?sponsorship", "No sponsorship available", "negative"),
+    (r"(?:will\s+not|cannot|unable\s+to|does\s+not)\s+sponsor", "No sponsorship available", "negative"),
+    (r"u\.?s\.?\s*citizens?\s+only", "US citizens only", "negative"),
+    (r"must\s+be\s+(?:a\s+)?u\.?s\.?\s*citizen", "US citizens only", "negative"),
+    (r"u\.?s\.?\s*citizenship\s+(?:is\s+)?required", "US citizens only", "negative"),
+    # Federal postings (USAJobs) commonly list this as a bare requirements
+    # bullet with no qualifying phrase at all - "- U.S. Citizenship -"
+    # (verified directly on real listings), so a standalone mention counts
+    # too, not just the "required"/"must be" phrasings above.
+    (r"[-•]\s*u\.?s\.?\s*citizenship\b|\bu\.?s\.?\s*citizenship\s*[-•]", "US citizens only", "negative"),
+    (r"will\s+sponsor", "Employer will sponsor", "positive"),
+    (r"sponsorship\s+(?:is\s+)?available", "Sponsorship available", "positive"),
+    (r"visa\s+sponsorship\s+(?:provided|offered)", "Sponsorship available", "positive"),
+    (r"f-?1\s+visa\s+holders?\s+welcome", "F1 visa holders welcome", "positive"),
+    (r"(?:opt|cpt)\s*/\s*(?:opt|cpt)\s+(?:accepted|welcome|eligible)", "CPT/OPT accepted", "positive"),
+    (r"\bopt\b.{0,15}\baccepted\b|\bcpt\b.{0,15}\baccepted\b", "CPT/OPT accepted", "positive"),
+    (r"must\s+be\s+authorized\s+to\s+work\s+in\s+the\s+u\.?s", "Must be authorized to work in the US", "info"),
+]
+
+_NEGATION_LOOKBACK_CHARS = 20
+_NEGATION_WORDS = re.compile(r"\b(no|not|without|cannot|can't|unable)\b")
+
+def extract_sponsorship_language(text: str) -> list:
+    """Scans a job posting's own text for employer language about work
+    authorization/visa sponsorship, so students can tell which postings are
+    realistic for an F1 visa holder without Arriv0 asserting anything about
+    their actual eligibility itself."""
+    if not text:
+        return []
+    lowered = text.lower()
+    seen_labels = set()
+    matches = []
+    for pattern, label, sentiment in SPONSORSHIP_LANGUAGE_PATTERNS:
+        if label in seen_labels:
+            continue
+        match = re.search(pattern, lowered)
+        if not match:
+            continue
+        if sentiment == "positive":
+            # "No sponsorship available" contains the same "sponsorship
+            # available" text a genuine positive mention would use - a
+            # positive match doesn't count if a negation word sits just
+            # before it (checked in code, not regex, since the gap between
+            # "no"/"without" and the phrase varies in length).
+            lookback = lowered[max(0, match.start() - _NEGATION_LOOKBACK_CHARS):match.start()]
+            if _NEGATION_WORDS.search(lookback):
+                continue
+        matches.append({"label": label, "sentiment": sentiment})
+        seen_labels.add(label)
+    return matches
+
+_INTERNSHIP_TITLE_KEYWORDS = ["intern", "internship", "entry level", "entry-level", "new grad", "graduate program", "co-op", "coop"]
+
+def _looks_like_internship(title: str) -> bool:
+    title_lower = (title or "").lower()
+    return any(kw in title_lower for kw in _INTERNSHIP_TITLE_KEYWORDS)
+
+async def fetch_usajobs_internships(query: str, max_items: int = 8) -> list:
+    """USAJOBS is the official federal government jobs API - free, no rate
+    limit concerns at this volume. Most federal roles legally require US
+    citizenship (this shows up directly in QualificationSummary text, which
+    extract_sponsorship_language() picks up like any other source), so this
+    mainly helps citizen/green-card students but is still surfaced with an
+    honest sponsorship-language flag rather than skipped outright."""
+    if not USAJOBS_API_KEY or not USAJOBS_EMAIL:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                "https://data.usajobs.gov/api/search",
+                params={"Keyword": f"{query} internship", "ResultsPerPage": 20},
+                headers={
+                    "Host": "data.usajobs.gov",
+                    "User-Agent": USAJOBS_EMAIL,
+                    "Authorization-Key": USAJOBS_API_KEY,
+                },
+            )
+            if response.status_code != 200:
+                logger.error(f"USAJobs error: status={response.status_code}")
+                return []
+            items = response.json().get("SearchResult", {}).get("SearchResultItems", [])
+    except Exception as e:
+        logger.error(f"USAJobs fetch error: {type(e).__name__}: {e}")
+        return []
+
+    results = []
+    for entry in items:
+        job = entry.get("MatchedObjectDescriptor", {})
+        title = job.get("PositionTitle", "")
+        if not _looks_like_internship(title):
+            continue
+        details = (job.get("UserArea") or {}).get("Details") or {}
+        # Requirements is where federal postings actually state "U.S.
+        # Citizenship" (verified directly - QualificationSummary/JobSummary
+        # alone missed it entirely on real listings), which is exactly the
+        # signal international students most need surfaced here.
+        description = " ".join(filter(None, [details.get("JobSummary"), job.get("QualificationSummary"), details.get("Requirements")]))
+        apply_urls = job.get("ApplyURI") or []
+        results.append({
+            "title": title,
+            "company": job.get("OrganizationName", ""),
+            "description": description[:1000],
+            "location": job.get("PositionLocationDisplay", ""),
+            "remote": bool(details.get("RemoteIndicator")),
+            "application_url": apply_urls[0] if apply_urls else job.get("PositionURI", ""),
+            "source": "USAJobs",
+            "posted_date": job.get("PublicationStartDate"),
+            "sponsorship_language": extract_sponsorship_language(title + " " + description),
+        })
+    return results[:max_items]
+
+async def fetch_remotive_internships(query: str, max_items: int = 8) -> list:
+    """Remotive's own `search` param does a loose full-text match (verified
+    directly - it doesn't reliably narrow down to internship-type roles by
+    itself), so results are still filtered by title afterward."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                "https://remotive.com/api/remote-jobs",
+                params={"search": query},
+                headers={"User-Agent": "Arriv0/1.0"},
+            )
+            if response.status_code != 200:
+                logger.error(f"Remotive error: status={response.status_code}")
+                return []
+            jobs = response.json().get("jobs", [])
+    except Exception as e:
+        logger.error(f"Remotive fetch error: {type(e).__name__}: {e}")
+        return []
+
+    results = []
+    for job in jobs:
+        title = job.get("title", "")
+        if not _looks_like_internship(title):
+            continue
+        description = _strip_html(job.get("description", ""))
+        results.append({
+            "title": title,
+            "company": job.get("company_name", ""),
+            "description": description[:1000],
+            "location": job.get("candidate_required_location", "Remote"),
+            "remote": True,
+            "application_url": job.get("url", ""),
+            "source": "Remotive",
+            "posted_date": job.get("publication_date"),
+            "sponsorship_language": extract_sponsorship_language(title + " " + description),
+        })
+    return results[:max_items]
+
+async def fetch_arbeitnow_internships(query: str, max_items: int = 8) -> list:
+    """Arbeitnow's job-board-api doesn't actually support server-side search
+    or a visa-sponsorship filter (verified directly - every query param
+    tried returned the same unfiltered page), so both internship relevance
+    and sponsorship language are determined entirely client-side here, same
+    as the other two sources."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                "https://www.arbeitnow.com/api/job-board-api",
+                headers={"User-Agent": "Arriv0/1.0"},
+            )
+            if response.status_code != 200:
+                logger.error(f"Arbeitnow error: status={response.status_code}")
+                return []
+            jobs = response.json().get("data", [])
+    except Exception as e:
+        logger.error(f"Arbeitnow fetch error: {type(e).__name__}: {e}")
+        return []
+
+    query_words = [w for w in re.findall(r"[a-z0-9]+", query.lower()) if len(w) > 2]
+    results = []
+    for job in jobs:
+        title = job.get("title", "")
+        if not _looks_like_internship(title):
+            continue
+        description = _strip_html(job.get("description", ""))
+        content_check = (title + " " + description).lower()
+        if query_words and not any(w in content_check for w in query_words):
+            continue
+        results.append({
+            "title": title,
+            "company": job.get("company_name", ""),
+            "description": description[:1000],
+            "location": job.get("location", ""),
+            "remote": bool(job.get("remote")),
+            "application_url": job.get("url", ""),
+            "source": "Arbeitnow",
+            "posted_date": job.get("created_at"),
+            "sponsorship_language": extract_sponsorship_language(title + " " + description),
+        })
+    return results[:max_items]
+
+async def fetch_supplementary_internships(query: str) -> list:
+    """Runs all three free sources concurrently and merges them - one
+    source failing (timeout, API change, etc.) never blocks the others,
+    matching the same per-source isolation used for the news fetchers."""
+    results = await asyncio.gather(
+        fetch_usajobs_internships(query),
+        fetch_remotive_internships(query),
+        fetch_arbeitnow_internships(query),
+        return_exceptions=True
+    )
+    all_items = []
+    for r in results:
+        if isinstance(r, list):
+            all_items.extend(r)
+        else:
+            logger.error(f"Supplementary internship source failed: {type(r).__name__}: {r}")
+    return _dedupe_internships(all_items)
+
+def _internship_is_duplicate(a: dict, b: dict) -> bool:
+    company_a = (a.get("company") or "").strip().lower()
+    company_b = (b.get("company") or "").strip().lower()
+    if not company_a or not company_b or company_a != company_b:
+        return False
+    return _titles_are_similar(a.get("title") or "", b.get("title") or "")
+
+def _dedupe_internships(items: list) -> list:
+    """Same company + similar title (reusing the news pipeline's title
+    similarity check) counts as the same posting cross-listed on multiple
+    boards, since these sources don't share Adzuna's numeric job ids."""
+    unique_items = []
+    for item in items:
+        if not any(_internship_is_duplicate(item, existing) for existing in unique_items):
+            unique_items.append(item)
+    return unique_items
+
+_SEASON_YEAR_PATTERN = re.compile(r"\b(spring|summer|fall|autumn|winter)\s+(20\d{2})\b", re.IGNORECASE)
+
+def compute_match_reasons(item: dict, profile: dict) -> list:
+    """Surfaces WHY a posting was matched, using only what's already on the
+    student's profile - major, program end date (graduation year), and the
+    optional career_interests/location_preference fields - plus the
+    posting's own sponsorship language. Never asserts eligibility, only
+    reflects back what the posting itself says."""
+    reasons = []
+    content = f"{item.get('title', '')} {item.get('description', '')}".lower()
+
+    major = (profile.get("major") or "").strip()
+    if major:
+        major_words = [w for w in re.findall(r"[a-z0-9]+", major.lower()) if len(w) > 3]
+        if any(w in content for w in major_words):
+            reasons.append(f"Matches your {major} background")
+
+    for interest in (profile.get("career_interests") or []):
+        interest_clean = interest.strip()
+        if interest_clean and interest_clean.lower() in content:
+            reasons.append(f"Matches your {interest_clean} interest")
+
+    location_pref = (profile.get("location_preference") or "").strip()
+    item_location = (item.get("location") or "").lower()
+    if location_pref and (location_pref.lower() in item_location or item.get("remote")):
+        reasons.append(f"Fits your preference for {location_pref}")
+
+    season_match = _SEASON_YEAR_PATTERN.search(content)
+    program_end = profile.get("program_end_date")
+    if season_match and program_end:
+        try:
+            grad_year = date.fromisoformat(str(program_end)[:10]).year
+            posting_year = int(season_match.group(2))
+            if date.today().year <= posting_year <= grad_year:
+                reasons.append(f"Fits your {season_match.group(1).title()} {posting_year} timeline")
+        except ValueError:
+            pass
+
+    for signal in item.get("sponsorship_language", []):
+        if signal["sentiment"] == "positive":
+            reasons.append(f"This employer mentions sponsorship: {signal['label']}")
+        elif signal["sentiment"] == "negative":
+            reasons.append(f"Warning: posting says \"{signal['label']}\"")
+
+    return reasons
+
 async def fetch_news_for_queries(queries: list, page_size: int = 3, max_items: int = 8) -> list:
     try:
         news_items = []
@@ -1740,11 +2022,30 @@ class UpdateProfileRequest(BaseModel):
     has_job_offer: Optional[bool] = None
     plans_after_graduation: Optional[str] = None
     work_experience_months: Optional[int] = None
+    career_interests: Optional[List[str]] = None
+    location_preference: Optional[str] = None
 
     @validator('name')
     def name_must_be_valid(cls, v):
         if v and len(v) > 100:
             raise ValueError('Name must be under 100 characters')
+        return v.strip() if v else v
+
+    @validator('career_interests')
+    def career_interests_must_be_valid(cls, v):
+        if v is None:
+            return v
+        if len(v) > 15:
+            raise ValueError('career_interests must have 15 items or fewer')
+        cleaned = [tag.strip() for tag in v if tag and tag.strip()]
+        if any(len(tag) > 50 for tag in cleaned):
+            raise ValueError('Each career interest must be under 50 characters')
+        return cleaned
+
+    @validator('location_preference')
+    def location_preference_must_be_valid(cls, v):
+        if v and len(v) > 200:
+            raise ValueError('Location preference must be under 200 characters')
         return v.strip() if v else v
 
     @validator('biggest_concern')
@@ -2827,16 +3128,26 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
     def extract_job(job: dict) -> dict:
         company = job.get("company") or {}
         location = job.get("location") or {}
+        description = job.get("description") or ""
+        location_display = location.get("display_name") or ""
         return {
             "id": job.get("id"),
             "title": job.get("title"),
             "company": company.get("display_name"),
-            "location": location.get("display_name"),
-            "description": job.get("description"),
+            "location": location_display,
+            "description": description,
             "url": job.get("redirect_url"),
             "created": job.get("created"),
             "salary_min": job.get("salary_min"),
             "salary_max": job.get("salary_max"),
+            # Added so every source (Adzuna plus the 3 free supplementary
+            # ones below) shares one normalized shape - old fields (url,
+            # created) are kept as-is for any existing consumer.
+            "source": "Adzuna",
+            "application_url": job.get("redirect_url"),
+            "posted_date": job.get("created"),
+            "remote": "remote" in location_display.lower(),
+            "sponsorship_language": extract_sponsorship_language(f"{job.get('title', '')} {description}"),
         }
 
     try:
@@ -2910,6 +3221,24 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
                 per_page = 20
                 total_pages = -(-total // per_page) if total else 1
                 has_more = page < total_pages
+
+        # Adzuna stays the primary source and its own pagination is left
+        # untouched - the 3 free supplementary sources (USAJobs, Remotive,
+        # Arbeitnow) aren't paginated the same way, so they're only fetched
+        # and appended once, on page 1, rather than re-fetched on every
+        # page turn. A failure here never breaks the Adzuna results that
+        # already succeeded above.
+        if page == 1:
+            try:
+                supplementary = await fetch_supplementary_internships(base_query)
+                for item in supplementary:
+                    if not any(_internship_is_duplicate(item, existing) for existing in results):
+                        results.append(item)
+            except Exception as e:
+                logger.error(f"Supplementary internship fetch failed: {type(e).__name__}: {e} correlation_id={correlation_id}")
+
+        for item in results:
+            item["match_reasons"] = compute_match_reasons(item, profile)
 
         return {
             "results": results,

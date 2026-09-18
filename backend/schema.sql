@@ -156,3 +156,15 @@ ALTER TABLE users
 ALTER TABLE news
   ADD COLUMN IF NOT EXISTS source text,
   ADD COLUMN IF NOT EXISTS published_at timestamp;
+
+-- Migration: career interests + location preference (2026-09-18)
+-- Backs internship match reasons ("Matches your cybersecurity interest",
+-- "Uses Python from your profile") in GET /internships - major and
+-- graduation year already existed, but interests/skills and a preferred
+-- location didn't. Settable via POST /profile/{user_id} (UpdateProfileRequest)
+-- like citizenship_country was; no dedicated signup or edit-profile UI field
+-- yet, so these stay empty until the frontend adds one. compute_match_reasons()
+-- in main.py treats both as optional and just skips those reasons if empty.
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS career_interests text[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS location_preference text;
