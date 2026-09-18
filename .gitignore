@@ -1,1 +1,9 @@
 .DS_Store
+
+# Signing credentials and certificates - must never be committed, regardless
+# of which directory a build tool happens to drop them in.
+credentials.json
+*.key
+*.pem
+*.p12
+*.certSigningRequest

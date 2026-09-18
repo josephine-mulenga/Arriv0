@@ -21,6 +21,7 @@ import logging
 import httpx
 import uuid
 import re
+import feedparser
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -235,6 +236,38 @@ URGENT_NEWS_KEYWORDS = [
     "urgent", "emergency", "immediate", "suspended", "terminated",
     "revoked", "deadline", "policy change", "effective immediately"
 ]
+
+# Shared by fetch_news_for_queries (NewsAPI) and fetch_rss_news (RSS) so an
+# article only needs to look relevant to F1 students once, regardless of
+# which source found it.
+NEWS_RELEVANCE_KEYWORDS = [
+    "opt", "cpt", "f1", "f-1", "sevis", "uscis",
+    "immigration", "international student", "visa",
+    "student", "work authorization", "practical training",
+    "stem", "h-1b", "green card", "deportation", "dso",
+    "i-20", "i-765", "foreign student", "study abroad",
+    "student visa", "work permit", "employment authorization",
+    "trump", "ice", "border", "asylum", "refugee",
+    "tuition", "college", "university", "campus",
+    "scholarship", "fellowship", "graduate student",
+    "doctorate", "phd", "masters degree", "undergraduate"
+]
+
+# USCIS moved its newsroom under /newsroom/ at some point and the old
+# /news/all-news/feed URL 404s now - the real feed URL is only discoverable
+# via the <link rel="alternate"> tag on the current news page. ICE's /rss
+# is an index page listing dozens of topic-specific feeds, not a feed
+# itself - /rss/ice-breaking-news is the actual general news feed. Study in
+# the States' rss.xml works exactly as published. All three verified
+# directly with feedparser before being added here.
+RSS_FEED_URLS = [
+    "https://www.uscis.gov/news/rss-feed/59144",
+    "https://www.ice.gov/rss/ice-breaking-news",
+    "https://studyinthestates.dhs.gov/rss.xml",
+]
+
+def _strip_html(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text or "").strip()
 
 def is_urgent_news(title: str, summary: str) -> bool:
     content = (title + " " + summary).lower()
@@ -1017,18 +1050,7 @@ async def fetch_news_for_queries(queries: list, page_size: int = 3, max_items: i
                             title = article.get("title", "")
                             description = article.get("description", "") or ""
                             content_check = (title + " " + description).lower()
-                            if any(kw in content_check for kw in [
-                                "opt", "cpt", "f1", "f-1", "sevis", "uscis",
-                                "immigration", "international student", "visa",
-                                "student", "work authorization", "practical training",
-                                "stem", "h-1b", "green card", "deportation", "dso",
-                                "i-20", "i-765", "foreign student", "study abroad",
-                                "student visa", "work permit", "employment authorization",
-                                "trump", "ice", "border", "asylum", "refugee",
-                                "tuition", "college", "university", "campus",
-                                "scholarship", "fellowship", "graduate student",
-                                "doctorate", "phd", "masters degree", "undergraduate"
-                            ]):
+                            if any(kw in content_check for kw in NEWS_RELEVANCE_KEYWORDS):
                                 news_items.append({
                                     "title": title[:200],
                                     "link": article.get("url", ""),
@@ -1077,6 +1099,55 @@ async def fetch_urgent_news():
         "USCIS F1 visa urgent policy change",
         "OPT CPT SEVIS emergency update",
     ], page_size=5, max_items=6)
+
+async def fetch_rss_news(max_items: int = 10) -> list:
+    """Free, unlimited supplement to NewsAPI - no per-day quota, so this can
+    run as often as every job that calls it needs without any rate-limit
+    math. Returns items in the same shape fetch_news_for_queries does, so
+    callers can merge and process both sources identically."""
+    news_items = []
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            for feed_url in RSS_FEED_URLS:
+                try:
+                    response = await client.get(feed_url, headers={"User-Agent": "Arriv0/1.0"})
+                    if response.status_code != 200:
+                        logger.error(f"RSS feed error: {feed_url} status={response.status_code}")
+                        continue
+                    parsed = feedparser.parse(response.content)
+                    for entry in parsed.entries[:20]:
+                        title = entry.get("title", "")
+                        summary = _strip_html(entry.get("summary") or entry.get("description") or "")
+                        content_check = (title + " " + summary).lower()
+                        if not any(kw in content_check for kw in NEWS_RELEVANCE_KEYWORDS):
+                            continue
+                        image_url = ""
+                        media = entry.get("media_content") or entry.get("media_thumbnail")
+                        if media and isinstance(media, list) and media[0].get("url"):
+                            image_url = media[0]["url"]
+                        news_items.append({
+                            "title": title[:200],
+                            "link": entry.get("link", ""),
+                            "summary": summary[:500],
+                            "image_url": image_url,
+                            "published_at": entry.get("published"),
+                        })
+                except Exception as e:
+                    logger.error(f"RSS feed fetch error for {feed_url}: {type(e).__name__}: {e}")
+                    continue
+    except Exception as e:
+        logger.error(f"RSS news fetch failed: {e}")
+        return []
+
+    seen = set()
+    unique_items = []
+    for item in news_items:
+        if item["title"] not in seen:
+            seen.add(item["title"])
+            unique_items.append(item)
+
+    logger.info(f"Fetched {len(unique_items)} relevant RSS news items")
+    return unique_items[:max_items]
 
 async def summarize_news_item(title: str, summary: str, link: str):
     safe_title = sanitize_input(title)
@@ -1143,9 +1214,24 @@ Does this news affect this student specifically? If yes write a personalized pus
     except Exception as e:
         logger.error(f"Failed to personalize news: {e}")
         return None
+
+def _merge_news_items(*item_lists: list) -> list:
+    """Combines NewsAPI and RSS results, keeping the first occurrence of each
+    title so the same story reported by both sources is only processed once."""
+    seen = set()
+    merged = []
+    for items in item_lists:
+        for item in items:
+            if item["title"] not in seen:
+                seen.add(item["title"])
+                merged.append(item)
+    return merged
+
 async def process_and_notify():
     logger.info("Starting news fetch and notification job")
-    news_items = await fetch_uscis_news()
+    newsapi_items = await fetch_uscis_news()
+    rss_items = await fetch_rss_news()
+    news_items = _merge_news_items(newsapi_items, rss_items)
     if not news_items:
         logger.info("No news items fetched")
         return
@@ -1203,7 +1289,9 @@ async def check_urgent_news():
     re-blasted every run it keeps showing up in NewsAPI's results."""
     logger.info("Running urgent news check")
     try:
-        news_items = await fetch_urgent_news()
+        newsapi_items = await fetch_urgent_news()
+        rss_items = await fetch_rss_news()
+        news_items = _merge_news_items(newsapi_items, rss_items)
         if not news_items:
             return
 
