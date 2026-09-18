@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   BriefcaseIcon,
   MagnifyingGlassIcon,
@@ -27,6 +27,11 @@ interface InternshipItem {
   salary_max?: number;
 }
 
+interface CompanyResult {
+  name: string;
+  logo_url?: string;
+}
+
 function formatSalary(min?: number, max?: number): string | null {
   if (!min && !max) return null;
   const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`;
@@ -51,8 +56,9 @@ export default function InternshipsScreen() {
   const [notConfigured, setNotConfigured] = useState(false);
 
   const [companyQuery, setCompanyQuery] = useState('');
-  const [companySuggestions, setCompanySuggestions] = useState<string[]>([]);
-  const [watchedCompanies, setWatchedCompanies] = useState<string[]>([]);
+  const [companySuggestions, setCompanySuggestions] = useState<CompanyResult[]>([]);
+  const [watchedCompanies, setWatchedCompanies] = useState<CompanyResult[]>([]);
+  const [brokenLogos, setBrokenLogos] = useState<Set<string>>(new Set());
   const [watching, setWatching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -106,7 +112,7 @@ export default function InternshipsScreen() {
   const handleUnwatch = async (company: string) => {
     if (!token) return;
     const previous = watchedCompanies;
-    setWatchedCompanies((prev) => prev.filter((c) => c !== company));
+    setWatchedCompanies((prev) => prev.filter((c) => c.name !== company));
     try {
       const result = await unwatchCompany(company, token);
       setWatchedCompanies(result.watched_companies ?? []);
@@ -209,14 +215,22 @@ export default function InternshipsScreen() {
 
           {companySuggestions.length > 0 && (
             <View style={styles.suggestionDropdown}>
-              {companySuggestions.map((name, index) => (
+              {companySuggestions.map((item, index) => (
                 <Pressable
-                  key={name}
+                  key={item.name}
                   style={[styles.suggestionRow, index === companySuggestions.length - 1 && styles.rowLast]}
                   disabled={watching}
-                  onPress={() => handleWatchCompany(name)}>
-                  <BuildingsIcon size={15} color={Palette.inkFaint} />
-                  <Text style={styles.suggestionText}>{name}</Text>
+                  onPress={() => handleWatchCompany(item.name)}>
+                  {item.logo_url && !brokenLogos.has(item.logo_url) ? (
+                    <Image
+                      source={{ uri: item.logo_url }}
+                      style={styles.companyLogo}
+                      onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
+                    />
+                  ) : (
+                    <BuildingsIcon size={15} color={Palette.inkFaint} />
+                  )}
+                  <Text style={styles.suggestionText}>{item.name}</Text>
                 </Pressable>
               ))}
             </View>
@@ -224,10 +238,17 @@ export default function InternshipsScreen() {
 
           {watchedCompanies.length > 0 && (
             <View style={styles.watchedChipsRow}>
-              {watchedCompanies.map((company) => (
-                <View key={company} style={styles.watchedChip}>
-                  <Text style={styles.watchedChipText}>{company}</Text>
-                  <Pressable onPress={() => handleUnwatch(company)} hitSlop={8}>
+              {watchedCompanies.map((item) => (
+                <View key={item.name} style={styles.watchedChip}>
+                  {item.logo_url && !brokenLogos.has(item.logo_url) ? (
+                    <Image
+                      source={{ uri: item.logo_url }}
+                      style={styles.watchedChipLogo}
+                      onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
+                    />
+                  ) : null}
+                  <Text style={styles.watchedChipText}>{item.name}</Text>
+                  <Pressable onPress={() => handleUnwatch(item.name)} hitSlop={8}>
                     <XIcon size={12} color={Palette.purple} weight="bold" />
                   </Pressable>
                 </View>
@@ -427,6 +448,16 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyRegular,
     fontSize: 13.5,
     color: Palette.ink,
+  },
+  companyLogo: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+  },
+  watchedChipLogo: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
   },
   watchedChipsRow: {
     flexDirection: 'row',

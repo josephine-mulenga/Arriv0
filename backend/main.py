@@ -269,6 +269,21 @@ RSS_FEED_URLS = [
 def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text or "").strip()
 
+def _rss_entry_image_url(entry) -> str:
+    """USCIS/ICE/Study in the States don't publish images in their feeds at
+    all (verified directly - no enclosures, no media tags), but other feeds
+    commonly use one of these three conventions, so all three are checked
+    for whichever RSS sources get added later."""
+    for enclosure in entry.get("enclosures") or []:
+        enclosure_type = enclosure.get("type", "")
+        url = enclosure.get("href") or enclosure.get("url")
+        if url and (enclosure_type.startswith("image/") or url.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))):
+            return url
+    media = entry.get("media_content") or entry.get("media_thumbnail")
+    if media and isinstance(media, list) and media[0].get("url"):
+        return media[0]["url"]
+    return ""
+
 def is_urgent_news(title: str, summary: str) -> bool:
     content = (title + " " + summary).lower()
     return any(kw in content for kw in URGENT_NEWS_KEYWORDS)
@@ -890,8 +905,105 @@ def ensure_intern_keyword(text: str) -> str:
     engineering intern" shouldn't get "...intern intern")."""
     return text if "intern" in text.lower() else f"{text} intern"
 
+# Known display name -> domain, for Clearbit logo lookups and for correcting
+# misspelled company searches before they ever reach Adzuna. Adzuna's own
+# `what=` search does plain keyword matching with no fuzziness at all -
+# verified directly that "microsft intern"/"gogle intern" return zero
+# results even though "microsoft intern"/"google intern" return plenty - so
+# a typo has to be corrected before the request is made, not after.
+COMPANY_DOMAINS = {
+    "microsoft": "microsoft.com", "google": "google.com", "amazon": "amazon.com",
+    "apple": "apple.com", "meta": "meta.com", "facebook": "meta.com",
+    "netflix": "netflix.com", "tesla": "tesla.com", "nvidia": "nvidia.com",
+    "ibm": "ibm.com", "intel": "intel.com", "oracle": "oracle.com",
+    "salesforce": "salesforce.com", "adobe": "adobe.com", "sap": "sap.com",
+    "uber": "uber.com", "lyft": "lyft.com", "airbnb": "airbnb.com",
+    "spotify": "spotify.com", "linkedin": "linkedin.com", "twitter": "twitter.com",
+    "x": "x.com", "snap": "snap.com", "snapchat": "snap.com",
+    "goldman sachs": "goldmansachs.com", "jpmorgan": "jpmorgan.com",
+    "morgan stanley": "morganstanley.com", "jpmorgan chase": "jpmorganchase.com",
+    "wells fargo": "wellsfargo.com", "bank of america": "bankofamerica.com",
+    "citi": "citigroup.com", "citigroup": "citigroup.com",
+    "capital one": "capitalone.com", "visa": "visa.com", "mastercard": "mastercard.com",
+    "paypal": "paypal.com", "stripe": "stripe.com", "square": "squareup.com",
+    "block": "block.xyz", "robinhood": "robinhood.com", "coinbase": "coinbase.com",
+    "deloitte": "deloitte.com", "pwc": "pwc.com", "ey": "ey.com",
+    "kpmg": "kpmg.com", "accenture": "accenture.com", "mckinsey": "mckinsey.com",
+    "boston consulting group": "bcg.com", "bcg": "bcg.com",
+    "boeing": "boeing.com", "lockheed martin": "lockheedmartin.com",
+    "raytheon": "rtx.com", "northrop grumman": "northropgrumman.com",
+    "general electric": "ge.com", "ge": "ge.com", "honeywell": "honeywell.com",
+    "johnson & johnson": "jnj.com", "pfizer": "pfizer.com", "moderna": "modernatx.com",
+    "walmart": "walmart.com", "target": "target.com", "costco": "costco.com",
+    "disney": "disney.com", "warner bros": "warnerbros.com", "sony": "sony.com",
+    "samsung": "samsung.com", "dell": "dell.com", "hp": "hp.com",
+    "cisco": "cisco.com", "qualcomm": "qualcomm.com", "amd": "amd.com",
+    "vmware": "vmware.com", "servicenow": "servicenow.com", "workday": "workday.com",
+    "palantir": "palantir.com", "databricks": "databricks.com", "snowflake": "snowflake.com",
+    "openai": "openai.com", "anthropic": "anthropic.com", "doordash": "doordash.com",
+    "instacart": "instacart.com", "chewy": "chewy.com", "shopify": "shopify.com",
+    "atlassian": "atlassian.com", "twilio": "twilio.com", "dropbox": "dropbox.com",
+    "zoom": "zoom.us", "slack": "slack.com", "asana": "asana.com",
+    "reddit": "reddit.com", "pinterest": "pinterest.com", "yelp": "yelp.com",
+    "ea": "ea.com", "electronic arts": "ea.com", "activision blizzard": "activisionblizzard.com",
+    "epic games": "epicgames.com", "riot games": "riotgames.com",
+    "goldman": "goldmansachs.com", "duolingo": "duolingo.com",
+}
+
+def _levenshtein(a: str, b: str) -> int:
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    previous_row = list(range(len(b) + 1))
+    for i, char_a in enumerate(a, start=1):
+        current_row = [i]
+        for j, char_b in enumerate(b, start=1):
+            insert_cost = current_row[j - 1] + 1
+            delete_cost = previous_row[j] + 1
+            replace_cost = previous_row[j - 1] + (char_a != char_b)
+            current_row.append(min(insert_cost, delete_cost, replace_cost))
+        previous_row = current_row
+    return previous_row[-1]
+
+def _closest_known_company(query: str) -> Optional[str]:
+    """Fuzzy-corrects a possibly-misspelled company name against
+    COMPANY_DOMAINS so a typo like "microsft" or "gogle" still resolves to
+    the real company before it's used in an Adzuna search or a logo
+    lookup. Returns the canonical (properly-spelled) name, or None if
+    nothing is close enough to be confident it's the same company."""
+    query = query.lower().strip()
+    if query in COMPANY_DOMAINS:
+        return query
+    # Corporate suffixes ("Microsoft Corporation", "Amazon.com Inc") shouldn't
+    # need a fuzzy match at all - the canonical name is right there as a
+    # substring. Only checked in this direction (known name inside query, not
+    # the reverse) so a short query like "go" can't wrongly match "google".
+    substring_matches = [name for name in COMPANY_DOMAINS if name in query]
+    if substring_matches:
+        return max(substring_matches, key=len)
+    threshold = 1 if len(query) <= 5 else 2
+    best_match, best_distance = None, threshold + 1
+    for name in COMPANY_DOMAINS:
+        distance = _levenshtein(query, name)
+        if distance <= threshold and distance < best_distance:
+            best_match, best_distance = name, distance
+    return best_match
+
+def company_logo_url(name: str) -> str:
+    corrected = _closest_known_company(name)
+    domain = COMPANY_DOMAINS.get(corrected) if corrected else None
+    if not domain:
+        # Best-effort guess for companies outside the curated list - Clearbit
+        # returns a generic placeholder rather than an error for domains it
+        # doesn't recognize, so a wrong guess never breaks the UI.
+        domain = re.sub(r"[^a-z0-9]", "", name.lower()) + ".com"
+    return f"https://logo.clearbit.com/{domain}"
+
 async def send_internship_notifications():
-    logger.info("Running daily internship match check")
+    logger.info("Running internship match check")
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
         logger.info("Adzuna not configured — skipping internship match check")
         return
@@ -1121,15 +1233,11 @@ async def fetch_rss_news(max_items: int = 10) -> list:
                         content_check = (title + " " + summary).lower()
                         if not any(kw in content_check for kw in NEWS_RELEVANCE_KEYWORDS):
                             continue
-                        image_url = ""
-                        media = entry.get("media_content") or entry.get("media_thumbnail")
-                        if media and isinstance(media, list) and media[0].get("url"):
-                            image_url = media[0]["url"]
                         news_items.append({
                             "title": title[:200],
                             "link": entry.get("link", ""),
                             "summary": summary[:500],
-                            "image_url": image_url,
+                            "image_url": _rss_entry_image_url(entry),
                             "published_at": entry.get("published"),
                         })
                 except Exception as e:
@@ -1227,6 +1335,56 @@ def _merge_news_items(*item_lists: list) -> list:
                 merged.append(item)
     return merged
 
+async def _insert_new_relevant_articles(news_items: list) -> list:
+    """Classifies and inserts articles not already in the news table (deduped
+    by title), skipping the OpenAI summarize call entirely for articles that
+    are irrelevant or already known. Returns only the newly-inserted ones,
+    so callers can notify about exactly what's new this run instead of
+    re-notifying about articles they've already told users about."""
+    newly_inserted = []
+    for item in news_items:
+        affects_f1, tag = classify_news(item["title"], item["summary"])
+        if not affects_f1:
+            continue
+
+        existing = supabase_admin.table("news").select("id").eq("title", item["title"]).execute()
+        if existing.data:
+            continue
+
+        urgent = is_urgent_news(item["title"], item["summary"])
+        summary = await summarize_news_item(item["title"], item["summary"], item["link"])
+        supabase_admin.table("news").insert({
+            "title": item["title"],
+            "body": summary,
+            "affects_f1": affects_f1,
+            "tag": tag,
+            "link": item["link"],
+            "image_url": item.get("image_url", ""),
+            "urgent": urgent
+        }).execute()
+        newly_inserted.append({"title": item["title"], "body": summary, "link": item["link"], "urgent": urgent})
+
+    return newly_inserted
+
+async def _notify_users_of_news(newly_inserted: list, log_label: str):
+    """Sends at most one push per user per batch even when several new
+    articles land in the same run, so a busy news day can't spam anyone."""
+    if not newly_inserted:
+        return
+    users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
+    if not users.data:
+        logger.info("No users with push tokens found")
+        return
+
+    for user in users.data:
+        for news in newly_inserted:
+            personalized = await personalize_news_for_student(news["title"], news["body"], news["link"], user)
+            if personalized:
+                title = "Arriv0 Urgent Immigration Update" if news["urgent"] else "Arriv0 Immigration Update"
+                await send_push_notification(user["push_token"], title, personalized)
+                logger.info(f"{log_label} sent to {user['name']}")
+                break
+
 async def process_and_notify():
     logger.info("Starting news fetch and notification job")
     newsapi_items = await fetch_uscis_news()
@@ -1236,57 +1394,21 @@ async def process_and_notify():
         logger.info("No news items fetched")
         return
 
-    summarized_news = []
-    for item in news_items:
-        summary = await summarize_news_item(item["title"], item["summary"], item["link"])
-        affects_f1, tag = classify_news(item["title"], item["summary"])
-        urgent = is_urgent_news(item["title"], item["summary"])
-        summarized_news.append({
-            "title": item["title"],
-            "body": summary,
-            "link": item["link"],
-            "affects_f1": affects_f1,
-            "tag": tag,
-            "image_url": item.get("image_url", ""),
-            "urgent": urgent
-        })
-        if affects_f1:
-            existing = supabase_admin.table("news").select("id").eq("title", item["title"]).execute()
-            if not existing.data:
-                supabase_admin.table("news").insert({
-                    "title": item["title"],
-                    "body": summary,
-                    "affects_f1": affects_f1,
-                    "tag": tag,
-                    "link": item["link"],
-                    "image_url": item.get("image_url", ""),
-                    "urgent": urgent
-                }).execute()
-
-    users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
-    if not users.data:
-        logger.info("No users with push tokens found")
-        return
-
-    for user in users.data:
-        for news in summarized_news:
-            if not news["affects_f1"]:
-                continue
-            personalized = await personalize_news_for_student(news["title"], news["body"], news["link"], user)
-            if personalized:
-                await send_push_notification(user["push_token"], "Arriv0 Immigration Update", personalized)
-                logger.info(f"News notification sent to {user['name']}")
-
+    newly_inserted = await _insert_new_relevant_articles(news_items)
+    await _notify_users_of_news(newly_inserted, "News notification")
     logger.info("News fetch and notification job complete")
 
 async def check_urgent_news():
     """Runs every 2 hours, independently of the 3-hour process_and_notify
-    job, so genuinely urgent articles reach affected students faster than
-    waiting for the next regular cycle. Uses only 2 narrowly-targeted
-    NewsAPI queries (fetch_urgent_news) to stay within the free tier's
-    100 requests/day. Only ever acts on articles not already in the news
-    table, so the same urgent item is inserted and pushed exactly once, not
-    re-blasted every run it keeps showing up in NewsAPI's results."""
+    job, so any new relevant article - not just urgent ones - reaches
+    affected students well before the next regular cycle. Uses only 2
+    narrowly-targeted NewsAPI queries (fetch_urgent_news) plus the same free
+    RSS feeds, to stay within the free tier's 100 requests/day. Only ever
+    acts on articles not already in the news table, so the same item is
+    inserted and pushed exactly once, not re-blasted every run it keeps
+    showing up in NewsAPI's results. is_urgent_news() still tags genuinely
+    urgent articles for a distinct notification title, but no longer gates
+    whether an article gets pushed at all."""
     logger.info("Running urgent news check")
     try:
         newsapi_items = await fetch_urgent_news()
@@ -1295,35 +1417,8 @@ async def check_urgent_news():
         if not news_items:
             return
 
-        for item in news_items:
-            affects_f1, tag = classify_news(item["title"], item["summary"])
-            if not affects_f1 or not is_urgent_news(item["title"], item["summary"]):
-                continue
-
-            existing = supabase_admin.table("news").select("id").eq("title", item["title"]).execute()
-            if existing.data:
-                continue
-
-            summary = await summarize_news_item(item["title"], item["summary"], item["link"])
-            supabase_admin.table("news").insert({
-                "title": item["title"],
-                "body": summary,
-                "affects_f1": affects_f1,
-                "tag": tag,
-                "link": item["link"],
-                "image_url": item.get("image_url", ""),
-                "urgent": True
-            }).execute()
-            logger.info(f"Urgent news item found: {item['title']}")
-
-            users = supabase_admin.table("users").select("*").not_.is_("push_token", "null").execute()
-            if not users.data:
-                continue
-            for user in users.data:
-                personalized = await personalize_news_for_student(item["title"], summary, item["link"], user)
-                if personalized:
-                    await send_push_notification(user["push_token"], "Arriv0 Urgent Immigration Update", personalized)
-                    logger.info(f"Urgent news notification sent to {user['name']}")
+        newly_inserted = await _insert_new_relevant_articles(news_items)
+        await _notify_users_of_news(newly_inserted, "Urgent news notification")
     except Exception as e:
         logger.error(f"Urgent news check failed: {e}")
 
@@ -1578,14 +1673,14 @@ async def startup_event():
     scheduler.add_job(process_and_notify, CronTrigger(hour="*/3"))
     scheduler.add_job(check_urgent_news, CronTrigger(hour="*/2"))
     scheduler.add_job(send_opt_countdown_alerts, CronTrigger(hour=9, minute=0))
-    scheduler.add_job(send_internship_notifications, CronTrigger(hour=10, minute=0))
+    scheduler.add_job(send_internship_notifications, CronTrigger(hour="*/2"))
     scheduler.add_job(check_watched_companies, CronTrigger(minute="*/30"))
     scheduler.start()
     logger.info("Morning notification scheduler started — checking every minute")
     logger.info("News fetch scheduler started — running every 3 hours")
     logger.info("Urgent news scheduler started — checking every 2 hours")
     logger.info("OPT countdown alert scheduler started — running daily at 9am UTC")
-    logger.info("Internship match scheduler started — running daily at 10am UTC")
+    logger.info("Internship match scheduler started — running every 2 hours")
     logger.info("Company watch scheduler started — checking every 30 minutes")
 
 @app.on_event("shutdown")
@@ -2687,6 +2782,16 @@ async def search_companies(request: Request, q: str = Query(..., max_length=200)
         return {"companies": []}
 
     try:
+        # Adzuna's what= search does plain keyword matching with no fuzziness
+        # at all - a misspelled query like "microsft intern" returns zero
+        # results even though the correctly-spelled version returns plenty
+        # (verified directly). Correct against the curated COMPANY_DOMAINS
+        # list before ever calling Adzuna, so a typo of a well-known company
+        # still finds it. Falls through to the raw query for anything not
+        # in that list, unchanged from before.
+        corrected = _closest_known_company(q)
+        search_term = corrected if corrected else q
+
         # No dedicated company-autocomplete endpoint on this Adzuna tier.
         # Adzuna's company= filter only recognizes a curated set of larger
         # employers and errors out for smaller ones (e.g. "duolingo" 502'd
@@ -2700,7 +2805,7 @@ async def search_companies(request: Request, q: str = Query(..., max_length=200)
                     "app_id": ADZUNA_APP_ID,
                     "app_key": ADZUNA_APP_KEY,
                     "results_per_page": 50,
-                    "what": ensure_intern_keyword(q),
+                    "what": ensure_intern_keyword(search_term),
                     "content-type": "application/json",
                 },
             )
@@ -2708,7 +2813,7 @@ async def search_companies(request: Request, q: str = Query(..., max_length=200)
             logger.error(f"Adzuna company-search error: status={response.status_code} body={response.text[:300]} correlation_id={correlation_id}")
             raise HTTPException(status_code=502, detail="Couldn't reach the internship search service. Try again shortly.")
 
-        q_lower = q.lower()
+        filter_term = search_term.lower()
         counts: dict = {}
         display_names: dict = {}
         for job in response.json().get("results", []):
@@ -2721,13 +2826,13 @@ async def search_companies(request: Request, q: str = Query(..., max_length=200)
             # own name actually contains the query, since this is an
             # autocomplete endpoint - showing unrelated company names isn't
             # useful no matter how it was found.
-            if name and q_lower in name.lower():
+            if name and (filter_term in name.lower() or _levenshtein(filter_term, name.lower()) <= 2):
                 key = name.lower()
                 counts[key] = counts.get(key, 0) + 1
                 display_names.setdefault(key, name)
 
         ranked = sorted(counts.keys(), key=lambda k: counts[k], reverse=True)
-        companies = [display_names[k] for k in ranked]
+        companies = [{"name": display_names[k], "logo_url": company_logo_url(display_names[k])} for k in ranked]
 
         return {"companies": companies[:10]}
     except httpx.TimeoutException as e:
@@ -2749,7 +2854,8 @@ def get_watched_companies(request: Request, authorization: Optional[str] = Heade
         response = supabase_admin.table("users").select("watched_companies").eq("id", user_id).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="User profile not found.")
-        return {"watched_companies": response.data[0].get("watched_companies") or []}
+        current = response.data[0].get("watched_companies") or []
+        return {"watched_companies": [{"name": c, "logo_url": company_logo_url(c)} for c in current]}
     except HTTPException:
         raise
     except Exception as e:
@@ -2768,10 +2874,10 @@ def watch_company(request: Request, data: WatchCompanyRequest, authorization: Op
             raise HTTPException(status_code=404, detail="User profile not found.")
         current = response.data[0].get("watched_companies") or []
         if any(c.lower() == data.company.lower() for c in current):
-            return {"message": f"{data.company} is already on your watch list.", "watched_companies": current}
+            return {"message": f"{data.company} is already on your watch list.", "watched_companies": [{"name": c, "logo_url": company_logo_url(c)} for c in current]}
         updated = current + [data.company]
         supabase_admin.table("users").update({"watched_companies": updated}).eq("id", user_id).execute()
-        return {"message": f"Now watching {data.company} for new internships.", "watched_companies": updated}
+        return {"message": f"Now watching {data.company} for new internships.", "watched_companies": [{"name": c, "logo_url": company_logo_url(c)} for c in updated]}
     except HTTPException:
         raise
     except Exception as e:
@@ -2793,7 +2899,7 @@ def unwatch_company(request: Request, company: str, authorization: Optional[str]
         if len(updated) == len(current):
             raise HTTPException(status_code=404, detail=f"{company} is not on your watch list.")
         supabase_admin.table("users").update({"watched_companies": updated}).eq("id", user_id).execute()
-        return {"message": f"Stopped watching {company}.", "watched_companies": updated}
+        return {"message": f"Stopped watching {company}.", "watched_companies": [{"name": c, "logo_url": company_logo_url(c)} for c in updated]}
     except HTTPException:
         raise
     except Exception as e:
