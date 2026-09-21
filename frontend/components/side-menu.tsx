@@ -11,7 +11,6 @@ import {
   XIcon,
   HouseIcon,
   PathIcon,
-  StarIcon,
   NewspaperIcon,
   RobotIcon,
   BellIcon,
@@ -33,8 +32,7 @@ interface SideMenuProps {
 
 const primaryItems: { icon: Icon; label: string; href: string }[] = [
   { icon: HouseIcon, label: 'Home', href: '/(tabs)' },
-  { icon: PathIcon, label: 'Timeline', href: '/(tabs)/timeline' },
-  { icon: StarIcon, label: 'Milestones', href: '/(tabs)/milestones' },
+  { icon: PathIcon, label: 'Journey', href: '/(tabs)/journey' },
   { icon: NewspaperIcon, label: 'News', href: '/(tabs)/news' },
   { icon: RobotIcon, label: 'AI Assistant', href: '/chat' },
 ];

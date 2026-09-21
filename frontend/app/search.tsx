@@ -55,11 +55,11 @@ export default function SearchScreen() {
         list.push({
           type: 'Deadlines',
           title: step.task,
-          meta: step.date_range ?? 'From your timeline',
+          meta: step.date_range ?? 'From your journey',
           icon: ClockIcon,
           tint: Palette.purpleTint,
           color: Palette.purple,
-          onPress: () => router.push('/(tabs)/timeline'),
+          onPress: () => router.push('/(tabs)/journey'),
         });
       });
 

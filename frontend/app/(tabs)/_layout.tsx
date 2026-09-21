@@ -1,11 +1,10 @@
 import { Tabs, Redirect } from 'expo-router';
 import { useEffect } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import {
   HouseIcon,
   PathIcon,
-  StarIcon,
   NewspaperIcon,
   BriefcaseIcon,
   UserIcon,
@@ -13,6 +12,7 @@ import {
 } from 'phosphor-react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { FloatingAskArri } from '@/components/floating-ask-arri';
 import { Palette, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { registerForPushNotifications } from '@/utils/registerPushNotifications';
@@ -43,66 +43,61 @@ export default function TabLayout() {
   }
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarActiveTintColor: Palette.purple,
-        tabBarInactiveTintColor: Palette.inkDisabled,
-        tabBarStyle: styles.tabBar,
-        tabBarBackground: () => (
-          <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
-        ),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={HouseIcon} color={color} focused={focused} />,
-          tabBarLabel: ({ color }) => <TabLabel label="Home" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="timeline"
-        options={{
-          title: 'Timeline',
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={PathIcon} color={color} focused={focused} />,
-          tabBarLabel: ({ color }) => <TabLabel label="Timeline" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="milestones"
-        options={{
-          title: 'Milestones',
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={StarIcon} color={color} focused={focused} />,
-          tabBarLabel: ({ color }) => <TabLabel label="Milestones" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="news"
-        options={{
-          title: 'News',
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={NewspaperIcon} color={color} focused={focused} />,
-          tabBarLabel: ({ color }) => <TabLabel label="News" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="internships"
-        options={{
-          title: 'Internships',
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={BriefcaseIcon} color={color} focused={focused} />,
-          tabBarLabel: ({ color }) => <TabLabel label="Internships" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={UserIcon} color={color} focused={focused} />,
-          tabBarLabel: ({ color }) => <TabLabel label="Profile" color={color} />,
-        }}
-      />
-    </Tabs>
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarButton: HapticTab,
+          tabBarActiveTintColor: Palette.purple,
+          tabBarInactiveTintColor: Palette.inkDisabled,
+          tabBarStyle: styles.tabBar,
+          tabBarBackground: () => (
+            <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
+          ),
+        }}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, focused }) => <TabIcon Icon={HouseIcon} color={color} focused={focused} />,
+            tabBarLabel: ({ color }) => <TabLabel label="Home" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="journey"
+          options={{
+            title: 'Journey',
+            tabBarIcon: ({ color, focused }) => <TabIcon Icon={PathIcon} color={color} focused={focused} />,
+            tabBarLabel: ({ color }) => <TabLabel label="Journey" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="news"
+          options={{
+            title: 'News',
+            tabBarIcon: ({ color, focused }) => <TabIcon Icon={NewspaperIcon} color={color} focused={focused} />,
+            tabBarLabel: ({ color }) => <TabLabel label="News" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="internships"
+          options={{
+            title: 'Opportunities',
+            tabBarIcon: ({ color, focused }) => <TabIcon Icon={BriefcaseIcon} color={color} focused={focused} />,
+            tabBarLabel: ({ color }) => <TabLabel label="Opportunities" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color, focused }) => <TabIcon Icon={UserIcon} color={color} focused={focused} />,
+            tabBarLabel: ({ color }) => <TabLabel label="Profile" color={color} />,
+          }}
+        />
+      </Tabs>
+      <FloatingAskArri />
+    </View>
   );
 }
 

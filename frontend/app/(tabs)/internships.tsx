@@ -178,7 +178,7 @@ export default function InternshipsScreen() {
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Internships</Text>
+          <Text style={styles.title}>Opportunities</Text>
         </View>
 
         <View style={styles.searchBar}>

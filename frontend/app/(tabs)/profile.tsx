@@ -145,7 +145,7 @@ export default function ProfileScreen() {
           <ActionRow
             icon={CloudSlashIcon}
             label="Offline timeline"
-            onPress={() => router.push('/(tabs)/timeline')}
+            onPress={() => router.push('/(tabs)/journey')}
             isLast
           />
         </View>

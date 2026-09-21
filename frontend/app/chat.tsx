@@ -13,7 +13,6 @@ import { router } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import {
   CaretLeftIcon,
-  RobotIcon,
   PaperPlaneTiltIcon,
   TrashIcon,
   ListChecksIcon,
@@ -23,10 +22,53 @@ import {
 
 import { useAuth } from '@/AuthContext';
 import { chat, getChatHistory, clearChatHistory } from '@/api';
+import { ArrivoLogo } from '@/components/arrivo-logo';
 import { Palette, Type } from '@/constants/theme';
 import { usePreferences } from '@/PreferencesContext';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+const LOADING_MESSAGES = ['Thinking...', 'Breaking it down...', 'Pulling the latest...', 'Almost there...'];
+
+function LoadingIndicator() {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+    }, 1400);
+    return () => clearInterval(interval);
+  }, []);
+  return <Text style={styles.assistantText}>{LOADING_MESSAGES[index]}</Text>;
+}
+
+// Reveals an assistant reply word by word instead of dumping the whole
+// response at once — only used for a message that just arrived live (see
+// liveIndex below), never for history loaded from the backend.
+function TypingText({ text, onDone }: { text: string; onDone: () => void }) {
+  const [visibleCount, setVisibleCount] = useState(0);
+  const words = text.split(' ');
+
+  useEffect(() => {
+    setVisibleCount(0);
+    if (words.length === 0) {
+      onDone();
+      return;
+    }
+    const interval = setInterval(() => {
+      setVisibleCount((prev) => {
+        const next = prev + 1;
+        if (next >= words.length) {
+          clearInterval(interval);
+          onDone();
+        }
+        return next;
+      });
+    }, 32);
+    return () => clearInterval(interval);
+  }, [text]);
+
+  return <Text style={styles.assistantText}>{words.slice(0, visibleCount).join(' ')}</Text>;
+}
 
 interface Message {
   role: 'user' | 'assistant';
@@ -48,7 +90,7 @@ function actionChipFor(message: Message): ActionChip | null {
   if (message.role !== 'assistant') return null;
   const text = message.text.toLowerCase();
   if (text.includes('cpt')) {
-    return { label: 'See my CPT timeline', icon: ListChecksIcon, href: '/(tabs)/timeline' };
+    return { label: 'See my CPT timeline', icon: ListChecksIcon, href: '/(tabs)/journey' };
   }
   if (text.includes('opt')) {
     return { label: 'Open my OPT checklist', icon: ListChecksIcon, href: '/deadline/opt-application' };
@@ -66,6 +108,9 @@ export default function ChatScreen() {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
+  // Index of the one message currently being typed out - only ever set
+  // right after a live reply arrives, never for history loaded on open.
+  const [liveIndex, setLiveIndex] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const sendScale = useSharedValue(1);
   const sendAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: sendScale.value }] }));
@@ -99,9 +144,17 @@ export default function ChatScreen() {
 
     try {
       const data = await chat(question, token);
-      setMessages((prev) => [...prev, { role: 'assistant', text: data.answer }]);
+      setMessages((prev) => {
+        const next = [...prev, { role: 'assistant' as const, text: data.answer }];
+        setLiveIndex(next.length - 1);
+        return next;
+      });
     } catch {
-      setMessages((prev) => [...prev, { role: 'assistant', text: "Sorry, I couldn't process that. Try again?" }]);
+      setMessages((prev) => {
+        const next = [...prev, { role: 'assistant' as const, text: "Sorry, I couldn't process that. Try again?" }];
+        setLiveIndex(next.length - 1);
+        return next;
+      });
     } finally {
       setLoading(false);
     }
@@ -142,7 +195,7 @@ export default function ChatScreen() {
         {messages.length <= 1 && (
           <View style={styles.emptyState}>
             <View style={[styles.emptyIconSquare, { backgroundColor: chatTheme.tint }]}>
-              <RobotIcon size={38} color={chatTheme.accent} weight="fill" />
+              <ArrivoLogo size={40} />
             </View>
             <Text style={styles.emptyText}>How can I help you today?</Text>
           </View>
@@ -152,7 +205,8 @@ export default function ChatScreen() {
           <Text style={styles.loadingText}>Loading conversation...</Text>
         ) : (
           messages.map((msg, index) => {
-            const chip = actionChipFor(msg);
+            const isLiveTyping = index === liveIndex;
+            const chip = !isLiveTyping ? actionChipFor(msg) : null;
             return (
               <View key={index}>
                 <View
@@ -162,7 +216,11 @@ export default function ChatScreen() {
                       ? [styles.userBubble, { backgroundColor: chatTheme.accent }]
                       : styles.assistantBubble,
                   ]}>
-                  <Text style={msg.role === 'user' ? styles.userText : styles.assistantText}>{msg.text}</Text>
+                  {isLiveTyping ? (
+                    <TypingText text={msg.text} onDone={() => setLiveIndex(null)} />
+                  ) : (
+                    <Text style={msg.role === 'user' ? styles.userText : styles.assistantText}>{msg.text}</Text>
+                  )}
                 </View>
                 {chip && (
                   <Pressable
@@ -181,7 +239,7 @@ export default function ChatScreen() {
         )}
         {loading && (
           <View style={[styles.bubble, styles.assistantBubble]}>
-            <Text style={styles.assistantText}>Typing...</Text>
+            <LoadingIndicator />
           </View>
         )}
       </ScrollView>
