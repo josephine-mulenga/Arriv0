@@ -196,3 +196,35 @@ ALTER TABLE users
     END
   ),
   ALTER COLUMN career_interests SET DEFAULT '{}';
+
+-- Migration: bookmarks table (undated - predates this file being kept in
+-- sync, documented here for the first time)
+-- Backs GET/POST/DELETE /bookmarks (news only, despite the plain name -
+-- it existed before internship bookmarking did). Written/read only via the
+-- service role key from main.py; no policies needed beyond RLS being on.
+CREATE TABLE IF NOT EXISTS bookmarks (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id),
+  news_title text,
+  news_body text,
+  news_link text,
+  news_tag text,
+  news_image_url text,
+  created_at timestamp DEFAULT now()
+);
+
+ALTER TABLE bookmarks ENABLE ROW LEVEL SECURITY;
+
+-- Migration: internship bookmarks (2026-09-24)
+-- Backs the new GET/POST/DELETE /bookmarks/internship endpoints - reuses
+-- the bookmarks table above rather than a new one, following the existing
+-- news_* column pattern. A row is either a news bookmark (news_* set,
+-- internship_* null) or an internship bookmark (reverse), so the two never
+-- collide despite sharing a table. Dedup on insert is by
+-- (user_id, internship_title, internship_company).
+ALTER TABLE bookmarks
+  ADD COLUMN IF NOT EXISTS internship_title text,
+  ADD COLUMN IF NOT EXISTS internship_company text,
+  ADD COLUMN IF NOT EXISTS internship_url text,
+  ADD COLUMN IF NOT EXISTS internship_source text,
+  ADD COLUMN IF NOT EXISTS internship_location text;

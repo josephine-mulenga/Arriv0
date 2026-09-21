@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import {
   CaretLeftIcon,
@@ -104,8 +104,9 @@ function actionChipFor(message: Message): ActionChip | null {
 export default function ChatScreen() {
   const { token } = useAuth();
   const { chatTheme } = usePreferences();
+  const { prefill } = useLocalSearchParams<{ prefill?: string }>();
   const [messages, setMessages] = useState<Message[]>([DEFAULT_GREETING]);
-  const [question, setQuestion] = useState('');
+  const [question, setQuestion] = useState(typeof prefill === 'string' ? prefill : '');
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   // Index of the one message currently being typed out - only ever set

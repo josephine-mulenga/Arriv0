@@ -244,6 +244,35 @@ def classify_news(title: str, summary: str) -> tuple:
     else:
         return False, "General news"
 
+def classify_news_relevance(tag: str, urgent: bool) -> str:
+    """HIGH/MEDIUM badge shown on the News screen - deterministic, not an
+    LLM call, since this runs over a whole page of articles per request."""
+    if urgent or tag in ("OPT", "CPT", "STEM OPT", "F1 Visa"):
+        return "HIGH"
+    return "MEDIUM"
+
+_STEM_MAJOR_KEYWORDS = ["computer", "science", "engineering", "technology", "mathematics", "biology", "chemistry", "physics", "cybersecurity", "data", "information"]
+
+def personalized_news_reason(tag: str, profile: dict) -> str:
+    """The News screen's "Why you're seeing this" line - kept short,
+    deterministic (not an LLM call - this runs per article per request),
+    and always framed as Arriv0's own inference from the student's profile,
+    never as a legal conclusion about their actual status."""
+    major = (profile.get("major") or "").strip()
+    is_likely_stem = any(kw in major.lower() for kw in _STEM_MAJOR_KEYWORDS) if major else False
+
+    if tag == "F1 Visa":
+        return "You're on an F1 visa, so F1 visa rules apply directly to you."
+    if tag == "OPT":
+        return "Based on your profile, this may affect your OPT eligibility or timeline."
+    if tag == "CPT":
+        return "Based on your profile, this is relevant to CPT work authorization."
+    if tag == "STEM OPT":
+        if is_likely_stem:
+            return f"Your {major} major may qualify for the STEM OPT extension this covers."
+        return "This covers the STEM OPT extension — check with your DSO if your major qualifies."
+    return "General immigration news relevant to international students like you."
+
 URGENT_NEWS_KEYWORDS = [
     "urgent", "emergency", "immediate", "suspended", "terminated",
     "revoked", "deadline", "policy change", "effective immediately"
@@ -1572,13 +1601,23 @@ def _location_matches_preference(location_pref: str, item_location: str, remote:
     # to a plain substring check.
     return pref in item_location
 
-def compute_match_reasons(item: dict, profile: dict) -> list:
+def compute_match_profile(item: dict, profile: dict) -> dict:
     """Surfaces WHY a posting was matched, using only what's already on the
     student's profile - major, program end date (graduation year), and the
     optional career_interests/location_preference fields - plus the
     posting's own sponsorship language. Never asserts eligibility, only
-    reflects back what the posting itself says."""
+    reflects back what the posting itself says.
+
+    Returns reasons (full sentences), pills (short labels for compact
+    display - "Computer Science" rather than "Matches your Computer
+    Science background"), and score (0-100, the match % badge). Score only
+    reflects profile-fit signals (major/interests/location/timeline), not
+    sponsorship - sponsorship is about eligibility, not fit, and already
+    gets its own separate badge, so folding it into the fit score would
+    conflate two different questions."""
     reasons = []
+    pills = []
+    score = 0
     content = f"{item.get('title', '')} {item.get('description', '')}".lower()
 
     major = (profile.get("major") or "").strip()
@@ -1586,16 +1625,25 @@ def compute_match_reasons(item: dict, profile: dict) -> list:
         major_words = [w for w in re.findall(r"[a-z0-9]+", major.lower()) if len(w) > 3]
         if any(w in content for w in major_words):
             reasons.append(f"Matches your {major} background")
+            pills.append(major)
+            score += 40
 
+    interest_count = 0
     for interest in _as_string_list(profile.get("career_interests")):
         interest_clean = interest.strip()
         if interest_clean and interest_clean.lower() in content:
             reasons.append(f"Matches your {interest_clean} interest")
+            pills.append(interest_clean)
+            if interest_count < 2:
+                score += 15
+                interest_count += 1
 
     location_pref = (profile.get("location_preference") or "").strip()
     item_location = (item.get("location") or "").lower()
     if location_pref and _location_matches_preference(location_pref, item_location, bool(item.get("remote"))):
         reasons.append(f"Fits your preference for {location_pref}")
+        pills.append(location_pref)
+        score += 15
 
     season_match = _SEASON_YEAR_PATTERN.search(content)
     program_end = profile.get("program_end_date")
@@ -1604,7 +1652,10 @@ def compute_match_reasons(item: dict, profile: dict) -> list:
             grad_year = date.fromisoformat(str(program_end)[:10]).year
             posting_year = int(season_match.group(2))
             if date.today().year <= posting_year <= grad_year:
-                reasons.append(f"Fits your {season_match.group(1).title()} {posting_year} timeline")
+                season_label = f"{season_match.group(1).title()} {posting_year}"
+                reasons.append(f"Fits your {season_label} timeline")
+                pills.append(season_label)
+                score += 15
         except ValueError:
             pass
 
@@ -1614,7 +1665,7 @@ def compute_match_reasons(item: dict, profile: dict) -> list:
         elif signal["sentiment"] == "negative":
             reasons.append(f"Warning: posting says \"{signal['label']}\"")
 
-    return reasons
+    return {"reasons": reasons, "pills": pills, "score": min(score, 100)}
 
 async def fetch_news_for_queries(queries: list, page_size: int = 3, max_items: int = 8) -> list:
     try:
@@ -2229,6 +2280,13 @@ class BookmarkRequest(BaseModel):
     news_tag: Optional[str] = None
     news_image_url: Optional[str] = None
 
+class InternshipBookmarkRequest(BaseModel):
+    internship_title: str
+    internship_company: Optional[str] = None
+    internship_url: Optional[str] = None
+    internship_source: Optional[str] = None
+    internship_location: Optional[str] = None
+
 class ReferralRequest(BaseModel):
     referred_email: EmailStr
 
@@ -2784,6 +2842,80 @@ def delete_bookmark(request: Request, bookmark_id: str, authorization: Optional[
         logger.error(f"Bookmark delete error: {type(e).__name__} correlation_id={correlation_id}")
         raise HTTPException(status_code=400, detail="Failed to remove bookmark.")
 
+# Internship bookmarks reuse the same `bookmarks` table as news bookmarks
+# (news_* columns stay null on an internship row and vice versa, so the two
+# never collide), following the same pattern as /bookmarks above: dedupe on
+# insert, list newest first, delete only your own. News bookmarking already
+# existed as plain /bookmarks (not /bookmarks/news) before this - left as
+# is rather than renamed, so nothing that already calls it breaks.
+@app.post("/bookmarks/internship")
+@limiter.limit("30/minute")
+def add_internship_bookmark(request: Request, data: InternshipBookmarkRequest, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        existing = (
+            supabase_admin.table("bookmarks")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("internship_title", data.internship_title)
+            .eq("internship_company", data.internship_company)
+            .execute()
+        )
+        if existing.data:
+            return {"message": "Already bookmarked.", "already_exists": True}
+        supabase_admin.table("bookmarks").insert({
+            "user_id": user_id,
+            "internship_title": data.internship_title,
+            "internship_company": data.internship_company,
+            "internship_url": data.internship_url,
+            "internship_source": data.internship_source,
+            "internship_location": data.internship_location
+        }).execute()
+        return {"message": "Internship bookmarked successfully.", "already_exists": False}
+    except Exception as e:
+        logger.error(f"Internship bookmark add error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to bookmark internship.")
+
+@app.get("/bookmarks/internship")
+@limiter.limit("30/minute")
+def get_internship_bookmarks(request: Request, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        response = (
+            supabase_admin.table("bookmarks")
+            .select("*")
+            .eq("user_id", user_id)
+            .not_.is_("internship_title", "null")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return {"bookmarks": response.data or [], "count": len(response.data or [])}
+    except Exception as e:
+        logger.error(f"Internship bookmarks fetch error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to fetch internship bookmarks.")
+
+@app.delete("/bookmarks/internship/{bookmark_id}")
+@limiter.limit("30/minute")
+def delete_internship_bookmark(request: Request, bookmark_id: str, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        existing = supabase_admin.table("bookmarks").select("user_id").eq("id", bookmark_id).execute()
+        if not existing.data or existing.data[0]["user_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Access denied.")
+        supabase_admin.table("bookmarks").delete().eq("id", bookmark_id).execute()
+        return {"message": "Bookmark removed successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Internship bookmark delete error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to remove bookmark.")
+
 @app.get("/news/search")
 @limiter.limit("20/minute")
 def search_news(request: Request, q: str = Query(..., max_length=200), authorization: Optional[str] = Header(None)):
@@ -2816,7 +2948,18 @@ def search_news(request: Request, q: str = Query(..., max_length=200), authoriza
 @limiter.limit("30/minute")
 def get_news(request: Request, authorization: Optional[str] = Header(None), page: int = 1, tag: Optional[str] = None):
     correlation_id = getattr(request.state, "correlation_id", None)
-    verify_token(authorization, correlation_id)
+    verified = verify_token(authorization, correlation_id)
+    try:
+        profile = get_profile_from_db(verified.user.id, correlation_id)
+    except Exception:
+        profile = {}
+
+    def enrich(item: dict) -> dict:
+        item_tag = item.get("tag") or "General news"
+        item["relevance"] = classify_news_relevance(item_tag, bool(item.get("urgent")))
+        item["why_relevant"] = personalized_news_reason(item_tag, profile)
+        return item
+
     try:
         limit = 10
         offset = (page - 1) * limit
@@ -2828,7 +2971,7 @@ def get_news(request: Request, authorization: Optional[str] = Header(None), page
         total_pages = -(-total // limit)
         if response.data:
             return {
-                "news": response.data,
+                "news": [enrich(item) for item in response.data],
                 "updated": response.data[0]["created_at"][:10],
                 "page": page,
                 "total": total,
@@ -2846,18 +2989,26 @@ def get_news(request: Request, authorization: Optional[str] = Header(None), page
         {"title": "New social media screening for visa renewals", "body": "USCIS now reviews public social media accounts during F1 visa processing. Review your public profiles before any upcoming renewal.", "affects_f1": True, "tag": "F1 Visa", "link": None, "image_url": ""},
         {"title": "OPT application fee increased to $520", "body": "The filing fee for Form I-765 increased effective January 2026. Budget accordingly before your application window opens.", "affects_f1": True, "tag": "OPT", "link": "https://www.uscis.gov/i-765", "image_url": ""}
     ]
-    return {"news": news, "updated": today_str, "page": 1, "total": 4, "total_pages": 1, "has_more": False}
+    return {"news": [enrich(item) for item in news], "updated": today_str, "page": 1, "total": 4, "total_pages": 1, "has_more": False}
 
 @app.get("/news/{news_id}")
 @limiter.limit("30/minute")
 def get_single_news(request: Request, news_id: str, authorization: Optional[str] = Header(None)):
     correlation_id = getattr(request.state, "correlation_id", None)
-    verify_token(authorization, correlation_id)
+    verified = verify_token(authorization, correlation_id)
     try:
         response = supabase_admin.table("news").select("*").eq("id", news_id).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="Article not found.")
-        return response.data[0]
+        item = response.data[0]
+        try:
+            profile = get_profile_from_db(verified.user.id, correlation_id)
+        except Exception:
+            profile = {}
+        item_tag = item.get("tag") or "General news"
+        item["relevance"] = classify_news_relevance(item_tag, bool(item.get("urgent")))
+        item["why_relevant"] = personalized_news_reason(item_tag, profile)
+        return item
     except HTTPException:
         raise
     except Exception as e:
@@ -3455,7 +3606,11 @@ async def get_internships(request: Request, authorization: Optional[str] = Heade
                 logger.error(f"Supplementary internship fetch failed: {type(e).__name__}: {e} correlation_id={correlation_id}")
 
         for item in results:
-            item["match_reasons"] = compute_match_reasons(item, profile)
+            match = compute_match_profile(item, profile)
+            item["match_reasons"] = match["reasons"]
+            item["match_pills"] = match["pills"]
+            item["match_score"] = match["score"]
+            item["logo_url"] = company_logo_url(item.get("company") or "")
 
         return {
             "results": results,

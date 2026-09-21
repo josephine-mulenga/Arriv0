@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import {
   IdentificationCardIcon,
   BriefcaseIcon,
   GraduationCapIcon,
   NewspaperIcon,
   BookmarkSimpleIcon,
+  SparkleIcon,
   type Icon,
 } from 'phosphor-react-native';
 
@@ -15,7 +17,7 @@ import { Chip } from '@/components/ui/chip';
 import { IconTile } from '@/components/ui/icon-tile';
 import { Palette, Spacing, Type } from '@/constants/theme';
 
-const TABS = ['All', 'F1 Visa', 'OPT', 'CPT', 'STEM OPT', 'Saved'];
+const TABS = ['For You', 'F1 Visa', 'OPT', 'CPT', 'STEM OPT', 'Saved'];
 
 interface NewsItem {
   id: string;
@@ -27,6 +29,8 @@ interface NewsItem {
   affects_f1?: boolean;
   created_at?: string;
   source?: string;
+  relevance?: 'HIGH' | 'MEDIUM';
+  why_relevant?: string;
 }
 
 interface Bookmark {
@@ -60,11 +64,6 @@ function relativeAge(dateString?: string): string {
   return months === 1 ? '1 month ago' : `${months} months ago`;
 }
 
-function formatDate(dateString?: string): string {
-  if (!dateString) return '';
-  return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 // Defensive — the backend now dedupes at the source, but this costs nothing
 // and guards against a stray re-fetch inserting the same story twice again.
 function dedupeByTitle(items: NewsItem[]): NewsItem[] {
@@ -92,14 +91,14 @@ export default function NewsScreen() {
   const { token } = useAuth();
   const [newsItems, setNewsItems] = useState<NewsItem[] | null>(null);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
-  const [selectedTab, setSelectedTab] = useState('All');
+  const [selectedTab, setSelectedTab] = useState('For You');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchNews = async (tag: string, targetPage: number, append: boolean) => {
     try {
-      const data = await getNews(token, { tag, page: targetPage });
+      const data = await getNews(token, { tag: tag === 'For You' ? undefined : tag, page: targetPage });
       const incoming = dedupeByTitle(data.news ?? []);
       setNewsItems((prev) => (append && prev ? dedupeByTitle([...prev, ...incoming]) : incoming));
       setHasMore(!!data.has_more);
@@ -152,6 +151,13 @@ export default function NewsScreen() {
     }
   };
 
+  const handleAskArri = (item: NewsItem) => {
+    router.push({
+      pathname: '/chat',
+      params: { prefill: `Tell me about this immigration update and how it affects me: "${item.title}"` },
+    });
+  };
+
   const displayedNews = selectedTab === 'Saved' ? bookmarks.map(bookmarkToNewsItem) : newsItems ?? [];
 
   return (
@@ -182,47 +188,67 @@ export default function NewsScreen() {
         {displayedNews.map((item, index) => {
           const visual = tagVisual(item.tag);
           const saved = isBookmarked(item);
+          const isHigh = item.relevance === 'HIGH';
           return (
-            <Pressable
-              key={item.id ?? index}
-              style={[styles.row, index === displayedNews.length - 1 && styles.rowLast]}
-              onPress={() => item.link && Linking.openURL(item.link)}>
-              <View style={styles.thumbColumn}>
-                {item.image_url ? (
-                  <Image source={{ uri: item.image_url }} style={styles.thumbImage} />
-                ) : (
-                  <IconTile icon={visual.icon} tint={visual.tint} color={visual.color} size={74} iconSize={28} />
-                )}
-                <Pressable hitSlop={8} onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
-                  <BookmarkSimpleIcon
-                    size={17}
-                    color={saved ? Palette.purple : Palette.inkFaint}
-                    weight={saved ? 'fill' : 'regular'}
-                  />
+            <View key={item.id ?? index} style={[styles.card, index === displayedNews.length - 1 && styles.cardLast]}>
+              <Pressable style={styles.cardTop} onPress={() => item.link && Linking.openURL(item.link)}>
+                <View style={styles.thumbColumn}>
+                  {item.image_url ? (
+                    <Image source={{ uri: item.image_url }} style={styles.thumbImage} />
+                  ) : (
+                    <IconTile icon={visual.icon} tint={visual.tint} color={visual.color} size={74} iconSize={28} />
+                  )}
+                  <Pressable hitSlop={8} onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
+                    <BookmarkSimpleIcon
+                      size={17}
+                      color={saved ? Palette.purple : Palette.inkFaint}
+                      weight={saved ? 'fill' : 'regular'}
+                    />
+                  </Pressable>
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <View style={styles.badgeRow}>
+                    {item.relevance ? (
+                      <View style={[styles.relevanceBadge, isHigh ? styles.relevanceBadgeHigh : styles.relevanceBadgeMedium]}>
+                        <Text style={[styles.relevanceBadgeText, isHigh ? styles.relevanceBadgeTextHigh : styles.relevanceBadgeTextMedium]}>
+                          {item.relevance}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {item.tag ? (
+                      <View style={[styles.badge, { backgroundColor: visual.tint }]}>
+                        <Text style={[styles.badgeText, { color: visual.color }]}>{item.tag}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <Text style={styles.headline} numberOfLines={1}>
+                    <Text style={styles.sourcePrefix}>{item.source || 'Source'} says: </Text>
+                    {item.title}
+                  </Text>
+
+                  {item.why_relevant ? (
+                    <Text style={styles.whyRelevant} numberOfLines={2}>
+                      Why this matters for you: {item.why_relevant}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+
+              <View style={styles.cardFooter}>
+                <Pressable onPress={() => item.link && Linking.openURL(item.link)} hitSlop={4}>
+                  <Text style={styles.sourceLink}>Source: {item.source || 'Unknown'}</Text>
+                </Pressable>
+                {item.created_at ? <Text style={styles.metaDot}>·</Text> : null}
+                <Text style={styles.metaText}>{relativeAge(item.created_at)}</Text>
+                <View style={{ flex: 1 }} />
+                <Pressable style={styles.askArriLink} onPress={() => handleAskArri(item)} hitSlop={6}>
+                  <SparkleIcon size={12} color={Palette.purple} weight="fill" />
+                  <Text style={styles.askArriText}>Ask Arri about this</Text>
                 </Pressable>
               </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.headline} numberOfLines={3}>
-                  {item.title}
-                </Text>
-                <Text style={styles.meta}>
-                  {formatDate(item.created_at)}
-                  {item.created_at ? ` · ${relativeAge(item.created_at)}` : ''}
-                  {item.source ? ` · ${item.source}` : ''}
-                </Text>
-                {item.tag ? (
-                  <View style={[styles.badge, { backgroundColor: visual.tint }]}>
-                    <Text style={[styles.badgeText, { color: visual.color }]}>{item.tag}</Text>
-                  </View>
-                ) : null}
-                <Text style={styles.whatThisMeans}>
-                  {item.affects_f1
-                    ? 'This directly affects your F-1 status — worth a read.'
-                    : 'General visa news — may not affect your status directly.'}
-                </Text>
-              </View>
-            </Pressable>
+            </View>
           );
         })}
 
@@ -273,45 +299,102 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Palette.inkPlaceholder,
   },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 14,
+  card: {
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Palette.divider,
   },
-  rowLast: {
+  cardLast: {
     borderBottomWidth: 0,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 5,
+  },
+  relevanceBadge: {
+    borderRadius: 6,
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+  },
+  relevanceBadgeHigh: {
+    backgroundColor: Palette.purpleTint,
+  },
+  relevanceBadgeMedium: {
+    backgroundColor: Palette.dividerLight,
+  },
+  relevanceBadgeText: {
+    fontFamily: Type.bodyBold,
+    fontSize: 10,
+    letterSpacing: 0.3,
+  },
+  relevanceBadgeTextHigh: {
+    color: Palette.purple,
+  },
+  relevanceBadgeTextMedium: {
+    color: Palette.inkFaint,
   },
   headline: {
     fontFamily: Type.bodyBold,
-    fontSize: 14.5,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 19,
     color: Palette.ink,
   },
-  meta: {
+  sourcePrefix: {
+    fontFamily: Type.bodyBold,
+    color: Palette.inkMuted,
+  },
+  whyRelevant: {
     marginTop: 4,
     fontFamily: Type.bodyRegular,
     fontSize: 12,
-    color: Palette.inkPlaceholder,
+    lineHeight: 16,
+    color: Palette.inkMuted,
   },
   badge: {
     alignSelf: 'flex-start',
     borderRadius: 9,
-    paddingVertical: 3,
+    paddingVertical: 2,
     paddingHorizontal: 8,
-    marginTop: 6,
   },
   badgeText: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: 10.5,
   },
-  whatThisMeans: {
-    marginTop: 6,
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingLeft: 86,
+    gap: 6,
+  },
+  sourceLink: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11.5,
+    color: Palette.purple,
+  },
+  metaDot: {
+    color: Palette.inkPlaceholder,
+    fontSize: 11.5,
+  },
+  metaText: {
     fontFamily: Type.bodyRegular,
-    fontSize: 12,
-    lineHeight: 17,
-    color: Palette.inkMuted,
+    fontSize: 11.5,
+    color: Palette.inkPlaceholder,
+  },
+  askArriLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  askArriText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 11.5,
+    color: Palette.purple,
   },
   thumbColumn: {
     alignItems: 'center',

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 import {
   BriefcaseIcon,
   MagnifyingGlassIcon,
@@ -8,12 +9,26 @@ import {
   WarningCircleIcon,
   BellIcon,
   XIcon,
+  BookmarkSimpleIcon,
+  SparkleIcon,
+  ShieldCheckIcon,
 } from 'phosphor-react-native';
 
-import { getInternships, searchInternshipCompanies, watchCompany, getWatchedCompanies, unwatchCompany } from '@/api';
+import {
+  getInternships,
+  searchInternshipCompanies,
+  watchCompany,
+  getWatchedCompanies,
+  unwatchCompany,
+  addInternshipBookmark,
+  getInternshipBookmarks,
+  deleteInternshipBookmark,
+} from '@/api';
 import { useAuth } from '@/AuthContext';
-import { IconTile } from '@/components/ui/icon-tile';
+import { Chip } from '@/components/ui/chip';
 import { Palette, Spacing, Type } from '@/constants/theme';
+
+const SECTIONS = ['Recommended', 'New This Week', 'Watching', 'Saved'];
 
 interface SponsorshipSignal {
   label: string;
@@ -28,24 +43,57 @@ interface InternshipItem {
   description?: string;
   url?: string;
   created?: string;
+  posted_date?: string;
   salary_min?: number;
   salary_max?: number;
   source?: string;
   application_url?: string;
+  logo_url?: string;
   sponsorship_language?: SponsorshipSignal[];
   match_reasons?: string[];
-}
-
-function sponsorshipSummary(signals?: SponsorshipSignal[]): { label: string; kind: 'positive' | 'negative' } | null {
-  if (!signals || signals.length === 0) return null;
-  if (signals.some((s) => s.sentiment === 'negative')) return { label: 'No sponsorship', kind: 'negative' };
-  if (signals.some((s) => s.sentiment === 'positive')) return { label: 'Sponsors F1/CPT', kind: 'positive' };
-  return null;
+  match_pills?: string[];
+  match_score?: number;
 }
 
 interface CompanyResult {
   name: string;
   logo_url?: string;
+}
+
+interface Bookmark {
+  id: string;
+  internship_title: string;
+  internship_company?: string;
+  internship_url?: string;
+  internship_source?: string;
+  internship_location?: string;
+}
+
+function sponsorshipSummary(signals?: SponsorshipSignal[]): { label: string; kind: 'positive' | 'negative' | 'neutral' } {
+  if (signals && signals.some((s) => s.sentiment === 'negative')) return { label: 'No sponsorship', kind: 'negative' };
+  if (signals && signals.some((s) => s.sentiment === 'positive')) return { label: 'Sponsors F1/CPT', kind: 'positive' };
+  return { label: 'Not specified', kind: 'neutral' };
+}
+
+function workAuthText(signals?: SponsorshipSignal[]): string {
+  const positive = signals?.find((s) => s.sentiment === 'positive');
+  if (positive) return `Employer posting mentions: "${positive.label}"`;
+  const negative = signals?.find((s) => s.sentiment === 'negative');
+  if (negative) return `Employer posting says: "${negative.label}"`;
+  return 'Authorization information not confirmed.';
+}
+
+function matchBadgeStyle(score = 0): { bg: string; color: string } {
+  if (score >= 80) return { bg: Palette.greenTint, color: Palette.green };
+  if (score >= 50) return { bg: Palette.amberTint, color: Palette.amber };
+  return { bg: Palette.dividerLight, color: Palette.inkFaint };
+}
+
+function isWithinDays(dateStr: string | undefined, days: number): boolean {
+  if (!dateStr) return false;
+  const then = new Date(dateStr).getTime();
+  if (Number.isNaN(then)) return false;
+  return Date.now() - then < days * 24 * 60 * 60 * 1000;
 }
 
 function formatSalary(min?: number, max?: number): string | null {
@@ -60,8 +108,20 @@ function stripHtml(text?: string): string {
   return text.replace(/<[^>]*>/g, '');
 }
 
+function bookmarkToItem(b: Bookmark): InternshipItem {
+  return {
+    id: b.id,
+    title: b.internship_title,
+    company: b.internship_company,
+    application_url: b.internship_url,
+    source: b.internship_source,
+    location: b.internship_location,
+  };
+}
+
 export default function InternshipsScreen() {
   const { token } = useAuth();
+  const [section, setSection] = useState('Recommended');
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<InternshipItem[] | null>(null);
   const [page, setPage] = useState(1);
@@ -74,12 +134,26 @@ export default function InternshipsScreen() {
   const [companyQuery, setCompanyQuery] = useState('');
   const [companySuggestions, setCompanySuggestions] = useState<CompanyResult[]>([]);
   const [watchedCompanies, setWatchedCompanies] = useState<CompanyResult[]>([]);
+  const [watchingItems, setWatchingItems] = useState<InternshipItem[] | null>(null);
   const [brokenLogos, setBrokenLogos] = useState<Set<string>>(new Set());
   const [watching, setWatching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+
+  const fetchBookmarks = async () => {
+    if (!token) return;
+    try {
+      const data = await getInternshipBookmarks(token);
+      setBookmarks(data.bookmarks ?? []);
+    } catch {
+      // ignore; bookmark state just won't reflect saved internships
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
+    fetchBookmarks();
     (async () => {
       try {
         const data = await getWatchedCompanies(token);
@@ -164,6 +238,36 @@ export default function InternshipsScreen() {
     fetchInternships('', 1, false);
   }, [token]);
 
+  // "Watching" is fetched lazily the first time that section is opened,
+  // one getInternships call per watched company (reusing the same
+  // major/company-search endpoint the rest of this screen already uses),
+  // merged into one list.
+  useEffect(() => {
+    if (section !== 'Watching' || !token || watchedCompanies.length === 0) return;
+    (async () => {
+      setWatchingItems(null);
+      try {
+        const results = await Promise.all(
+          watchedCompanies.map((c) => getInternships(token, { query: c.name }).catch(() => ({ results: [] })))
+        );
+        const merged: InternshipItem[] = [];
+        const seen = new Set<string>();
+        for (const data of results) {
+          for (const item of data.results ?? []) {
+            const key = `${(item.title || '').toLowerCase()}|${(item.company || '').toLowerCase()}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              merged.push(item);
+            }
+          }
+        }
+        setWatchingItems(merged);
+      } catch {
+        setWatchingItems([]);
+      }
+    })();
+  }, [section, token, watchedCompanies]);
+
   const handleSearch = () => {
     fetchInternships(query.trim(), 1, false);
   };
@@ -174,106 +278,164 @@ export default function InternshipsScreen() {
     setLoadingMore(false);
   };
 
+  const isBookmarked = (item: InternshipItem) =>
+    bookmarks.some((b) => b.internship_title === item.title && b.internship_company === item.company);
+  const getBookmarkId = (item: InternshipItem) =>
+    bookmarks.find((b) => b.internship_title === item.title && b.internship_company === item.company)?.id;
+
+  const handleToggleBookmark = async (item: InternshipItem) => {
+    if (!token) return;
+    try {
+      if (isBookmarked(item)) {
+        const bookmarkId = getBookmarkId(item);
+        if (bookmarkId) await deleteInternshipBookmark(bookmarkId, token);
+      } else {
+        await addInternshipBookmark(item, token);
+      }
+      await fetchBookmarks();
+    } catch {
+      // ignore; user can retry
+    }
+  };
+
+  const handleAskArri = (item: InternshipItem) => {
+    router.push({
+      pathname: '/chat',
+      params: {
+        prefill: `Tell me about this internship at ${item.company || 'this company'} and whether it fits my profile: "${item.title}"`,
+      },
+    });
+  };
+
+  const newThisWeek = (items ?? []).filter((item) => isWithinDays(item.posted_date || item.created, 7));
+  const savedItems = bookmarks.map(bookmarkToItem);
+
+  const displayedItems =
+    section === 'Recommended' ? items :
+    section === 'New This Week' ? newThisWeek :
+    section === 'Watching' ? watchingItems :
+    savedItems;
+
+  const showSearch = section === 'Recommended';
+  const showWatchManager = section === 'Watching';
+
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Opportunities</Text>
+          <Text style={styles.title}>Opportunities for you</Text>
+          <Text style={styles.subtitle}>Based on your major, skills, and graduation year</Text>
         </View>
 
-        <View style={styles.searchBar}>
-          <MagnifyingGlassIcon size={17} color={Palette.inkFaint} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search internships"
-            placeholderTextColor={Palette.inkPlaceholder}
-            value={query}
-            onChangeText={setQuery}
-            onSubmitEditing={handleSearch}
-            returnKeyType="search"
-          />
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScroll}
+          contentContainerStyle={styles.chipRow}>
+          {SECTIONS.map((s) => (
+            <Chip key={s} label={s} selected={section === s} onPress={() => setSection(s)} />
+          ))}
+        </ScrollView>
 
-        {majorMatched && items && items.length > 0 && (
-          <View style={styles.matchBanner}>
-            <Text style={styles.matchBannerText}>Matched to your major</Text>
+        {showSearch && (
+          <>
+            <View style={styles.searchBar}>
+              <MagnifyingGlassIcon size={17} color={Palette.inkFaint} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search internships"
+                placeholderTextColor={Palette.inkPlaceholder}
+                value={query}
+                onChangeText={setQuery}
+                onSubmitEditing={handleSearch}
+                returnKeyType="search"
+              />
+            </View>
+
+            {majorMatched && items && items.length > 0 && (
+              <View style={styles.matchBanner}>
+                <Text style={styles.matchBannerText}>Matched to your major</Text>
+              </View>
+            )}
+
+            <View style={styles.disclaimer}>
+              <WarningCircleIcon size={15} color={Palette.inkMuted} />
+              <Text style={styles.disclaimerText}>
+                These are general listings pulled by keyword — we don&apos;t confirm CPT/OPT
+                eligibility for any specific role. Check your own authorization status with your DSO
+                or in Journey before applying.
+              </Text>
+            </View>
+          </>
+        )}
+
+        {showWatchManager && (
+          <View style={styles.watchSection}>
+            <View style={styles.watchSectionHeader}>
+              <BellIcon size={16} color={Palette.purple} weight="fill" />
+              <Text style={styles.sectionTitle}>Watch Companies</Text>
+            </View>
+            <Text style={styles.sectionSubtitle}>
+              You&apos;ll be notified within 30 minutes of new postings from companies you watch.
+            </Text>
+
+            <View style={styles.watchSearchBar}>
+              <MagnifyingGlassIcon size={16} color={Palette.inkFaint} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search for a company to watch"
+                placeholderTextColor={Palette.inkPlaceholder}
+                value={companyQuery}
+                onChangeText={setCompanyQuery}
+              />
+            </View>
+
+            {companySuggestions.length > 0 && (
+              <View style={styles.suggestionDropdown}>
+                {companySuggestions.map((item, index) => (
+                  <Pressable
+                    key={item.name}
+                    style={[styles.suggestionRow, index === companySuggestions.length - 1 && styles.rowLast]}
+                    disabled={watching}
+                    onPress={() => handleWatchCompany(item.name)}>
+                    {item.logo_url && !brokenLogos.has(item.logo_url) ? (
+                      <Image
+                        source={{ uri: item.logo_url }}
+                        style={styles.companyLogo}
+                        onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
+                      />
+                    ) : (
+                      <BuildingsIcon size={15} color={Palette.inkFaint} />
+                    )}
+                    <Text style={styles.suggestionText}>{item.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {watchedCompanies.length > 0 && (
+              <View style={styles.watchedChipsRow}>
+                {watchedCompanies.map((item) => (
+                  <View key={item.name} style={styles.watchedChip}>
+                    {item.logo_url && !brokenLogos.has(item.logo_url) ? (
+                      <Image
+                        source={{ uri: item.logo_url }}
+                        style={styles.watchedChipLogo}
+                        onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
+                      />
+                    ) : null}
+                    <Text style={styles.watchedChipText}>{item.name}</Text>
+                    <Pressable onPress={() => handleUnwatch(item.name)} hitSlop={8}>
+                      <XIcon size={12} color={Palette.purple} weight="bold" />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
-        <View style={styles.disclaimer}>
-          <WarningCircleIcon size={15} color={Palette.inkMuted} />
-          <Text style={styles.disclaimerText}>
-            These are general listings pulled by keyword — we don&apos;t confirm CPT/OPT
-            eligibility for any specific role. Check your own authorization status with your DSO
-            or in Timeline before applying.
-          </Text>
-        </View>
-
-        <View style={styles.watchSection}>
-          <View style={styles.watchSectionHeader}>
-            <BellIcon size={16} color={Palette.purple} weight="fill" />
-            <Text style={styles.sectionTitle}>Watch Companies</Text>
-          </View>
-          <Text style={styles.sectionSubtitle}>
-            You&apos;ll be notified within 30 minutes of new postings from companies you watch.
-          </Text>
-
-          <View style={styles.watchSearchBar}>
-            <MagnifyingGlassIcon size={16} color={Palette.inkFaint} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search for a company to watch"
-              placeholderTextColor={Palette.inkPlaceholder}
-              value={companyQuery}
-              onChangeText={setCompanyQuery}
-            />
-          </View>
-
-          {companySuggestions.length > 0 && (
-            <View style={styles.suggestionDropdown}>
-              {companySuggestions.map((item, index) => (
-                <Pressable
-                  key={item.name}
-                  style={[styles.suggestionRow, index === companySuggestions.length - 1 && styles.rowLast]}
-                  disabled={watching}
-                  onPress={() => handleWatchCompany(item.name)}>
-                  {item.logo_url && !brokenLogos.has(item.logo_url) ? (
-                    <Image
-                      source={{ uri: item.logo_url }}
-                      style={styles.companyLogo}
-                      onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
-                    />
-                  ) : (
-                    <BuildingsIcon size={15} color={Palette.inkFaint} />
-                  )}
-                  <Text style={styles.suggestionText}>{item.name}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-
-          {watchedCompanies.length > 0 && (
-            <View style={styles.watchedChipsRow}>
-              {watchedCompanies.map((item) => (
-                <View key={item.name} style={styles.watchedChip}>
-                  {item.logo_url && !brokenLogos.has(item.logo_url) ? (
-                    <Image
-                      source={{ uri: item.logo_url }}
-                      style={styles.watchedChipLogo}
-                      onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
-                    />
-                  ) : null}
-                  <Text style={styles.watchedChipText}>{item.name}</Text>
-                  <Pressable onPress={() => handleUnwatch(item.name)} hitSlop={8}>
-                    <XIcon size={12} color={Palette.purple} weight="bold" />
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {notConfigured && (
+        {section === 'Recommended' && notConfigured && (
           <View style={styles.emptyState}>
             <BriefcaseIcon size={36} color="#CFC9F5" />
             <Text style={styles.emptyTitle}>Internship search isn&apos;t set up yet</Text>
@@ -281,7 +443,7 @@ export default function InternshipsScreen() {
           </View>
         )}
 
-        {!notConfigured && errorMessage && (
+        {section === 'Recommended' && !notConfigured && errorMessage && (
           <View style={styles.emptyState}>
             <WarningCircleIcon size={36} color="#CFC9F5" />
             <Text style={styles.emptyTitle}>Couldn&apos;t load internships</Text>
@@ -289,75 +451,135 @@ export default function InternshipsScreen() {
           </View>
         )}
 
-        {!notConfigured && !errorMessage && items === null && (
-          <Text style={styles.loadingText}>Loading internships...</Text>
+        {!notConfigured && !errorMessage && displayedItems === null && (
+          <Text style={styles.loadingText}>Loading...</Text>
         )}
 
-        {!notConfigured && !errorMessage && items !== null && items.length === 0 && (
+        {!notConfigured && !errorMessage && displayedItems !== null && displayedItems.length === 0 && (
           <View style={styles.emptyState}>
             <BriefcaseIcon size={36} color="#CFC9F5" />
-            <Text style={styles.emptyTitle}>No internships found</Text>
-            <Text style={styles.emptyBody}>Try a different search term.</Text>
+            <Text style={styles.emptyTitle}>
+              {section === 'Saved' ? 'No saved opportunities yet' : section === 'Watching' ? 'No postings from watched companies yet' : 'No internships found'}
+            </Text>
+            <Text style={styles.emptyBody}>
+              {section === 'Watching' && watchedCompanies.length === 0
+                ? 'Add a company above to start watching for new postings.'
+                : 'Try a different search term.'}
+            </Text>
           </View>
         )}
 
-        {items?.map((item, index) => {
+        {displayedItems?.map((item, index) => {
           const salary = formatSalary(item.salary_min, item.salary_max);
           const applyUrl = item.application_url || item.url;
           const sponsorship = sponsorshipSummary(item.sponsorship_language);
+          const matchColors = matchBadgeStyle(item.match_score);
+          const saved = isBookmarked(item);
           return (
-            <Pressable
-              key={item.id ?? index}
-              style={[styles.row, index === items.length - 1 && styles.rowLast]}
-              onPress={() => applyUrl && Linking.openURL(applyUrl)}>
-              <IconTile icon={BriefcaseIcon} tint={Palette.purpleTint} color={Palette.purple} size={44} iconSize={20} />
-              <View style={{ flex: 1 }}>
-                <View style={styles.titleRow}>
-                  <Text style={styles.jobTitle} numberOfLines={2}>{item.title}</Text>
-                  {item.source ? (
-                    <View style={styles.sourceBadge}>
-                      <Text style={styles.sourceBadgeText}>{item.source}</Text>
+            <View key={item.id ?? index} style={[styles.card, index === displayedItems.length - 1 && styles.cardLast]}>
+              <Pressable onPress={() => applyUrl && Linking.openURL(applyUrl)}>
+                <View style={styles.cardTop}>
+                  {item.logo_url && !brokenLogos.has(item.logo_url) ? (
+                    <Image
+                      source={{ uri: item.logo_url }}
+                      style={styles.jobLogo}
+                      onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
+                    />
+                  ) : (
+                    <View style={styles.jobLogoFallback}>
+                      <BriefcaseIcon size={18} color={Palette.purple} />
                     </View>
-                  ) : null}
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.jobTitle} numberOfLines={2}>{item.title}</Text>
+                      {typeof item.match_score === 'number' ? (
+                        <View style={[styles.matchBadge, { backgroundColor: matchColors.bg }]}>
+                          <Text style={[styles.matchBadgeText, { color: matchColors.color }]}>{item.match_score}%</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {item.company ? (
+                      <View style={styles.metaRow}>
+                        <BuildingsIcon size={13} color={Palette.inkFaint} />
+                        <Text style={styles.metaText} numberOfLines={1}>{item.company}</Text>
+                        {item.source ? (
+                          <View style={styles.sourceBadge}>
+                            <Text style={styles.sourceBadgeText}>{item.source}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+                    {item.location ? (
+                      <View style={styles.metaRow}>
+                        <MapPinIcon size={13} color={Palette.inkFaint} />
+                        <Text style={styles.metaText} numberOfLines={1}>{item.location}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
-                {item.company ? (
-                  <View style={styles.metaRow}>
-                    <BuildingsIcon size={13} color={Palette.inkFaint} />
-                    <Text style={styles.metaText} numberOfLines={1}>{item.company}</Text>
-                  </View>
-                ) : null}
-                {item.location ? (
-                  <View style={styles.metaRow}>
-                    <MapPinIcon size={13} color={Palette.inkFaint} />
-                    <Text style={styles.metaText} numberOfLines={1}>{item.location}</Text>
-                  </View>
-                ) : null}
+
                 {item.description ? (
                   <Text style={styles.description} numberOfLines={2}>{stripHtml(item.description)}</Text>
                 ) : null}
                 {salary ? <Text style={styles.salary}>{salary}</Text> : null}
-                {sponsorship ? (
-                  <View style={[styles.sponsorshipBadge, sponsorship.kind === 'negative' ? styles.sponsorshipBadgeNegative : styles.sponsorshipBadgePositive]}>
-                    <Text style={[styles.sponsorshipBadgeText, sponsorship.kind === 'negative' ? styles.sponsorshipBadgeTextNegative : styles.sponsorshipBadgeTextPositive]}>
-                      {sponsorship.kind === 'negative' ? `⚠ ${sponsorship.label}` : sponsorship.label}
-                    </Text>
-                  </View>
-                ) : null}
-                {item.match_reasons && item.match_reasons.length > 0 ? (
-                  <View style={styles.matchReasonsBlock}>
-                    {item.match_reasons.map((reason, reasonIndex) => (
-                      <Text key={reasonIndex} style={styles.matchReasonText} numberOfLines={2}>
-                        • {reason}
-                      </Text>
+
+                {item.match_pills && item.match_pills.length > 0 ? (
+                  <View style={styles.pillsRow}>
+                    {item.match_pills.map((pill, pillIndex) => (
+                      <View key={pillIndex} style={styles.pill}>
+                        <Text style={styles.pillText}>{pill}</Text>
+                      </View>
                     ))}
                   </View>
                 ) : null}
+
+                <View
+                  style={[
+                    styles.sponsorshipBadge,
+                    sponsorship.kind === 'negative'
+                      ? styles.sponsorshipBadgeNegative
+                      : sponsorship.kind === 'positive'
+                        ? styles.sponsorshipBadgePositive
+                        : styles.sponsorshipBadgeNeutral,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.sponsorshipBadgeText,
+                      sponsorship.kind === 'negative'
+                        ? styles.sponsorshipBadgeTextNegative
+                        : sponsorship.kind === 'positive'
+                          ? styles.sponsorshipBadgeTextPositive
+                          : styles.sponsorshipBadgeTextNeutral,
+                    ]}>
+                    {sponsorship.kind === 'negative' ? `⚠ ${sponsorship.label}` : sponsorship.label}
+                  </Text>
+                </View>
+
+                <View style={styles.workAuthBlock}>
+                  <View style={styles.workAuthHeader}>
+                    <ShieldCheckIcon size={13} color={Palette.inkMuted} />
+                    <Text style={styles.workAuthLabel}>Work authorization</Text>
+                  </View>
+                  <Text style={styles.workAuthText}>{workAuthText(item.sponsorship_language)}</Text>
+                </View>
+              </Pressable>
+
+              <View style={styles.cardFooter}>
+                <Pressable hitSlop={8} onPress={() => handleToggleBookmark(item)} style={styles.footerAction}>
+                  <BookmarkSimpleIcon size={16} color={saved ? Palette.purple : Palette.inkFaint} weight={saved ? 'fill' : 'regular'} />
+                </Pressable>
+                <View style={{ flex: 1 }} />
+                <Pressable style={styles.askArriLink} onPress={() => handleAskArri(item)} hitSlop={6}>
+                  <SparkleIcon size={12} color={Palette.purple} weight="fill" />
+                  <Text style={styles.askArriText}>Ask Arri about this</Text>
+                </Pressable>
               </View>
-            </Pressable>
+            </View>
           );
         })}
 
-        {hasMore && items && items.length > 0 && (
+        {section === 'Recommended' && hasMore && items && items.length > 0 && (
           <Pressable style={styles.loadMoreButton} onPress={handleLoadMore} disabled={loadingMore}>
             {loadingMore ? (
               <ActivityIndicator color={Palette.purple} />
@@ -381,15 +603,30 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: Type.headingBold,
-    fontSize: 22,
+    fontSize: 20,
     color: Palette.ink,
+  },
+  subtitle: {
+    marginTop: 3,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    color: Palette.inkFaint,
+  },
+  chipScroll: {
+    height: 56,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  chipRow: {
+    gap: 8,
+    alignItems: 'center',
+    paddingVertical: 14,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginTop: 14,
-    marginBottom: 16,
+    marginBottom: 12,
     backgroundColor: Palette.dividerLight,
     borderRadius: 13,
     paddingHorizontal: 14,
@@ -426,7 +663,7 @@ const styles = StyleSheet.create({
     borderColor: Palette.divider,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   disclaimerText: {
     flex: 1,
@@ -485,6 +722,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Palette.divider,
   },
+  rowLast: {
+    borderBottomWidth: 0,
+  },
   suggestionText: {
     fontFamily: Type.bodyRegular,
     fontSize: 13.5,
@@ -525,15 +765,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Palette.inkPlaceholder,
   },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 14,
+  card: {
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Palette.divider,
   },
-  rowLast: {
+  cardLast: {
     borderBottomWidth: 0,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  jobLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Palette.dividerLight,
+  },
+  jobLogoFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Palette.purpleTint,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleRow: {
     flexDirection: 'row',
@@ -544,63 +800,40 @@ const styles = StyleSheet.create({
   jobTitle: {
     flex: 1,
     fontFamily: Type.bodyBold,
-    fontSize: 14.5,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 19,
     color: Palette.ink,
+  },
+  matchBadge: {
+    borderRadius: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  matchBadgeText: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11.5,
   },
   sourceBadge: {
     backgroundColor: Palette.dividerLight,
     borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 4,
   },
   sourceBadgeText: {
     fontFamily: Type.bodySemiBold,
-    fontSize: 10.5,
+    fontSize: 10,
     color: Palette.inkFaint,
-  },
-  sponsorshipBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 6,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  sponsorshipBadgePositive: {
-    backgroundColor: Palette.greenTint,
-  },
-  sponsorshipBadgeNegative: {
-    backgroundColor: Palette.redTint,
-  },
-  sponsorshipBadgeText: {
-    fontFamily: Type.bodySemiBold,
-    fontSize: 11.5,
-  },
-  sponsorshipBadgeTextPositive: {
-    color: Palette.green,
-  },
-  sponsorshipBadgeTextNegative: {
-    color: Palette.danger,
-  },
-  matchReasonsBlock: {
-    marginTop: 6,
-    gap: 2,
-  },
-  matchReasonText: {
-    fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
-    lineHeight: 16,
-    color: Palette.purple,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 4,
+    marginTop: 3,
   },
   metaText: {
     fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
+    fontSize: 12,
     color: Palette.inkFaint,
   },
   description: {
@@ -616,6 +849,96 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: Palette.green,
   },
+  pillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  pill: {
+    backgroundColor: Palette.purpleTint,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  pillText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 11,
+    color: Palette.purple,
+  },
+  sponsorshipBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  sponsorshipBadgePositive: {
+    backgroundColor: Palette.greenTint,
+  },
+  sponsorshipBadgeNegative: {
+    backgroundColor: Palette.redTint,
+  },
+  sponsorshipBadgeNeutral: {
+    backgroundColor: Palette.dividerLight,
+  },
+  sponsorshipBadgeText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 11.5,
+  },
+  sponsorshipBadgeTextPositive: {
+    color: Palette.green,
+  },
+  sponsorshipBadgeTextNegative: {
+    color: Palette.danger,
+  },
+  sponsorshipBadgeTextNeutral: {
+    color: Palette.inkFaint,
+  },
+  workAuthBlock: {
+    marginTop: 8,
+    backgroundColor: Palette.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Palette.divider,
+    borderRadius: 10,
+    padding: 9,
+  },
+  workAuthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  workAuthLabel: {
+    fontFamily: Type.bodyBold,
+    fontSize: 10.5,
+    letterSpacing: 0.3,
+    color: Palette.inkMuted,
+  },
+  workAuthText: {
+    marginTop: 3,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: Palette.inkBody,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 9,
+  },
+  footerAction: {
+    padding: 2,
+  },
+  askArriLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  askArriText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 11.5,
+    color: Palette.purple,
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -628,6 +951,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Palette.ink,
     marginTop: 6,
+    textAlign: 'center',
   },
   emptyBody: {
     textAlign: 'center',

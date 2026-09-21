@@ -242,6 +242,39 @@ export const deleteBookmark = async (bookmarkId, token) => {
   return handleResponse(response);
 };
 
+export const addInternshipBookmark = async (internship, token) => {
+  const response = await fetch(`${BASE_URL}/bookmarks/internship`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      internship_title: internship.title,
+      internship_company: internship.company,
+      internship_url: internship.application_url || internship.url,
+      internship_source: internship.source,
+      internship_location: internship.location
+    })
+  });
+  return handleResponse(response);
+};
+
+export const getInternshipBookmarks = async (token) => {
+  const response = await fetch(`${BASE_URL}/bookmarks/internship`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const deleteInternshipBookmark = async (bookmarkId, token) => {
+  const response = await fetch(`${BASE_URL}/bookmarks/internship/${bookmarkId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
 export const getChatHistory = async (token) => {
   const response = await fetch(`${BASE_URL}/chat/history`, {
     headers: { 'Authorization': `Bearer ${token}` }
