@@ -1410,12 +1410,22 @@ async def fetch_remotive_internships(query: str, max_items: int = 8) -> list:
         })
     return results[:max_items]
 
-async def fetch_arbeitnow_internships(query: str, max_items: int = 8) -> list:
-    """Arbeitnow's job-board-api doesn't actually support server-side search
-    or a visa-sponsorship filter (verified directly - every query param
-    tried returned the same unfiltered page), so both internship relevance
-    and sponsorship language are determined entirely client-side here, same
-    as the other two sources."""
+_ARBEITNOW_CACHE = {"jobs": None, "fetched_at": None}
+_ARBEITNOW_CACHE_TTL = timedelta(minutes=5)
+
+async def _fetch_arbeitnow_raw() -> list:
+    """Arbeitnow's job-board-api doesn't support server-side search at all
+    (verified directly in Part 2 - every query param tried, including its
+    own advertised visa_sponsorship=true, returned the same unfiltered
+    page), which means every caller re-downloads and re-parses the exact
+    same ~250-job payload regardless of query. check_watched_companies
+    calls this once per watched company per user (every 30 minutes) - with
+    no caching that was a full re-fetch+re-parse per pair, every run,
+    forever. A short TTL cache means one real fetch serves every query
+    that lands within the same few minutes."""
+    now = datetime.now(pytz.utc)
+    if _ARBEITNOW_CACHE["jobs"] is not None and now - _ARBEITNOW_CACHE["fetched_at"] < _ARBEITNOW_CACHE_TTL:
+        return _ARBEITNOW_CACHE["jobs"]
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(
@@ -1424,12 +1434,20 @@ async def fetch_arbeitnow_internships(query: str, max_items: int = 8) -> list:
             )
             if response.status_code != 200:
                 logger.error(f"Arbeitnow error: status={response.status_code}")
-                return []
+                return _ARBEITNOW_CACHE["jobs"] or []
             jobs = response.json().get("data", [])
     except Exception as e:
         logger.error(f"Arbeitnow fetch error: {type(e).__name__}: {e}")
-        return []
+        return _ARBEITNOW_CACHE["jobs"] or []
+    _ARBEITNOW_CACHE["jobs"] = jobs
+    _ARBEITNOW_CACHE["fetched_at"] = now
+    return jobs
 
+async def fetch_arbeitnow_internships(query: str, max_items: int = 8) -> list:
+    """Internship relevance and sponsorship language are determined
+    entirely client-side here, same as the other two sources, since
+    Arbeitnow has no server-side filtering to rely on."""
+    jobs = await _fetch_arbeitnow_raw()
     query_words = [w for w in re.findall(r"[a-z0-9]+", query.lower()) if len(w) > 2]
     results = []
     for job in jobs:
@@ -2231,14 +2249,59 @@ class FeedbackRequest(BaseModel):
             raise ValueError("message must be 2000 characters or fewer")
         return v.strip()
 
+# Populated by _run_scheduled_job every time a job finishes (or times out),
+# and exposed via /health - found during an incident where every scheduled
+# job kept reporting scheduler.running == True for 65+ hours straight while
+# not one of them was actually completing (no crash, nothing in the
+# process's own health check to show it), because none of them had a
+# timeout and APScheduler doesn't detect or report a hung job on its own.
+LAST_JOB_RUN = {}
+
+async def _run_scheduled_job(name: str, coro_func, timeout_seconds: int):
+    """Every scheduled job is registered through this wrapper instead of
+    directly, so a hang in one job (an external API that stops responding
+    without erroring, a connection that never times out at the TCP level,
+    etc.) gets forcibly cancelled rather than potentially occupying the
+    single asyncio event loop FastAPI itself runs on for an unbounded
+    amount of time. APScheduler already isolates *exceptions* between jobs
+    - this covers the gap it doesn't: hangs."""
+    started = datetime.now(pytz.utc)
+    try:
+        await asyncio.wait_for(coro_func(), timeout=timeout_seconds)
+        LAST_JOB_RUN[name] = {"last_run_at": started.isoformat(), "ok": True}
+    except asyncio.TimeoutError:
+        logger.error(f"Scheduled job '{name}' exceeded {timeout_seconds}s and was cancelled")
+        LAST_JOB_RUN[name] = {"last_run_at": started.isoformat(), "ok": False, "error": f"timed out after {timeout_seconds}s"}
+    except Exception as e:
+        logger.error(f"Scheduled job '{name}' failed: {type(e).__name__}: {e}")
+        LAST_JOB_RUN[name] = {"last_run_at": started.isoformat(), "ok": False, "error": f"{type(e).__name__}: {e}"[:200]}
+
+async def _send_morning_notifications_job():
+    await _run_scheduled_job("send_morning_notifications", send_morning_notifications, 45)
+
+async def _process_and_notify_job():
+    await _run_scheduled_job("process_and_notify", process_and_notify, 300)
+
+async def _check_urgent_news_job():
+    await _run_scheduled_job("check_urgent_news", check_urgent_news, 300)
+
+async def _send_opt_countdown_alerts_job():
+    await _run_scheduled_job("send_opt_countdown_alerts", send_opt_countdown_alerts, 300)
+
+async def _send_internship_notifications_job():
+    await _run_scheduled_job("send_internship_notifications", send_internship_notifications, 600)
+
+async def _check_watched_companies_job():
+    await _run_scheduled_job("check_watched_companies", check_watched_companies, 600)
+
 @app.on_event("startup")
 async def startup_event():
-    scheduler.add_job(send_morning_notifications, CronTrigger(minute="*"))
-    scheduler.add_job(process_and_notify, CronTrigger(hour="*/3"))
-    scheduler.add_job(check_urgent_news, CronTrigger(hour="*/2"))
-    scheduler.add_job(send_opt_countdown_alerts, CronTrigger(hour=9, minute=0))
-    scheduler.add_job(send_internship_notifications, CronTrigger(hour="*/2"))
-    scheduler.add_job(check_watched_companies, CronTrigger(minute="*/30"))
+    scheduler.add_job(_send_morning_notifications_job, CronTrigger(minute="*"))
+    scheduler.add_job(_process_and_notify_job, CronTrigger(hour="*/3"))
+    scheduler.add_job(_check_urgent_news_job, CronTrigger(hour="*/2"))
+    scheduler.add_job(_send_opt_countdown_alerts_job, CronTrigger(hour=9, minute=0))
+    scheduler.add_job(_send_internship_notifications_job, CronTrigger(hour="*/2"))
+    scheduler.add_job(_check_watched_companies_job, CronTrigger(minute="*/30"))
     scheduler.start()
     logger.info("Morning notification scheduler started — checking every minute")
     logger.info("News fetch scheduler started — running every 3 hours")
@@ -2280,7 +2343,12 @@ def health_check():
             "database": db_status,
             "ai": ai_status,
             "scheduler": "healthy" if scheduler.running else "unhealthy"
-        }
+        },
+        # scheduler.running only means the scheduler object itself hasn't
+        # been shut down - it says nothing about whether jobs are actually
+        # completing. This is the real signal: when each job last finished
+        # and whether that run succeeded.
+        "scheduled_jobs": LAST_JOB_RUN
     }
 
 def _create_user_profile(user_id: str, data: ProfileFields) -> None:
