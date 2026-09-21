@@ -2269,7 +2269,16 @@ class FeedbackRequest(BaseModel):
 # not one of them was actually completing (no crash, nothing in the
 # process's own health check to show it), because none of them had a
 # timeout and APScheduler doesn't detect or report a hung job on its own.
+#
+# This is in-memory only, so it's reset by every process restart/redeploy -
+# which turned out to be misleading on its own: right after a deploy, an
+# infrequent job (every 2-3 hours, or daily) can look "stuck" here for a
+# long time simply because it hasn't reached its next scheduled occurrence
+# yet, not because anything is actually wrong. PROCESS_STARTED_AT is
+# exposed alongside this in /health specifically so that gap reads as
+# "hasn't had a chance since the last restart" instead of "stuck".
 LAST_JOB_RUN = {}
+PROCESS_STARTED_AT = datetime.now(pytz.utc)
 
 async def _run_scheduled_job(name: str, coro_func, timeout_seconds: int):
     """Every scheduled job is registered through this wrapper instead of
@@ -2310,12 +2319,25 @@ async def _check_watched_companies_job():
 
 @app.on_event("startup")
 async def startup_event():
-    scheduler.add_job(_send_morning_notifications_job, CronTrigger(minute="*"))
-    scheduler.add_job(_process_and_notify_job, CronTrigger(hour="*/3"))
-    scheduler.add_job(_check_urgent_news_job, CronTrigger(hour="*/2"))
-    scheduler.add_job(_send_opt_countdown_alerts_job, CronTrigger(hour=9, minute=0))
-    scheduler.add_job(_send_internship_notifications_job, CronTrigger(hour="*/2"))
-    scheduler.add_job(_check_watched_companies_job, CronTrigger(minute="*/30"))
+    # misfire_grace_time=3600: without this, a deploy that happens to land
+    # within a few seconds of a job's exact trigger time (e.g. a redeploy
+    # completing at 16:00:03 when a job was due at 16:00:00) makes
+    # APScheduler treat that occurrence as a misfire and silently skip it
+    # rather than run it late - by default the grace window is only 1
+    # second. For a job that only fires every 2-3 hours (or once a day),
+    # skipping a single occurrence this way looks identical from the
+    # outside to the job actually being stuck for that whole interval.
+    # Confirmed this happened today: two 2-hour jobs' 16:00 occurrence went
+    # unrecorded right as a deploy landed, while the more frequent jobs
+    # simply reached their own next occurrence moments later and looked
+    # fine. An hour of grace is generous enough to absorb any realistic
+    # deploy, without changing behavior for a job that fires on time.
+    scheduler.add_job(_send_morning_notifications_job, CronTrigger(minute="*"), misfire_grace_time=3600)
+    scheduler.add_job(_process_and_notify_job, CronTrigger(hour="*/3"), misfire_grace_time=3600)
+    scheduler.add_job(_check_urgent_news_job, CronTrigger(hour="*/2"), misfire_grace_time=3600)
+    scheduler.add_job(_send_opt_countdown_alerts_job, CronTrigger(hour=9, minute=0), misfire_grace_time=3600)
+    scheduler.add_job(_send_internship_notifications_job, CronTrigger(hour="*/2"), misfire_grace_time=3600)
+    scheduler.add_job(_check_watched_companies_job, CronTrigger(minute="*/30"), misfire_grace_time=3600)
     scheduler.start()
     logger.info("Morning notification scheduler started — checking every minute")
     logger.info("News fetch scheduler started — running every 3 hours")
@@ -2362,7 +2384,13 @@ def health_check():
         # been shut down - it says nothing about whether jobs are actually
         # completing. This is the real signal: when each job last finished
         # and whether that run succeeded.
-        "scheduled_jobs": LAST_JOB_RUN
+        "scheduled_jobs": LAST_JOB_RUN,
+        # LAST_JOB_RUN is in-memory and resets on every restart - a job
+        # missing here right after a deploy just means it hasn't reached
+        # its next occurrence yet, not that it's stuck. Compare against
+        # this to tell the difference (e.g. a 2-hour job absent 5 minutes
+        # after process_started_at is expected; absent 3 hours after is not).
+        "process_started_at": PROCESS_STARTED_AT.isoformat()
     }
 
 def _create_user_profile(user_id: str, data: ProfileFields) -> None:
