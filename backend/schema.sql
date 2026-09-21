@@ -106,11 +106,16 @@ USING (auth.uid() = user_id);
 -- Written/read only by the backend via the service role key; no user-facing
 -- endpoint reads this table, so RLS is enabled with no policies (service
 -- role bypasses RLS entirely, anon/authenticated access is fully blocked).
+-- (Corrected 2026-09-21: the live table actually has `notified_at`, not
+-- `seen_at` as originally written here - found while diagnosing the
+-- 2026-09-18 outage. main.py's upserts never name this column explicitly
+-- (they rely on the DEFAULT now()), so the mismatch never caused a runtime
+-- bug, only wrong documentation.)
 CREATE TABLE IF NOT EXISTS internships_seen (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid NOT NULL REFERENCES users(id),
   job_id text NOT NULL,
-  seen_at timestamp DEFAULT now(),
+  notified_at timestamp DEFAULT now(),
   UNIQUE (user_id, job_id)
 );
 
