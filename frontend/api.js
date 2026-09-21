@@ -99,7 +99,7 @@ export const getUserProfile = async (userId, token) => {
 };
 
 export const getTimeline = async (token, year) => {
-  const url = year ? `${BASE_URL}/timeline?year=${year}` : `${BASE_URL}/timeline`;
+  const url = year !== undefined && year !== null ? `${BASE_URL}/timeline?year=${year}` : `${BASE_URL}/timeline`;
   const response = await fetch(url, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -143,6 +143,25 @@ export const getSingleNews = async (newsId, token) => {
 export const getMilestones = async (token) => {
   const response = await fetch(`${BASE_URL}/milestones`, {
     headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const getMiniGoals = async (token) => {
+  const response = await fetch(`${BASE_URL}/mini-goals`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return handleResponse(response);
+};
+
+export const toggleMiniGoal = async (goalId, done, token) => {
+  const response = await fetch(`${BASE_URL}/mini-goals/toggle`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ goal_id: goalId, done })
   });
   return handleResponse(response);
 };

@@ -228,3 +228,21 @@ ALTER TABLE bookmarks
   ADD COLUMN IF NOT EXISTS internship_url text,
   ADD COLUMN IF NOT EXISTS internship_source text,
   ADD COLUMN IF NOT EXISTS internship_location text;
+
+-- Migration: mini goals completion (2026-09-24)
+-- Backs GET /mini-goals and POST /mini-goals/toggle - the Journey screen's
+-- personalized sub-step checklist under a major milestone. The goal
+-- definitions themselves (label, which major group, which milestone they
+-- lead to) live in MINI_GOAL_TEMPLATES in main.py, same as timeline/
+-- milestones already do - only per-user *completion* needs real storage.
+-- goal_id is one of the ids from that template (e.g. "cs_leetcode_3"), not
+-- a foreign key, since the templates aren't database rows.
+CREATE TABLE IF NOT EXISTS mini_goals_completed (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id),
+  goal_id text NOT NULL,
+  completed_at timestamp DEFAULT now(),
+  UNIQUE (user_id, goal_id)
+);
+
+ALTER TABLE mini_goals_completed ENABLE ROW LEVEL SECURITY;

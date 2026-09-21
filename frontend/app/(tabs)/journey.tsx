@@ -8,14 +8,17 @@ import {
   WarningCircleIcon,
   CloudSlashIcon,
   SparkleIcon,
-  ClipboardTextIcon,
-  CaretRightIcon,
+  CaretDownIcon,
+  CaretUpIcon,
+  ArrowSquareOutIcon,
 } from 'phosphor-react-native';
 
-import { getTimeline, getMilestones } from '@/api';
+import { getTimeline, getMilestones, getMiniGoals, toggleMiniGoal } from '@/api';
 import { useAuth } from '@/AuthContext';
-import { Chip } from '@/components/ui/chip';
 import { RailRow } from '@/components/ui/rail-row';
+import { SkeletonList } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/ui/error-state';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { router, useFocusEffect } from 'expo-router';
 import { getStepCompletion, setStepCompletion } from '@/utils/step-completion';
@@ -38,8 +41,14 @@ interface TimelineData {
 
 interface Milestone {
   id: number;
+  target_year: number;
+  icon: string;
   title: string;
   description: string;
+  what_to_do?: string;
+  why_it_matters?: string;
+  source?: string | null;
+  source_label?: string | null;
   status: 'done' | 'next' | 'locked';
 }
 
@@ -48,6 +57,23 @@ interface MilestonesData {
   total: number;
   milestones: Milestone[];
 }
+
+interface MiniGoal {
+  id: string;
+  milestone_id: number;
+  label: string;
+  semester: string;
+  done: boolean;
+}
+
+const STEPPER = [
+  { year: 0, label: 'Before\nArrival' },
+  { year: 1, label: 'Year 1' },
+  { year: 2, label: 'Year 2' },
+  { year: 3, label: 'Year 3' },
+  { year: 4, label: 'Year 4' },
+  { year: 5, label: 'OPT' },
+];
 
 function stepStatus(step: TimelineStep, effectiveDone: boolean) {
   if (step.warning) {
@@ -61,9 +87,8 @@ function stepStatus(step: TimelineStep, effectiveDone: boolean) {
 
 export default function JourneyScreen() {
   const { token } = useAuth();
-  const [section, setSection] = useState<'timeline' | 'milestones'>('timeline');
 
-  // --- Timeline state ---
+  // --- Timeline (this year's checklist) state ---
   const [data, setData] = useState<TimelineData | null>(null);
   const [offline, setOffline] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -72,7 +97,12 @@ export default function JourneyScreen() {
 
   // --- Milestones state ---
   const [milestoneData, setMilestoneData] = useState<MilestonesData | null>(null);
+  const [milestonesError, setMilestonesError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const lastMilestonesFetchedAt = useRef(0);
+
+  // --- Mini goals state ---
+  const [miniGoals, setMiniGoals] = useState<MiniGoal[] | null>(null);
 
   const fetchTimeline = async (year?: number) => {
     try {
@@ -85,6 +115,27 @@ export default function JourneyScreen() {
     }
   };
 
+  const fetchMilestones = async () => {
+    try {
+      const result = await getMilestones(token);
+      setMilestoneData(result);
+      setMilestonesError(null);
+      const next = result.milestones.find((m: Milestone) => m.status === 'next');
+      setExpandedId((prev) => prev ?? next?.id ?? null);
+    } catch {
+      setMilestonesError('Could not load your journey right now.');
+    }
+  };
+
+  const fetchMiniGoals = async () => {
+    try {
+      const result = await getMiniGoals(token);
+      setMiniGoals(result.goals ?? []);
+    } catch {
+      setMiniGoals([]);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
@@ -94,17 +145,15 @@ export default function JourneyScreen() {
 
       if (Date.now() - lastMilestonesFetchedAt.current < 15000) return;
       lastMilestonesFetchedAt.current = Date.now();
-      getMilestones(token).then(setMilestoneData).catch(() => {});
+      fetchMilestones();
+      fetchMiniGoals();
     }, [token])
   );
 
   useEffect(() => {
     if (!token || selectedYear === null) return;
     if (data && data.viewing_year_level === selectedYear) return;
-    (async () => {
-      await Promise.resolve();
-      fetchTimeline(selectedYear);
-    })();
+    fetchTimeline(selectedYear);
   }, [selectedYear]);
 
   const deadlineKey = data ? `timeline-year-${data.viewing_year_level}` : null;
@@ -123,154 +172,237 @@ export default function JourneyScreen() {
     await setStepCompletion(deadlineKey, step.task, next);
   };
 
+  const handleToggleGoal = async (goal: MiniGoal) => {
+    const nextDone = !goal.done;
+    setMiniGoals((prev) => (prev ? prev.map((g) => (g.id === goal.id ? { ...g, done: nextDone } : g)) : prev));
+    try {
+      await toggleMiniGoal(goal.id, nextDone, token);
+    } catch {
+      // revert on failure
+      setMiniGoals((prev) => (prev ? prev.map((g) => (g.id === goal.id ? { ...g, done: !nextDone } : g)) : prev));
+    }
+  };
+
+  const handleAskArriAboutMilestone = (milestone: Milestone) => {
+    router.push({
+      pathname: '/chat',
+      params: { prefill: `What do I need to do for ${milestone.title}?` },
+    });
+  };
+
   const upcoming = data ? data.steps.filter((s) => !isEffectivelyDone(s)) : [];
-  const completed = data ? data.steps.filter((s) => isEffectivelyDone(s)) : [];
-  const showCptGuide = data ? data.steps.some((s) => s.task.toLowerCase().includes('cpt')) : false;
+  const completedSteps = data ? data.steps.filter((s) => isEffectivelyDone(s)) : [];
 
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Your Journey</Text>
+          <Text style={styles.title}>Your F1 Journey</Text>
           <Pressable style={styles.searchButton} onPress={() => router.push('/search')}>
             <MagnifyingGlassIcon size={18} color={Palette.inkBody} />
           </Pressable>
         </View>
 
-        <View style={styles.segmentRow}>
-          <Chip label="Timeline" selected={section === 'timeline'} onPress={() => setSection('timeline')} />
-          <Chip label="Milestones" selected={section === 'milestones'} onPress={() => setSection('milestones')} />
-        </View>
-
-        {section === 'timeline' ? (
-          <>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.chipScroll}
-              contentContainerStyle={styles.chipRow}>
-              {[0, 1, 2, 3, 4].map((year) => (
-                <Chip
-                  key={year}
-                  label={year === 0 ? 'Before Arrival' : `Year ${year}`}
-                  selected={selectedYear === year}
-                  onPress={() => setSelectedYear(year)}
-                />
-              ))}
-            </ScrollView>
-
-            {offline && (
-              <View style={styles.offlineBanner}>
-                <CloudSlashIcon size={20} color={Palette.amber} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.offlineTitle}>Showing your saved timeline</Text>
-                  <Text style={styles.offlineBody}>You&apos;re offline — this is the last saved copy.</Text>
-                  <Pressable style={styles.retryButton} onPress={() => fetchTimeline(selectedYear ?? undefined)}>
-                    <Text style={styles.retryText}>Try again</Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-
-            {showCptGuide && (
-              <View style={styles.guideCard}>
-                <SparkleIcon size={16} color={Palette.purple} weight="fill" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.guideTitle}>New to CPT?</Text>
-                  <Text style={styles.guideBody}>
-                    Needs 1 full academic year first, must relate to your major, and requires DSO
-                    sign-off before you start.
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <View style={offline ? styles.skeletonWrap : undefined}>
-              {upcoming.length > 0 && (
-                <>
-                  <Text style={styles.groupHeader}>UPCOMING</Text>
-                  {upcoming.map((step, index) => (
-                    <StepRow
-                      key={index}
-                      index={index}
-                      step={step}
-                      effectiveDone={false}
-                      isLast={index === upcoming.length - 1 && completed.length === 0}
-                      onToggleConfirm={() => handleToggleConfirm(step)}
-                    />
-                  ))}
-                </>
-              )}
-
-              {completed.length > 0 && (
-                <>
-                  <Text style={styles.groupHeader}>COMPLETED</Text>
-                  {completed.map((step, index) => (
-                    <StepRow
-                      key={index}
-                      index={index}
-                      step={step}
-                      effectiveDone={true}
-                      isLast={index === completed.length - 1}
-                      onToggleConfirm={() => handleToggleConfirm(step)}
-                    />
-                  ))}
-                </>
-              )}
-
-              {!data && !offline && <Text style={styles.emptyText}>Loading your timeline...</Text>}
-            </View>
-          </>
-        ) : (
-          <>
-            {milestoneData && (
-              <Text style={styles.milestoneSubtitle}>
-                {milestoneData.completed} of {milestoneData.total} complete since you landed
-              </Text>
-            )}
-
-            <Pressable style={styles.promptCard} onPress={() => router.push('/complete-profile')}>
-              <ClipboardTextIcon size={18} color={Palette.purple} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.promptTitle}>Complete your profile</Text>
-                <Text style={styles.promptBody}>Get milestones based on your real status.</Text>
-              </View>
-              <CaretRightIcon size={15} color={Palette.chevron} />
-            </Pressable>
-
-            {milestoneData?.milestones.map((item, index) => {
-              const isLast = index === milestoneData.milestones.length - 1;
-              const dotColor =
-                item.status === 'done' ? Palette.green : item.status === 'next' ? Palette.purple : Palette.inkDisabled;
-              return (
-                <RailRow
-                  key={item.id}
-                  dotColor={dotColor}
-                  dotFilled={item.status === 'done'}
-                  dotSize={13}
-                  ringWidth={item.status === 'done' ? undefined : 2.5}
-                  isLast={isLast}
-                  index={index}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.stepperScroll} contentContainerStyle={styles.stepperRow}>
+          {STEPPER.map((s, index) => {
+            const isCurrent = selectedYear === s.year;
+            const isPast = data ? s.year < data.current_year_level : false;
+            return (
+              <View key={s.year} style={styles.stepperItemWrap}>
+                <Pressable style={styles.stepperItem} onPress={() => setSelectedYear(s.year)}>
                   <View
                     style={[
-                      styles.card,
-                      item.status === 'next' && styles.cardInProgress,
-                      item.status === 'locked' && styles.cardLocked,
+                      styles.stepperDot,
+                      isCurrent && styles.stepperDotCurrent,
+                      isPast && !isCurrent && styles.stepperDotPast,
                     ]}>
-                    <Text style={[styles.cardTitle, item.status === 'locked' && styles.cardTitleLocked]}>
-                      {item.title}
-                    </Text>
-                    <Text style={styles.cardDescription} numberOfLines={2}>
-                      {item.description}
-                    </Text>
+                    {isPast && !isCurrent ? (
+                      <CheckCircleIcon size={14} color={Palette.white} weight="fill" />
+                    ) : (
+                      <Text style={[styles.stepperDotText, isCurrent && styles.stepperDotTextCurrent]}>{index}</Text>
+                    )}
                   </View>
-                </RailRow>
-              );
-            })}
+                  <Text style={[styles.stepperLabel, isCurrent && styles.stepperLabelCurrent]}>{s.label}</Text>
+                </Pressable>
+                {index < STEPPER.length - 1 && <View style={styles.stepperConnector} />}
+              </View>
+            );
+          })}
+        </ScrollView>
 
-            {!milestoneData && <Text style={styles.emptyText}>Loading your milestones...</Text>}
-          </>
+        {milestoneData && (
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>
+              CURRENTLY: YEAR {data?.current_year_level ?? '—'}
+            </Text>
+            <Text style={styles.summaryProgress}>
+              You have completed {milestoneData.completed} of {milestoneData.total} milestones
+            </Text>
+          </View>
         )}
+
+        <Text style={styles.sectionHeader}>MILESTONES</Text>
+
+        {milestonesError && <ErrorState message={milestonesError} onRetry={fetchMilestones} />}
+
+        {!milestonesError && !milestoneData && <SkeletonList count={5} />}
+
+        {!milestonesError &&
+          milestoneData?.milestones.map((m) => {
+            const isNext = m.status === 'next';
+            const isExpanded = expandedId === m.id;
+            const goalsForMilestone = (miniGoals ?? []).filter((g) => g.milestone_id === m.id);
+            const dotColor = m.status === 'done' ? Palette.green : isNext ? Palette.purple : Palette.inkDisabled;
+            return (
+              <View key={m.id} style={styles.milestoneWrap}>
+                <Pressable
+                  style={[styles.milestoneRow, isNext && styles.milestoneRowNext]}
+                  onPress={() => setExpandedId(isExpanded ? null : m.id)}>
+                  <View style={[styles.milestoneDot, { backgroundColor: m.status === 'locked' ? Palette.white : dotColor, borderColor: dotColor }]}>
+                    {m.status === 'done' ? (
+                      <CheckCircleIcon size={isNext ? 20 : 16} color={Palette.white} weight="fill" />
+                    ) : (
+                      <Text style={styles.milestoneEmoji}>{m.icon}</Text>
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {isNext ? <Text style={styles.nextLabel}>NEXT</Text> : null}
+                    <Text style={[styles.milestoneTitle, isNext && styles.milestoneTitleNext, m.status === 'locked' && styles.milestoneTitleLocked]}>
+                      {m.title}
+                    </Text>
+                    {!isExpanded ? (
+                      <Text style={styles.milestoneDescription} numberOfLines={1}>{m.description}</Text>
+                    ) : null}
+                  </View>
+                  {isExpanded ? (
+                    <CaretUpIcon size={16} color={Palette.inkFaint} />
+                  ) : (
+                    <CaretDownIcon size={16} color={Palette.inkFaint} />
+                  )}
+                </Pressable>
+
+                {isExpanded && (
+                  <View style={styles.detailCard}>
+                    <Text style={styles.detailLabel}>STATUS</Text>
+                    <Text style={styles.detailValue}>
+                      {m.status === 'done' ? 'Completed' : m.status === 'next' ? 'Up next' : 'Not yet available'}
+                    </Text>
+
+                    <Text style={styles.detailLabel}>AROUND</Text>
+                    <Text style={styles.detailValue}>
+                      {m.target_year === 0 ? 'Before arrival' : m.target_year === 5 ? 'OPT phase' : `Year ${m.target_year}`}
+                    </Text>
+
+                    {m.what_to_do ? (
+                      <>
+                        <Text style={styles.detailLabel}>WHAT TO DO</Text>
+                        <Text style={styles.detailValue}>{m.what_to_do}</Text>
+                      </>
+                    ) : null}
+
+                    {m.why_it_matters ? (
+                      <>
+                        <Text style={styles.detailLabel}>WHY IT MATTERS</Text>
+                        <Text style={styles.detailValue}>{m.why_it_matters}</Text>
+                      </>
+                    ) : null}
+
+                    {m.source ? (
+                      <Pressable style={styles.sourceRow} onPress={() => Linking.openURL(m.source!)}>
+                        <ArrowSquareOutIcon size={13} color={Palette.purple} />
+                        <Text style={styles.sourceLink}>Source: {m.source_label}</Text>
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable style={styles.askArriButton} onPress={() => handleAskArriAboutMilestone(m)}>
+                      <SparkleIcon size={13} color={Palette.white} weight="fill" />
+                      <Text style={styles.askArriButtonText}>Ask Arri about this</Text>
+                    </Pressable>
+
+                    {goalsForMilestone.length > 0 && (
+                      <View style={styles.goalsTree}>
+                        <Text style={styles.goalsTreeLabel}>Mini goals to get there</Text>
+                        {goalsForMilestone.map((goal, goalIndex) => (
+                          <Pressable key={goal.id} style={styles.goalRow} onPress={() => handleToggleGoal(goal)}>
+                            <View style={styles.goalRail}>
+                              <View style={[styles.goalDot, goal.done && styles.goalDotDone]}>
+                                {goal.done ? <CheckCircleIcon size={13} color={Palette.white} weight="fill" /> : null}
+                              </View>
+                              {goalIndex < goalsForMilestone.length - 1 && <View style={styles.goalLine} />}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.goalLabel, goal.done && styles.goalLabelDone]}>{goal.label}</Text>
+                              <Text style={styles.goalSemester}>{goal.semester}</Text>
+                            </View>
+                          </Pressable>
+                        ))}
+                        <View style={styles.goalsTreeArrow}>
+                          <Text style={styles.goalsTreeArrowText}>↑ leads to</Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+        <View style={styles.rowBetween}>
+          <Text style={styles.sectionHeader}>{(data?.year ?? 'THIS YEAR').toUpperCase()} CHECKLIST</Text>
+        </View>
+
+        {offline && (
+          <View style={styles.offlineBanner}>
+            <CloudSlashIcon size={20} color={Palette.amber} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.offlineTitle}>Showing your saved checklist</Text>
+              <Text style={styles.offlineBody}>You&apos;re offline — this is the last saved copy.</Text>
+              <Pressable style={styles.retryButton} onPress={() => fetchTimeline(selectedYear ?? undefined)}>
+                <Text style={styles.retryText}>Try again</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {!data && !offline && <SkeletonList count={3} />}
+
+        {data && upcoming.length === 0 && completedSteps.length === 0 && (
+          <EmptyState icon={CheckCircleIcon} title="You are on track" body="No actions needed right now." />
+        )}
+
+        <View style={offline ? styles.skeletonWrap : undefined}>
+          {upcoming.length > 0 && (
+            <>
+              <Text style={styles.groupHeader}>UPCOMING</Text>
+              {upcoming.map((step, index) => (
+                <StepRow
+                  key={index}
+                  index={index}
+                  step={step}
+                  effectiveDone={false}
+                  isLast={index === upcoming.length - 1 && completedSteps.length === 0}
+                  onToggleConfirm={() => handleToggleConfirm(step)}
+                />
+              ))}
+            </>
+          )}
+
+          {completedSteps.length > 0 && (
+            <>
+              <Text style={styles.groupHeader}>COMPLETED</Text>
+              {completedSteps.map((step, index) => (
+                <StepRow
+                  key={index}
+                  index={index}
+                  step={step}
+                  effectiveDone={true}
+                  isLast={index === completedSteps.length - 1}
+                  onToggleConfirm={() => handleToggleConfirm(step)}
+                />
+              ))}
+            </>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -347,24 +479,276 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segmentRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 14,
-  },
   content: {
     paddingHorizontal: Spacing.screenPadding,
     paddingBottom: 108,
   },
-  chipScroll: {
-    height: 52,
+  stepperScroll: {
+    marginTop: 14,
     flexGrow: 0,
     flexShrink: 0,
   },
-  chipRow: {
-    gap: 8,
+  stepperRow: {
+    alignItems: 'flex-start',
+    paddingVertical: 8,
+  },
+  stepperItemWrap: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+  },
+  stepperItem: {
+    alignItems: 'center',
+    width: 58,
+  },
+  stepperDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperDotCurrent: {
+    backgroundColor: Palette.purple,
+    borderColor: Palette.purple,
+  },
+  stepperDotPast: {
+    backgroundColor: Palette.green,
+    borderColor: Palette.green,
+  },
+  stepperDotText: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11,
+    color: Palette.inkFaint,
+  },
+  stepperDotTextCurrent: {
+    color: Palette.white,
+  },
+  stepperLabel: {
+    marginTop: 4,
+    fontFamily: Type.bodyRegular,
+    fontSize: 10,
+    lineHeight: 12,
+    textAlign: 'center',
+    color: Palette.inkFaint,
+  },
+  stepperLabelCurrent: {
+    fontFamily: Type.bodyBold,
+    color: Palette.purple,
+  },
+  stepperConnector: {
+    width: 14,
+    height: 2,
+    backgroundColor: Palette.track,
+    marginBottom: 16,
+  },
+  summaryCard: {
+    marginTop: 14,
+    backgroundColor: Palette.purpleCard,
+    borderWidth: 1,
+    borderColor: Palette.purpleCardBorder,
+    borderRadius: Radius.cardSmall,
+    padding: 14,
+  },
+  summaryLabel: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11,
+    letterSpacing: 0.5,
+    color: Palette.purple,
+  },
+  summaryProgress: {
+    marginTop: 4,
+    fontFamily: Type.headingSemiBold,
+    fontSize: 14.5,
+    color: Palette.ink,
+  },
+  sectionHeader: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 12.5,
+    color: Palette.inkPlaceholder,
+    letterSpacing: 0.6,
+    marginBottom: 10,
+    marginTop: 20,
+  },
+  milestoneWrap: {
+    marginBottom: 8,
+  },
+  milestoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: Radius.cardSmall,
+    padding: 12,
+  },
+  milestoneRowNext: {
+    borderColor: Palette.purple,
+    borderWidth: 2,
+    backgroundColor: Palette.purpleCard,
+    padding: 16,
+  },
+  milestoneDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  milestoneEmoji: {
+    fontSize: 16,
+  },
+  nextLabel: {
+    fontFamily: Type.bodyBold,
+    fontSize: 10.5,
+    letterSpacing: 0.5,
+    color: Palette.purple,
+    marginBottom: 2,
+  },
+  milestoneTitle: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 14,
+    color: Palette.ink,
+  },
+  milestoneTitleNext: {
+    fontSize: 16.5,
+    color: Palette.purpleDark,
+  },
+  milestoneTitleLocked: {
+    color: Palette.inkPlaceholder,
+  },
+  milestoneDescription: {
+    marginTop: 2,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    color: Palette.inkMuted,
+  },
+  detailCard: {
+    marginTop: 6,
+    backgroundColor: Palette.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Palette.divider,
+    borderRadius: Radius.cardSmall,
+    padding: 14,
+    gap: 2,
+  },
+  detailLabel: {
+    marginTop: 8,
+    fontFamily: Type.bodyBold,
+    fontSize: 10.5,
+    letterSpacing: 0.5,
+    color: Palette.inkPlaceholder,
+  },
+  detailValue: {
+    marginTop: 2,
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Palette.inkBody,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 10,
+  },
+  sourceLink: {
+    fontFamily: Type.bodyBold,
+    fontSize: 12.5,
+    color: Palette.purple,
+  },
+  askArriButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    backgroundColor: Palette.purple,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  askArriButtonText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 12.5,
+    color: Palette.white,
+  },
+  goalsTree: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Palette.divider,
+  },
+  goalsTreeLabel: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11,
+    letterSpacing: 0.4,
+    color: Palette.inkMuted,
+    marginBottom: 8,
+  },
+  goalRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  goalRail: {
+    width: 20,
+    alignItems: 'center',
+  },
+  goalDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Palette.borderInput,
+    backgroundColor: Palette.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalDotDone: {
+    backgroundColor: Palette.green,
+    borderColor: Palette.green,
+  },
+  goalLine: {
+    width: 2,
+    flex: 1,
+    minHeight: 10,
+    backgroundColor: Palette.track,
+    marginVertical: 2,
+  },
+  goalLabel: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 12.5,
+    color: Palette.ink,
+    paddingBottom: 10,
+  },
+  goalLabelDone: {
+    color: Palette.inkPlaceholder,
+    textDecorationLine: 'line-through',
+  },
+  goalSemester: {
+    marginTop: -8,
+    fontFamily: Type.bodyRegular,
+    fontSize: 10.5,
+    color: Palette.inkPlaceholder,
+  },
+  goalsTreeArrow: {
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  goalsTreeArrowText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 11,
+    color: Palette.purple,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   groupHeader: {
     fontFamily: Type.headingSemiBold,
@@ -382,28 +766,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.cardSmall,
     padding: 11,
   },
-  cardInProgress: {
-    backgroundColor: Palette.purpleCard,
-    borderColor: Palette.purpleCardBorder,
-  },
-  cardLocked: {
-    backgroundColor: Palette.surfaceSubtle,
-    borderColor: Palette.divider,
-  },
   cardTitle: {
     fontFamily: Type.headingSemiBold,
     fontSize: 13,
     color: Palette.ink,
-  },
-  cardTitleLocked: {
-    color: Palette.inkPlaceholder,
-  },
-  cardDescription: {
-    marginTop: 3,
-    fontFamily: Type.bodyRegular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: Palette.inkMuted,
   },
   cardDate: {
     marginTop: 2,
@@ -420,41 +786,6 @@ const styles = StyleSheet.create({
   cardStatusLabel: {
     fontFamily: Type.bodyBold,
     fontSize: 11,
-  },
-  emptyText: {
-    fontFamily: Type.bodyRegular,
-    fontSize: 13,
-    color: Palette.inkPlaceholder,
-    marginTop: 8,
-  },
-  milestoneSubtitle: {
-    marginTop: 12,
-    fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    color: Palette.inkFaint,
-  },
-  guideCard: {
-    flexDirection: 'row',
-    gap: 10,
-    backgroundColor: Palette.purpleCard,
-    borderWidth: 1,
-    borderColor: Palette.purpleCardBorder,
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 10,
-    marginBottom: 10,
-  },
-  guideTitle: {
-    fontFamily: Type.headingSemiBold,
-    fontSize: 13,
-    color: Palette.ink,
-  },
-  guideBody: {
-    marginTop: 2,
-    fontFamily: Type.bodyRegular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: Palette.inkBody,
   },
   offlineBanner: {
     flexDirection: 'row',
@@ -494,29 +825,5 @@ const styles = StyleSheet.create({
   },
   skeletonWrap: {
     opacity: 0.55,
-  },
-  promptCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: Palette.purpleCard,
-    borderWidth: 1,
-    borderColor: Palette.purpleCardBorder,
-    borderRadius: Radius.cardSmall,
-    padding: 12,
-    marginTop: 12,
-    marginBottom: 14,
-  },
-  promptTitle: {
-    fontFamily: Type.headingSemiBold,
-    fontSize: 13,
-    color: Palette.ink,
-  },
-  promptBody: {
-    marginTop: 1,
-    fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
-    lineHeight: 15,
-    color: Palette.inkBody,
   },
 });

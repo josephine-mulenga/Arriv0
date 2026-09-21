@@ -26,6 +26,9 @@ import {
 } from '@/api';
 import { useAuth } from '@/AuthContext';
 import { Chip } from '@/components/ui/chip';
+import { SkeletonList } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/ui/error-state';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Palette, Spacing, Type } from '@/constants/theme';
 
 const SECTIONS = ['Recommended', 'New This Week', 'Watching', 'Saved'];
@@ -436,37 +439,42 @@ export default function InternshipsScreen() {
         )}
 
         {section === 'Recommended' && notConfigured && (
-          <View style={styles.emptyState}>
-            <BriefcaseIcon size={36} color="#CFC9F5" />
-            <Text style={styles.emptyTitle}>Internship search isn&apos;t set up yet</Text>
-            <Text style={styles.emptyBody}>Check back soon — we&apos;re still connecting this feature.</Text>
-          </View>
+          <EmptyState
+            icon={BriefcaseIcon}
+            title="Internship search isn't set up yet"
+            body="Check back soon — we're still connecting this feature."
+          />
         )}
 
         {section === 'Recommended' && !notConfigured && errorMessage && (
-          <View style={styles.emptyState}>
-            <WarningCircleIcon size={36} color="#CFC9F5" />
-            <Text style={styles.emptyTitle}>Couldn&apos;t load internships</Text>
-            <Text style={styles.emptyBody}>{errorMessage}</Text>
-          </View>
+          <ErrorState
+            message="Could not load opportunities right now."
+            onRetry={() => fetchInternships(query.trim(), 1, false)}
+          />
         )}
 
-        {!notConfigured && !errorMessage && displayedItems === null && (
-          <Text style={styles.loadingText}>Loading...</Text>
-        )}
+        {!notConfigured && !errorMessage && displayedItems === null && <SkeletonList />}
 
         {!notConfigured && !errorMessage && displayedItems !== null && displayedItems.length === 0 && (
-          <View style={styles.emptyState}>
-            <BriefcaseIcon size={36} color="#CFC9F5" />
-            <Text style={styles.emptyTitle}>
-              {section === 'Saved' ? 'No saved opportunities yet' : section === 'Watching' ? 'No postings from watched companies yet' : 'No internships found'}
-            </Text>
-            <Text style={styles.emptyBody}>
-              {section === 'Watching' && watchedCompanies.length === 0
-                ? 'Add a company above to start watching for new postings.'
-                : 'Try a different search term.'}
-            </Text>
-          </View>
+          <EmptyState
+            icon={section === 'Saved' ? BookmarkSimpleIcon : BriefcaseIcon}
+            title={
+              section === 'Saved'
+                ? 'No saved opportunities yet'
+                : section === 'Watching'
+                  ? 'No postings from watched companies yet'
+                  : 'No matching internships'
+            }
+            body={
+              section === 'Saved'
+                ? 'Save opportunities you want to come back to.'
+                : section === 'Watching' && watchedCompanies.length === 0
+                  ? 'Add a company above to start watching for new postings.'
+                  : section === 'Recommended'
+                    ? 'Complete your profile for better matches.'
+                    : 'Try a different search term.'
+            }
+          />
         )}
 
         {displayedItems?.map((item, index) => {
@@ -760,11 +768,6 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: Palette.purple,
   },
-  loadingText: {
-    fontFamily: Type.bodyRegular,
-    fontSize: 13,
-    color: Palette.inkPlaceholder,
-  },
   card: {
     paddingVertical: 12,
     borderBottomWidth: 1,
@@ -938,27 +941,6 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodySemiBold,
     fontSize: 11.5,
     color: Palette.purple,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 30,
-    gap: 6,
-  },
-  emptyTitle: {
-    fontFamily: Type.headingSemiBold,
-    fontSize: 16,
-    color: Palette.ink,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  emptyBody: {
-    textAlign: 'center',
-    fontFamily: Type.bodyRegular,
-    fontSize: 13,
-    lineHeight: 19,
-    color: Palette.inkMuted,
   },
   loadMoreButton: {
     alignItems: 'center',

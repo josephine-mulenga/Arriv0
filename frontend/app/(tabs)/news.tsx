@@ -15,6 +15,9 @@ import { getNews, addBookmark, getBookmarks, deleteBookmark } from '@/api';
 import { useAuth } from '@/AuthContext';
 import { Chip } from '@/components/ui/chip';
 import { IconTile } from '@/components/ui/icon-tile';
+import { SkeletonList } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/ui/error-state';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Palette, Spacing, Type } from '@/constants/theme';
 
 const TABS = ['For You', 'F1 Visa', 'OPT', 'CPT', 'STEM OPT', 'Saved'];
@@ -95,6 +98,7 @@ export default function NewsScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchNews = async (tag: string, targetPage: number, append: boolean) => {
     try {
@@ -103,8 +107,12 @@ export default function NewsScreen() {
       setNewsItems((prev) => (append && prev ? dedupeByTitle([...prev, ...incoming]) : incoming));
       setHasMore(!!data.has_more);
       setPage(data.page ?? targetPage);
+      setErrorMessage(null);
     } catch {
-      // keep last-known list on failure
+      if (!append) {
+        setNewsItems([]);
+        setErrorMessage('We could not refresh your immigration news.');
+      }
     }
   };
 
@@ -177,12 +185,18 @@ export default function NewsScreen() {
           ))}
         </ScrollView>
 
-        {selectedTab !== 'Saved' && !newsItems && <Text style={styles.emptyText}>Loading news...</Text>}
+        {selectedTab !== 'Saved' && !newsItems && !errorMessage && <SkeletonList />}
 
-        {displayedNews.length === 0 && (newsItems || selectedTab === 'Saved') && (
-          <Text style={styles.emptyText}>
-            {selectedTab === 'Saved' ? 'No saved articles yet.' : 'No news in this category yet.'}
-          </Text>
+        {selectedTab !== 'Saved' && errorMessage && (
+          <ErrorState message={errorMessage} onRetry={() => fetchNews(selectedTab, 1, false)} />
+        )}
+
+        {!errorMessage && displayedNews.length === 0 && (newsItems || selectedTab === 'Saved') && (
+          <EmptyState
+            icon={selectedTab === 'Saved' ? BookmarkSimpleIcon : NewspaperIcon}
+            title={selectedTab === 'Saved' ? 'No saved articles yet' : 'No new updates for your profile right now'}
+            body={selectedTab === 'Saved' ? 'Bookmark articles that matter to you.' : undefined}
+          />
         )}
 
         {displayedNews.map((item, index) => {
@@ -293,11 +307,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.screenPadding,
     paddingBottom: 108,
-  },
-  emptyText: {
-    fontFamily: Type.bodyRegular,
-    fontSize: 13,
-    color: Palette.inkPlaceholder,
   },
   card: {
     paddingVertical: 12,

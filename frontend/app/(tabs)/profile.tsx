@@ -3,30 +3,53 @@ import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } fr
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  PencilSimpleIcon,
   CaretRightIcon,
+  CaretDownIcon,
+  CaretUpIcon,
   FolderSimpleIcon,
   BellIcon,
   CloudSlashIcon,
-  ClipboardTextIcon,
   GiftIcon,
   CameraIcon,
   ImageIcon,
   EnvelopeSimpleIcon,
   ChatCenteredDotsIcon,
+  IdentificationCardIcon,
+  GraduationCapIcon,
+  BriefcaseIcon,
+  SlidersHorizontalIcon,
+  BookmarkSimpleIcon,
+  UserCircleIcon,
+  type Icon,
 } from 'phosphor-react-native';
 
-import { getUserProfile, uploadAvatar, updateProfile } from '@/api';
+import { getUserProfile, uploadAvatar, updateProfile, getOnboardingScore, getDocuments } from '@/api';
 import { useAuth } from '@/AuthContext';
-import { Palette, Spacing, Type } from '@/constants/theme';
+import { SkeletonList } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/ui/error-state';
+import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 
 interface ProfileData {
   name?: string;
   school?: string;
+  major?: string;
   visa_type?: string;
   year_level?: number;
+  program_start_date?: string;
   program_end_date?: string;
   avatar_url?: string;
+  has_ssn?: boolean;
+  has_bank_account?: boolean;
+  cpt_months_used?: number;
+  career_interests?: string[];
+  location_preference?: string;
+  notification_time?: string;
+  push_token?: string;
+}
+
+interface ScoreData {
+  percentage: number;
+  next_step?: string | null;
 }
 
 const yearLevelNames: Record<number, string> = {
@@ -44,17 +67,37 @@ function getInitials(name?: string): string {
 }
 
 export default function ProfileScreen() {
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [score, setScore] = useState<ScoreData | null>(null);
+  const [docCounts, setDocCounts] = useState<{ collected: number; total: number } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!token || !user) return;
-      getUserProfile(user.id, token).then(setProfile).catch(() => {});
-    }, [token, user])
-  );
+  const load = useCallback(() => {
+    if (!token || !user) return;
+    getUserProfile(user.id, token)
+      .then((data) => {
+        setProfile(data);
+        setErrorMessage(null);
+      })
+      .catch(() => setErrorMessage('We could not load your profile.'));
+    getOnboardingScore(token)
+      .then(setScore)
+      .catch(() => {});
+    getDocuments(token)
+      .then((data) => {
+        const docs = data.documents ?? data ?? [];
+        if (Array.isArray(docs)) {
+          setDocCounts({ collected: docs.filter((d: any) => d.collected).length, total: docs.length });
+        }
+      })
+      .catch(() => {});
+  }, [token, user]);
+
+  useFocusEffect(load);
 
   const doUpload = async (imageUri: string) => {
     if (!user || !token) return;
@@ -95,66 +138,201 @@ export default function ProfileScreen() {
     if (!result.canceled) doUpload(result.assets[0].uri);
   };
 
+  const handleSignOut = () => {
+    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          router.replace('/login');
+        },
+      },
+    ]);
+  };
+
+  const graduationYear = profile?.program_end_date ? profile.program_end_date.slice(0, 4) : null;
+
+  const toggle = (id: string) => setExpandedSection((prev) => (prev === id ? null : id));
+
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>My Profile</Text>
 
-        <View style={styles.identityRow}>
-          <Pressable onPress={() => setPickerVisible(true)} disabled={uploading}>
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarInitials}>{getInitials(profile?.name)}</Text>
+        {errorMessage && <ErrorState message={errorMessage} onRetry={load} />}
+
+        {!errorMessage && !profile && <SkeletonList count={4} />}
+
+        {!errorMessage && profile && (
+          <>
+            <View style={styles.identityRow}>
+              <Pressable onPress={() => setPickerVisible(true)} disabled={uploading}>
+                {profile.avatar_url ? (
+                  <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarInitials}>{getInitials(profile.name)}</Text>
+                  </View>
+                )}
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{profile.name ?? '...'}</Text>
+                <Text style={styles.subline}>
+                  {[profile.visa_type ? `${profile.visa_type} Student` : 'F1 Student', profile.major, profile.school]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+                {graduationYear ? <Text style={styles.subline}>Expected graduation {graduationYear}</Text> : null}
+              </View>
+            </View>
+
+            {score && (
+              <View style={styles.completenessCard}>
+                <View style={styles.completenessHeader}>
+                  <Text style={styles.completenessLabel}>PROFILE COMPLETENESS</Text>
+                  <Text style={styles.completenessPercent}>{score.percentage}%</Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, score.percentage))}%` }]} />
+                </View>
+                <Text style={styles.completenessBody}>
+                  {score.percentage >= 100 ? "You're all set!" : 'Complete your profile for better recommendations.'}
+                </Text>
               </View>
             )}
-          </Pressable>
-          <View>
-            <Text style={styles.name}>{profile?.name ?? '...'}</Text>
-            <Text style={styles.email}>{user?.email ?? ''}</Text>
-          </View>
-        </View>
 
-        <Text style={styles.groupLabel}>My Information</Text>
-        <View style={styles.group}>
-          <InfoRow label="School" value={profile?.school} />
-          <InfoRow label="Visa Type" value={profile?.visa_type} />
-          <InfoRow
-            label="Year Level"
-            value={profile?.year_level ? yearLevelNames[profile.year_level] : undefined}
-          />
-          <InfoRow label="Program End Date" value={profile?.program_end_date} isLast />
-        </View>
+            <Section
+              id="immigration"
+              icon={IdentificationCardIcon}
+              title="IMMIGRATION"
+              whyItMatters="Better timeline"
+              expanded={expandedSection === 'immigration'}
+              onToggle={() => toggle('immigration')}
+              actionLabel="Edit"
+              onAction={() => router.push('/edit-profile')}
+              rows={[
+                { label: 'Visa type', value: profile.visa_type },
+                { label: 'Program start', value: profile.program_start_date },
+                { label: 'Program end', value: profile.program_end_date },
+                {
+                  label: 'CPT used',
+                  value:
+                    profile.cpt_months_used !== undefined ? `${profile.cpt_months_used} of 12 months` : undefined,
+                },
+              ]}
+            />
 
-        <Text style={styles.groupLabel}>Account</Text>
-        <View style={styles.group}>
-          <ActionRow icon={PencilSimpleIcon} label="Edit Profile" onPress={() => router.push('/edit-profile')} />
-          <ActionRow
-            icon={ClipboardTextIcon}
-            label="Complete Your Profile"
-            onPress={() => router.push('/complete-profile')}
-          />
-          <ActionRow icon={FolderSimpleIcon} label="Documents" onPress={() => router.push('/documents')} />
-          <ActionRow icon={GiftIcon} label="Invite Friends" onPress={() => router.push('/referrals')} />
-          <ActionRow
-            icon={BellIcon}
-            label="Notification Settings"
-            onPress={() => router.push('/notification-settings')}
-          />
-          <ActionRow
-            icon={CloudSlashIcon}
-            label="Offline timeline"
-            onPress={() => router.push('/(tabs)/journey')}
-            isLast
-          />
-        </View>
+            <Section
+              id="academic"
+              icon={GraduationCapIcon}
+              title="ACADEMIC"
+              whyItMatters="Better news"
+              expanded={expandedSection === 'academic'}
+              onToggle={() => toggle('academic')}
+              actionLabel="Edit"
+              onAction={() => router.push('/edit-profile')}
+              rows={[
+                { label: 'School', value: profile.school },
+                { label: 'Major', value: profile.major },
+                { label: 'Year level', value: profile.year_level ? yearLevelNames[profile.year_level] : undefined },
+              ]}
+            />
 
-        <Text style={styles.groupLabel}>Support</Text>
-        <View style={styles.group}>
-          <ActionRow icon={ChatCenteredDotsIcon} label="Feedback" onPress={() => router.push('/feedback')} />
-          <ActionRow icon={EnvelopeSimpleIcon} label="Contact Us" onPress={() => router.push('/contact-us')} isLast />
-        </View>
+            <Section
+              id="career"
+              icon={BriefcaseIcon}
+              title="CAREER"
+              whyItMatters="Better opportunity matches"
+              expanded={expandedSection === 'career'}
+              onToggle={() => toggle('career')}
+              actionLabel="Edit"
+              onAction={() => router.push('/edit-profile')}
+              rows={[
+                {
+                  label: 'Career interests',
+                  value: profile.career_interests?.length ? profile.career_interests.join(', ') : undefined,
+                },
+                { label: 'Location preference', value: profile.location_preference },
+              ]}
+            />
+
+            <Section
+              id="preferences"
+              icon={SlidersHorizontalIcon}
+              title="PREFERENCES"
+              expanded={expandedSection === 'preferences'}
+              onToggle={() => toggle('preferences')}
+              actionLabel="Edit"
+              onAction={() => router.push('/notification-settings')}
+              rows={[
+                { label: 'Push notifications', value: profile.push_token ? 'Enabled' : 'Disabled' },
+                { label: 'Daily briefing time', value: profile.notification_time },
+              ]}
+            />
+
+            <Section
+              id="documents"
+              icon={FolderSimpleIcon}
+              title="DOCUMENTS"
+              expanded={expandedSection === 'documents'}
+              onToggle={() => toggle('documents')}
+              actionLabel="View"
+              onAction={() => router.push('/documents')}
+              rows={[
+                {
+                  label: 'Collected',
+                  value: docCounts ? `${docCounts.collected} of ${docCounts.total} collected` : undefined,
+                },
+              ]}
+            />
+
+            <Section
+              id="saved"
+              icon={BookmarkSimpleIcon}
+              title="SAVED"
+              expanded={expandedSection === 'saved'}
+              onToggle={() => toggle('saved')}
+              actionLabel="View"
+              onAction={() => router.push('/(tabs)/internships')}
+              rows={[
+                { label: 'Saved opportunities', value: 'In the Opportunities tab', onPress: () => router.push('/(tabs)/internships') },
+                { label: 'Saved news', value: 'In the News tab', onPress: () => router.push('/(tabs)/news') },
+              ]}
+            />
+
+            <Section
+              id="account"
+              icon={UserCircleIcon}
+              title="ACCOUNT"
+              expanded={expandedSection === 'account'}
+              onToggle={() => toggle('account')}
+              rows={[
+                { label: 'Email', value: user?.email },
+                { label: 'Password', value: 'Change password', onPress: () => router.push('/reset-password') },
+              ]}
+              footer={
+                <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+                  <Text style={styles.signOutText}>Sign out</Text>
+                </Pressable>
+              }
+            />
+
+            <Text style={styles.groupLabel}>More</Text>
+            <View style={styles.group}>
+              <ActionRow icon={GiftIcon} label="Invite Friends" onPress={() => router.push('/referrals')} />
+              <ActionRow
+                icon={BellIcon}
+                label="Notification Settings"
+                onPress={() => router.push('/notification-settings')}
+              />
+              <ActionRow icon={CloudSlashIcon} label="Offline timeline" onPress={() => router.push('/(tabs)/journey')} />
+              <ActionRow icon={ChatCenteredDotsIcon} label="Feedback" onPress={() => router.push('/feedback')} />
+              <ActionRow icon={EnvelopeSimpleIcon} label="Contact Us" onPress={() => router.push('/contact-us')} isLast />
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <Modal visible={pickerVisible} transparent animationType="fade" onRequestClose={() => setPickerVisible(false)}>
@@ -189,17 +367,70 @@ export default function ProfileScreen() {
   );
 }
 
-function InfoRow({ label, value, isLast }: { label: string; value?: string; isLast?: boolean }) {
+function Section({
+  id,
+  icon: IconComponent,
+  title,
+  whyItMatters,
+  expanded,
+  onToggle,
+  actionLabel,
+  onAction,
+  rows,
+  footer,
+}: {
+  id: string;
+  icon: Icon;
+  title: string;
+  whyItMatters?: string;
+  expanded: boolean;
+  onToggle: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
+  rows: { label: string; value?: string; onPress?: () => void }[];
+  footer?: React.ReactNode;
+}) {
   return (
-    <Pressable
-      style={[styles.row, !isLast && styles.rowDivider]}
-      onPress={() => router.push('/edit-profile')}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <View style={styles.rowRight}>
-        <Text style={styles.rowValue}>{value ?? '—'}</Text>
-        <CaretRightIcon size={15} color={Palette.chevron} />
-      </View>
-    </Pressable>
+    <View style={styles.sectionWrap}>
+      <Pressable style={styles.sectionHeader} onPress={onToggle}>
+        <View style={styles.sectionHeaderLeft}>
+          <IconComponent size={17} color={Palette.purple} />
+          <Text style={styles.sectionTitle}>{title}</Text>
+        </View>
+        <View style={styles.sectionHeaderRight}>
+          {whyItMatters ? <Text style={styles.whyItMatters}>{whyItMatters}</Text> : null}
+          {expanded ? (
+            <CaretUpIcon size={15} color={Palette.chevron} />
+          ) : (
+            <CaretDownIcon size={15} color={Palette.chevron} />
+          )}
+        </View>
+      </Pressable>
+
+      {expanded && (
+        <View style={styles.sectionBody}>
+          {rows.map((row, index) => (
+            <Pressable
+              key={row.label}
+              style={[styles.row, index < rows.length - 1 && styles.rowDivider]}
+              onPress={row.onPress}
+              disabled={!row.onPress}>
+              <Text style={styles.rowLabel}>{row.label}</Text>
+              <View style={styles.rowRight}>
+                <Text style={styles.rowValue}>{row.value ?? 'Not set'}</Text>
+                {row.onPress ? <CaretRightIcon size={14} color={Palette.chevron} /> : null}
+              </View>
+            </Pressable>
+          ))}
+          {actionLabel && onAction ? (
+            <Pressable style={styles.sectionActionButton} onPress={onAction}>
+              <Text style={styles.sectionActionText}>{actionLabel}</Text>
+            </Pressable>
+          ) : null}
+          {footer}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -209,7 +440,7 @@ function ActionRow({
   onPress,
   isLast,
 }: {
-  icon: typeof PencilSimpleIcon;
+  icon: Icon;
   label: string;
   onPress: () => void;
   isLast?: boolean;
@@ -245,41 +476,125 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: Spacing.sectionGap,
+    marginBottom: 16,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: Palette.purpleTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   avatarInitials: {
     fontFamily: Type.headingBold,
-    fontSize: 18,
+    fontSize: 19,
     color: Palette.purple,
   },
   name: {
     fontFamily: Type.headingSemiBold,
-    fontSize: 16,
+    fontSize: 16.5,
     color: Palette.ink,
   },
-  email: {
+  subline: {
     marginTop: 2,
     fontFamily: Type.bodyRegular,
-    fontSize: 13,
+    fontSize: 12.5,
     color: Palette.inkPlaceholder,
+  },
+  completenessCard: {
+    backgroundColor: Palette.purpleCard,
+    borderWidth: 1,
+    borderColor: Palette.purpleCardBorder,
+    borderRadius: Radius.cardSmall,
+    padding: 14,
+    marginBottom: Spacing.sectionGap,
+  },
+  completenessHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  completenessLabel: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11,
+    letterSpacing: 0.5,
+    color: Palette.purple,
+  },
+  completenessPercent: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 15,
+    color: Palette.purpleDark,
+  },
+  progressTrack: {
+    marginTop: 8,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Palette.track,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: Palette.purple,
+  },
+  completenessBody: {
+    marginTop: 8,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    color: Palette.inkBody,
+  },
+  sectionWrap: {
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: 14,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 15,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 13,
+    letterSpacing: 0.4,
+    color: Palette.ink,
+  },
+  whyItMatters: {
+    fontFamily: Type.bodyBold,
+    fontSize: 10.5,
+    color: Palette.purple,
+  },
+  sectionBody: {
+    paddingHorizontal: 15,
+    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: Palette.dividerLight,
   },
   groupLabel: {
     fontFamily: Type.headingSemiBold,
     fontSize: 15,
     color: Palette.ink,
+    marginTop: Spacing.cardGap,
     marginBottom: Spacing.cardGap,
   },
   group: {
@@ -293,7 +608,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 13,
   },
   rowDivider: {
     borderBottomWidth: 1,
@@ -308,16 +623,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    maxWidth: '60%',
   },
   rowValue: {
     fontFamily: Type.bodySemiBold,
-    fontSize: 14,
+    fontSize: 13,
     color: Palette.ink,
+    textAlign: 'right',
   },
   actionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  sectionActionButton: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: Palette.purple,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  sectionActionText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 12.5,
+    color: Palette.white,
+  },
+  signOutButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: Palette.danger,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  signOutText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 12.5,
+    color: Palette.danger,
   },
   modalOverlay: {
     flex: 1,

@@ -702,16 +702,111 @@ def build_milestones(profile: dict) -> list:
         reported_to_dso = days_since_start > 10
 
     return [
-        {"id": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.", "status": "done" if reported_to_dso else "next"},
-        {"id": 2, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.", "status": "done" if has_bank_account else ("next" if reported_to_dso else "locked")},
-        {"id": 3, "icon": "🪪", "title": "Applied for Social Security Number", "description": "Required for working in the US and building credit history.", "status": "done" if has_ssn else ("next" if has_bank_account else "locked")},
-        {"id": 4, "icon": "💼", "title": "First CPT internship authorized", "description": "You gained real US work experience. This goes on your resume.", "status": "done" if has_done_cpt else ("next" if year_level >= 2 else "locked")},
-        {"id": 5, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.", "status": "done" if has_opt_recommendation else ("next" if year_level >= 3 else "locked")},
-        {"id": 6, "icon": "📄", "title": "Form I-765 submitted", "description": "Your OPT application is in USCIS hands.", "status": "done" if has_i765_submitted else ("next" if has_opt_recommendation else "locked")},
-        {"id": 7, "icon": "💳", "title": "EAD card received", "description": "Your Employment Authorization Document arrived by mail.", "status": "next" if has_i765_submitted else "locked"},
-        {"id": 8, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you worked for becomes real.", "status": "locked"},
-        {"id": 9, "icon": "🚀", "title": "STEM OPT extension approved", "description": "24 more months of work authorization secured.", "status": "locked"}
+        {"id": 1, "target_year": 1, "icon": "🛬", "title": "Arrived and reported to DSO", "description": "Your F1 journey officially started. SEVIS record active.",
+         "what_to_do": "Visit your Designated School Official's office within 10 days of arrival to check in and have your I-20 signed.",
+         "why_it_matters": "This activates your SEVIS record — without it, you're not in valid F-1 status.",
+         "source": "https://studyinthestates.dhs.gov/students", "source_label": "Study in the States",
+         "status": "done" if reported_to_dso else "next"},
+        {"id": 2, "target_year": 1, "icon": "🏦", "title": "Opened a US bank account", "description": "You can now receive payments and build credit history.",
+         "what_to_do": "Bring your passport, I-20, and proof of address to a bank to open a checking account.",
+         "why_it_matters": "You need this to receive paychecks, pay rent, and start building a US credit history.",
+         "source": None, "source_label": None,
+         "status": "done" if has_bank_account else ("next" if reported_to_dso else "locked")},
+        {"id": 3, "target_year": 1, "icon": "🪪", "title": "Applied for Social Security Number", "description": "Required for working in the US and building credit history.",
+         "what_to_do": "Apply at your local Social Security office with your I-20, passport, and a job offer letter (on-campus work counts).",
+         "why_it_matters": "Required to legally work in the US and to build a credit history.",
+         "source": "https://www.ssa.gov/ssnumber/", "source_label": "Social Security Administration",
+         "status": "done" if has_ssn else ("next" if has_bank_account else "locked")},
+        {"id": 4, "target_year": 2, "icon": "💼", "title": "First CPT internship authorized", "description": "You gained real US work experience. This goes on your resume.",
+         "what_to_do": "Find an internship related to your major, then get CPT authorization from your DSO before your start date.",
+         "why_it_matters": "Real US work experience for your resume — and part-time CPT doesn't count against your OPT eligibility.",
+         "source": "https://studyinthestates.dhs.gov/students/work/curricular-practical-training", "source_label": "Study in the States — CPT",
+         "status": "done" if has_done_cpt else ("next" if year_level >= 2 else "locked")},
+        {"id": 5, "target_year": 4, "icon": "📋", "title": "DSO OPT recommendation received", "description": "Your DSO has approved your OPT application request.",
+         "what_to_do": "Meet with your DSO 90 days before your program end date to request your OPT recommendation and updated I-20.",
+         "why_it_matters": "You can't file Form I-765 without this — it's the first real step in the OPT application.",
+         "source": "https://www.uscis.gov/working-in-the-united-states/students-and-exchange-visitors/optional-practical-training-opt-for-f-1-students", "source_label": "USCIS — OPT for F-1 Students",
+         "status": "done" if has_opt_recommendation else ("next" if year_level >= 3 else "locked")},
+        {"id": 6, "target_year": 4, "icon": "📄", "title": "Form I-765 submitted", "description": "Your OPT application is in USCIS hands.",
+         "what_to_do": "File Form I-765 with USCIS along with the $520 fee, your photos, and your updated I-20.",
+         "why_it_matters": "This is the actual work-authorization application — it starts your official OPT clock.",
+         "source": "https://www.uscis.gov/i-765", "source_label": "USCIS — Form I-765",
+         "status": "done" if has_i765_submitted else ("next" if has_opt_recommendation else "locked")},
+        {"id": 7, "target_year": 4, "icon": "💳", "title": "EAD card received", "description": "Your Employment Authorization Document arrived by mail.",
+         "what_to_do": "Track your case on the USCIS case status page and watch your mail for the physical card.",
+         "why_it_matters": "You cannot legally start OPT employment until you physically have this card.",
+         "source": "https://egov.uscis.gov/casestatus/landing.do", "source_label": "USCIS — Case Status",
+         "status": "next" if has_i765_submitted else "locked"},
+        {"id": 8, "target_year": 5, "icon": "🎯", "title": "First OPT job offer accepted", "description": "The moment everything you worked for becomes real.",
+         "what_to_do": "Make sure your job is directly related to your field of study before accepting.",
+         "why_it_matters": "OPT employment must relate to your major — unrelated work can put your status at risk.",
+         "source": None, "source_label": None,
+         "status": "locked"},
+        {"id": 9, "target_year": 5, "icon": "🚀", "title": "STEM OPT extension approved", "description": "24 more months of work authorization secured.",
+         "what_to_do": "If your major qualifies, file for the STEM OPT extension before your standard OPT expires.",
+         "why_it_matters": "24 additional months of work authorization — but only STEM-designated majors qualify.",
+         "source": "https://www.ice.gov/sevis/stemlist", "source_label": "ICE — STEM Designated Degree List",
+         "status": "locked"}
     ]
+
+# Personalized sub-steps under a major milestone (Journey screen's "mini
+# goals tree") - keyed by the build_milestones() id they lead up to, then
+# by major group. Definitions live here rather than in the database (like
+# timeline/milestones already do) since they're deterministic from major;
+# only *completion* is user-specific and needs real storage, which is what
+# mini_goals_completed is for.
+MINI_GOAL_TEMPLATES = {
+    4: {  # First CPT internship authorized
+        "cs": [
+            {"id": "cs_apply_5", "label": "Apply to 5 internships this week", "semester": "This week"},
+            {"id": "cs_leetcode_3", "label": "Practice 3 LeetCode questions", "semester": "This week"},
+            {"id": "cs_github", "label": "Update your GitHub with a recent project", "semester": "This month"},
+            {"id": "cs_linkedin", "label": "Update your LinkedIn profile", "semester": "This month"},
+            {"id": "cs_colorstack", "label": "Join ColorStack or a similar CS community", "semester": "This month"},
+            {"id": "cs_mock_interview", "label": "Do one mock technical interview", "semester": "This month"},
+        ],
+        "business": [
+            {"id": "biz_apply_5", "label": "Apply to 5 internships this week", "semester": "This week"},
+            {"id": "biz_networking", "label": "Attend 1 networking event", "semester": "This week"},
+            {"id": "biz_coffee_chats", "label": "Schedule 2 coffee chats", "semester": "This week"},
+            {"id": "biz_case_study", "label": "Practice 1 case study", "semester": "This month"},
+            {"id": "biz_linkedin", "label": "Update your LinkedIn profile", "semester": "This month"},
+            {"id": "biz_outreach", "label": "Send 5 LinkedIn outreach messages", "semester": "This month"},
+        ],
+        "engineering": [
+            {"id": "eng_apply_5", "label": "Apply to 5 internships this week", "semester": "This week"},
+            {"id": "eng_lab_project", "label": "Document a lab or class project", "semester": "This month"},
+            {"id": "eng_research", "label": "Ask a professor about research opportunities", "semester": "This month"},
+            {"id": "eng_technical_skill", "label": "Learn one new technical tool relevant to your field", "semester": "This month"},
+            {"id": "eng_linkedin", "label": "Update your LinkedIn profile", "semester": "This month"},
+            {"id": "eng_career_fair", "label": "Attend a career fair", "semester": "This month"},
+        ],
+        "default": [
+            {"id": "gen_apply_5", "label": "Apply to 5 internships this week", "semester": "This week"},
+            {"id": "gen_linkedin", "label": "Update your LinkedIn profile", "semester": "This week"},
+            {"id": "gen_coffee_chats", "label": "Schedule 2 coffee chats", "semester": "This month"},
+            {"id": "gen_resume", "label": "Get your resume reviewed", "semester": "This month"},
+        ],
+    },
+    6: {  # Form I-765 submitted
+        "default": [
+            {"id": "opt_uscis_account", "label": "Create your USCIS online account", "semester": "This month"},
+            {"id": "opt_gather_docs", "label": "Gather your I-20, passport, and photos", "semester": "This month"},
+            {"id": "opt_dso_meeting", "label": "Meet with your DSO to confirm timing", "semester": "This month"},
+            {"id": "opt_fee", "label": "Set aside $520 for the filing fee", "semester": "This month"},
+        ],
+    },
+}
+
+def _major_group(major: str) -> str:
+    major_lower = (major or "").lower()
+    if any(k in major_lower for k in ["computer", "software", "cybersecurity", "data science", "information technology"]):
+        return "cs"
+    if any(k in major_lower for k in ["business", "finance", "marketing", "economics", "accounting", "management"]):
+        return "business"
+    if any(k in major_lower for k in ["engineering", "mechanical", "electrical", "civil", "chemical", "biomedical"]):
+        return "engineering"
+    return "default"
 
 def calculate_year_level(program_start_date: str, program_end_date: str) -> int:
     try:
@@ -2287,6 +2382,10 @@ class InternshipBookmarkRequest(BaseModel):
     internship_source: Optional[str] = None
     internship_location: Optional[str] = None
 
+class MiniGoalToggleRequest(BaseModel):
+    goal_id: str
+    done: bool
+
 class ReferralRequest(BaseModel):
     referred_email: EmailStr
 
@@ -3060,6 +3159,54 @@ def get_milestones(request: Request, authorization: Optional[str] = Header(None)
     completed = len([m for m in all_milestones if m["status"] == "done"])
     total = len(all_milestones)
     return {"milestones": all_milestones, "completed": completed, "total": total, "percentage": round((completed / total) * 100)}
+
+@app.get("/mini-goals")
+@limiter.limit("30/minute")
+def get_mini_goals(request: Request, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    profile = get_profile_from_db(user_id, correlation_id)
+    major_group = _major_group(profile.get("major"))
+
+    try:
+        completed = supabase_admin.table("mini_goals_completed").select("goal_id").eq("user_id", user_id).execute()
+        completed_ids = {row["goal_id"] for row in (completed.data or [])}
+    except Exception as e:
+        logger.error(f"Mini goals completion fetch error: {type(e).__name__} correlation_id={correlation_id}")
+        completed_ids = set()
+
+    goals = []
+    for milestone_id, groups in MINI_GOAL_TEMPLATES.items():
+        template = groups.get(major_group) or groups.get("default") or []
+        for goal in template:
+            goals.append({
+                "id": goal["id"],
+                "milestone_id": milestone_id,
+                "label": goal["label"],
+                "semester": goal["semester"],
+                "done": goal["id"] in completed_ids,
+            })
+    return {"goals": goals}
+
+@app.post("/mini-goals/toggle")
+@limiter.limit("30/minute")
+def toggle_mini_goal(request: Request, data: MiniGoalToggleRequest, authorization: Optional[str] = Header(None)):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    verified = verify_token(authorization, correlation_id)
+    user_id = verified.user.id
+    try:
+        if data.done:
+            supabase_admin.table("mini_goals_completed").upsert(
+                {"user_id": user_id, "goal_id": data.goal_id},
+                on_conflict="user_id,goal_id"
+            ).execute()
+        else:
+            supabase_admin.table("mini_goals_completed").delete().eq("user_id", user_id).eq("goal_id", data.goal_id).execute()
+        return {"message": "Updated."}
+    except Exception as e:
+        logger.error(f"Mini goal toggle error: {type(e).__name__} correlation_id={correlation_id}")
+        raise HTTPException(status_code=400, detail="Failed to update mini goal.")
 
 @app.get("/ai-status")
 @limiter.limit("10/minute")
