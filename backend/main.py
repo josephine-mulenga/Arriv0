@@ -3292,11 +3292,11 @@ Use this official immigration knowledge to ground your response:
 - Today is: {day_of_week}
 - Week number: {week_number}
 
-Write EXACTLY 3 short lines for a compact home-screen brief, separated by newlines - no paragraph, no greeting, no "Hey [name]". Each line is a headline-style sentence, not a full explanation:
-Line 1: whether there's an urgent deadline right now. If none, say so plainly (e.g. "No urgent deadlines today.").
-Line 2: their single next concrete step, starting with "Next: " (e.g. "Next: renew your I-20 before it expires.").
-Line 3: one relevant, real detail from the context above (a specific recent news item, or their CPT/OPT eligibility status) - never invent a specific count of articles, opportunities, or matches that isn't given to you above.
-Plain English. No bullet points, no markdown, no emoji. If you mention any date, write it out in plain English (e.g. "March 2, 2029") - never a raw ISO date like "2029-03-02"."""
+Write EXACTLY 3 short lines for a compact home-screen brief, separated by newlines - no paragraph, no greeting, no "Hey [name]". Write like a friend giving them a heads-up, not a news anchor reading headlines - warm and plain, never a stiff clipped fragment:
+Line 1: whether there's an urgent deadline right now. If none, say so plainly and reassuringly (e.g. "Nothing urgent on your plate today."). If something's real, lead with "Heads up —" and say why it matters to them, not just what happened (e.g. "Heads up — there are new rules that could affect how long you can stay. Worth checking with your DSO.").
+Line 2: their single next concrete step, starting with "Next: " but phrased like advice, not a command fragment (e.g. "Next: get your I-20 renewed before it expires.").
+Line 3: one relevant, real detail from the context above (a specific recent news item, or their CPT/OPT eligibility status), framed in one natural sentence like you'd casually mention it to them - never invent a specific count of articles, opportunities, or matches that isn't given to you above.
+Plain English, like you're texting someone you know, not summarizing a press release. No bullet points, no markdown, no emoji. If you mention any date, write it out in plain English (e.g. "March 2, 2029") - never a raw ISO date like "2029-03-02"."""
 
     try:
         response = openai_client.chat.completions.create(

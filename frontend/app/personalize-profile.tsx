@@ -170,7 +170,7 @@ export default function PersonalizeProfileScreen() {
           <Text style={styles.title}>Almost there</Text>
           <Text style={styles.subtitle}>This helps Arriv0 personalize your experience.</Text>
 
-          <Text style={styles.sectionHeader}>YOUR GOALS</Text>
+          <Text style={styles.sectionHeader}>Your Goals</Text>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>What are you planning next?</Text>
@@ -212,7 +212,7 @@ export default function PersonalizeProfileScreen() {
             </View>
           </View>
 
-          <Text style={styles.sectionHeader}>YOUR SITUATION</Text>
+          <Text style={styles.sectionHeader}>Your Situation</Text>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>What&apos;s your biggest concern right now?</Text>
@@ -258,7 +258,7 @@ export default function PersonalizeProfileScreen() {
             />
           </View>
 
-          <Text style={styles.sectionHeader}>REFERRAL</Text>
+          <Text style={styles.sectionHeader}>Referral</Text>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Referral code (optional)</Text>
@@ -373,10 +373,9 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     fontFamily: Type.headingSemiBold,
-    fontSize: 12,
-    letterSpacing: 0.6,
-    color: Palette.inkPlaceholder,
-    marginTop: 6,
+    fontSize: 17,
+    color: Palette.ink,
+    marginTop: 8,
   },
   fieldLabel: {
     fontFamily: Type.bodyBold,

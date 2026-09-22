@@ -67,11 +67,30 @@ interface InternshipItem {
   match_score?: number;
 }
 
-function greetingWord(): string {
+function timeOfDayGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// A handful of ways to say hello, picked by day-of-year so it's stable for
+// the whole day (no flicker on re-render/refresh) but changes tomorrow -
+// a plain "{Good morning}, {name}" every single time is what makes a home
+// screen feel like a template with the name swapped in.
+function buildGreeting(firstName?: string): string {
+  const now = new Date();
+  const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
+  const name = firstName ? `, ${firstName}` : '';
+  const variants = [
+    `${timeOfDayGreeting()}${name}`,
+    firstName ? `Hey ${firstName}` : timeOfDayGreeting(),
+    firstName ? `Welcome back, ${firstName}` : timeOfDayGreeting(),
+    `Happy ${DAY_NAMES[now.getDay()]}${name}`,
+  ];
+  return variants[dayOfYear % variants.length];
 }
 
 function isWithinLastDay(dateStr?: string): boolean {
@@ -196,7 +215,9 @@ export default function HomeScreen() {
   const isUrgentDeadline = urgentDays !== null && urgentDays >= 0 && urgentDays <= 30;
   const firstName = profile?.name?.split(' ')[0];
 
-  let greetingLine = `${greetingWord()}${firstName ? `, ${firstName}` : ''}`;
+  let greetingLine = isUrgentDeadline
+    ? `${timeOfDayGreeting()}${firstName ? `, ${firstName}` : ''}`
+    : buildGreeting(firstName);
   if (isUrgentDeadline) {
     greetingLine += ` — your OPT window opens in ${urgentDays} day${urgentDays === 1 ? '' : 's'}`;
   }
@@ -225,14 +246,20 @@ export default function HomeScreen() {
             <View style={styles.header}>
               <View style={{ flex: 1 }}>
                 <View style={styles.greetingRow}>
-                  <Text style={styles.greeting}>{greetingLine}</Text>
+                  <Text
+                    style={styles.greeting}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}>
+                    {greetingLine}
+                  </Text>
                   {showStreak && (
                     <View style={styles.streakPill}>
                       <Text style={styles.streakPillText}>{'\u{1F525}'} {profile!.streak_days}</Text>
                     </View>
                   )}
                 </View>
-                <Text style={styles.subtitle}>Here&apos;s what matters today.</Text>
+                <Text style={styles.subtitle}>Here&apos;s what matters today</Text>
               </View>
               <Pressable style={styles.iconButton} onPress={() => setMenuOpen(true)}>
                 <ListIcon size={18} color={Palette.inkBody} />
@@ -279,11 +306,11 @@ export default function HomeScreen() {
               </Pressable>
             </Animated.View>
 
-            <Text style={styles.sectionHeader}>YOUR STATUS</Text>
+            <Text style={styles.sectionHeader}>Your Status</Text>
             <Animated.View entering={FadeInUp.delay(60).duration(350)}>
               <Pressable style={styles.statusCard} onPress={() => router.push('/deadline/opt-application')}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.statusLabel}>OPT APPLICATION</Text>
+                  <Text style={styles.statusLabel}>OPT Application</Text>
                   <Text style={styles.statusNumber}>
                     {spine ? Math.max(spine.daysToWindow, 0) : '--'} days
                   </Text>
@@ -304,7 +331,7 @@ export default function HomeScreen() {
               </Pressable>
             </Animated.View>
 
-            <Text style={styles.sectionHeader}>TODAY</Text>
+            <Text style={styles.sectionHeader}>Today</Text>
             <Animated.View entering={FadeInUp.delay(100).duration(350)} style={styles.todayGroup}>
               <Pressable style={styles.todayRow} onPress={() => router.push('/(tabs)/news')}>
                 <NewspaperIcon size={16} color={Palette.purple} />
@@ -320,7 +347,7 @@ export default function HomeScreen() {
               </Pressable>
             </Animated.View>
 
-            <Text style={styles.sectionHeader}>NEXT STEP</Text>
+            <Text style={styles.sectionHeader}>Next Step</Text>
             {nextStep ? (
               <Animated.View entering={FadeInUp.delay(140).duration(350)} style={styles.nextStepCard}>
                 <Text style={styles.nextStepTitle}>{nextStep.task}</Text>
@@ -336,7 +363,7 @@ export default function HomeScreen() {
             )}
 
             <View style={styles.rowBetween}>
-              <Text style={styles.sectionHeader}>FOR YOU</Text>
+              <Text style={styles.sectionHeader}>For You</Text>
               <Pressable onPress={() => router.push('/(tabs)/news')}>
                 <Text style={styles.seeAll}>See all</Text>
               </Pressable>
@@ -401,13 +428,13 @@ const styles = StyleSheet.create({
   greetingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: 8,
   },
   greeting: {
+    flexShrink: 1,
     fontFamily: Type.headingBold,
-    fontSize: FontSize.h1,
-    lineHeight: FontSize.h1Line,
+    fontSize: 24,
+    lineHeight: 30,
     letterSpacing: -0.3,
     color: Palette.ink,
   },
@@ -530,11 +557,10 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     fontFamily: Type.headingSemiBold,
-    fontSize: FontSize.h2,
-    lineHeight: FontSize.h2Line,
-    letterSpacing: 0.2,
+    fontSize: 18,
+    lineHeight: 24,
     color: Palette.ink,
-    marginTop: 20,
+    marginTop: 22,
     marginBottom: 8,
   },
   statusCard: {

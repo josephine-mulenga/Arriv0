@@ -110,7 +110,7 @@ export default function TabLayout() {
           options={{
             title: 'Opportunities',
             tabBarIcon: ({ color, focused }) => <TabIcon Icon={BriefcaseIcon} color={color} focused={focused} />,
-            tabBarLabel: ({ color }) => <TabLabel label="Opportunities" color={color} />,
+            tabBarLabel: ({ color }) => <TabLabel label="Jobs" color={color} />,
           }}
         />
         <Tabs.Screen

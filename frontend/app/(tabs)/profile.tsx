@@ -205,7 +205,7 @@ export default function ProfileScreen() {
             {score && (
               <View style={styles.completenessCard}>
                 <View style={styles.completenessHeader}>
-                  <Text style={styles.completenessLabel}>PROFILE COMPLETENESS</Text>
+                  <Text style={styles.completenessLabel}>Profile Completeness</Text>
                   <Text style={styles.completenessPercent}>{score.percentage}%</Text>
                 </View>
                 <View style={styles.progressTrack}>
@@ -220,7 +220,7 @@ export default function ProfileScreen() {
             <Section
               id="immigration"
               icon={IdentificationCardIcon}
-              title="IMMIGRATION"
+              title="Immigration"
               whyItMatters="Better timeline"
               expanded={expandedSection === 'immigration'}
               onToggle={() => toggle('immigration')}
@@ -241,7 +241,7 @@ export default function ProfileScreen() {
             <Section
               id="academic"
               icon={GraduationCapIcon}
-              title="ACADEMIC"
+              title="Academic"
               whyItMatters="Better news"
               expanded={expandedSection === 'academic'}
               onToggle={() => toggle('academic')}
@@ -257,7 +257,7 @@ export default function ProfileScreen() {
             <Section
               id="career"
               icon={BriefcaseIcon}
-              title="CAREER"
+              title="Career"
               whyItMatters="Better opportunity matches"
               expanded={expandedSection === 'career'}
               onToggle={() => toggle('career')}
@@ -275,7 +275,7 @@ export default function ProfileScreen() {
             <Section
               id="preferences"
               icon={SlidersHorizontalIcon}
-              title="PREFERENCES"
+              title="Preferences"
               expanded={expandedSection === 'preferences'}
               onToggle={() => toggle('preferences')}
               actionLabel="Edit"
@@ -302,7 +302,7 @@ export default function ProfileScreen() {
             <Section
               id="documents"
               icon={FolderSimpleIcon}
-              title="DOCUMENTS"
+              title="Documents"
               expanded={expandedSection === 'documents'}
               onToggle={() => toggle('documents')}
               actionLabel="View"
@@ -318,7 +318,7 @@ export default function ProfileScreen() {
             <Section
               id="saved"
               icon={BookmarkSimpleIcon}
-              title="SAVED"
+              title="Saved"
               expanded={expandedSection === 'saved'}
               onToggle={() => toggle('saved')}
               actionLabel="View"
@@ -332,7 +332,7 @@ export default function ProfileScreen() {
             <Section
               id="account"
               icon={UserCircleIcon}
-              title="ACCOUNT"
+              title="Account"
               expanded={expandedSection === 'account'}
               onToggle={() => toggle('account')}
               rows={[
@@ -349,7 +349,7 @@ export default function ProfileScreen() {
             <Section
               id="help"
               icon={LifebuoyIcon}
-              title="HELP & SUPPORT"
+              title="Help & Support"
               expanded={expandedSection === 'help'}
               onToggle={() => toggle('help')}
               rows={[
@@ -573,9 +573,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   completenessLabel: {
-    fontFamily: Type.bodyBold,
-    fontSize: 12,
-    letterSpacing: 0.5,
+    fontFamily: Type.bodySemiBold,
+    fontSize: 12.5,
     color: Palette.purple,
   },
   completenessPercent: {
@@ -627,8 +626,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontFamily: Type.headingSemiBold,
-    fontSize: 13,
-    letterSpacing: 0.4,
+    fontSize: 15,
     color: Palette.ink,
   },
   whyItMatters: {

@@ -470,7 +470,7 @@ export default function InternshipsScreen() {
                     ) : (
                       <BuildingsIcon size={15} color={Palette.inkFaint} />
                     )}
-                    <Text style={styles.suggestionText}>{item.name}</Text>
+                    <Text style={styles.suggestionText} numberOfLines={1}>{item.name}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -496,7 +496,7 @@ export default function InternshipsScreen() {
                       ) : (
                         <BuildingsIcon size={13} color={Palette.purple} />
                       )}
-                      <Text style={styles.watchedChipText}>{item.name}</Text>
+                      <Text style={styles.watchedChipText} numberOfLines={1}>{item.name}</Text>
                       {newCount > 0 && (
                         <View style={styles.newBadge}>
                           <Text style={styles.newBadgeText}>New · {newCount}</Text>
@@ -831,6 +831,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   suggestionText: {
+    flexShrink: 1,
     fontFamily: Type.bodyRegular,
     fontSize: 13.5,
     color: Palette.ink,
@@ -866,12 +867,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    maxWidth: 200,
     backgroundColor: Palette.purpleTint,
     borderRadius: 9,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
   watchedChipText: {
+    flexShrink: 1,
     fontFamily: Type.bodySemiBold,
     fontSize: 12.5,
     color: Palette.purple,

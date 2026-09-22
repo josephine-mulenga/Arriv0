@@ -234,7 +234,7 @@ export default function JourneyScreen() {
         {milestoneData && (
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>
-              CURRENTLY: YEAR {data?.current_year_level ?? '—'}
+              Currently: Year {data?.current_year_level ?? '—'}
             </Text>
             <Text style={styles.summaryProgress}>
               You have completed {milestoneData.completed} of {milestoneData.total} milestones
@@ -242,7 +242,7 @@ export default function JourneyScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionHeader}>MILESTONES</Text>
+        <Text style={styles.sectionHeader}>Milestones</Text>
 
         {milestonesError && <ErrorState message={milestonesError} onRetry={fetchMilestones} />}
 
@@ -267,7 +267,7 @@ export default function JourneyScreen() {
                     )}
                   </View>
                   <View style={{ flex: 1 }}>
-                    {isNext ? <Text style={styles.nextLabel}>NEXT</Text> : null}
+                    {isNext ? <Text style={styles.nextLabel}>Next</Text> : null}
                     <Text style={[styles.milestoneTitle, isNext && styles.milestoneTitleNext, m.status === 'locked' && styles.milestoneTitleLocked]}>
                       {m.title}
                     </Text>
@@ -284,26 +284,26 @@ export default function JourneyScreen() {
 
                 {isExpanded && (
                   <View style={styles.detailCard}>
-                    <Text style={styles.detailLabel}>STATUS</Text>
+                    <Text style={styles.detailLabel}>Status</Text>
                     <Text style={styles.detailValue}>
                       {m.status === 'done' ? 'Completed' : m.status === 'next' ? 'Up next' : 'Not yet available'}
                     </Text>
 
-                    <Text style={styles.detailLabel}>AROUND</Text>
+                    <Text style={styles.detailLabel}>Around</Text>
                     <Text style={styles.detailValue}>
                       {m.target_year === 0 ? 'Before arrival' : m.target_year === 5 ? 'OPT phase' : `Year ${m.target_year}`}
                     </Text>
 
                     {m.what_to_do ? (
                       <>
-                        <Text style={styles.detailLabel}>WHAT TO DO</Text>
+                        <Text style={styles.detailLabel}>What to Do</Text>
                         <Text style={styles.detailValue}>{m.what_to_do}</Text>
                       </>
                     ) : null}
 
                     {m.why_it_matters ? (
                       <>
-                        <Text style={styles.detailLabel}>WHY IT MATTERS</Text>
+                        <Text style={styles.detailLabel}>Why It Matters</Text>
                         <Text style={styles.detailValue}>{m.why_it_matters}</Text>
                       </>
                     ) : null}
@@ -349,7 +349,7 @@ export default function JourneyScreen() {
           })}
 
         <View style={styles.rowBetween}>
-          <Text style={styles.sectionHeader}>{(data?.year ?? 'THIS YEAR').toUpperCase()} CHECKLIST</Text>
+          <Text style={styles.sectionHeader}>{data?.year ?? 'This Year'} Checklist</Text>
         </View>
 
         {offline && (
@@ -374,7 +374,7 @@ export default function JourneyScreen() {
         <View style={offline ? styles.skeletonWrap : undefined}>
           {upcoming.length > 0 && (
             <>
-              <Text style={styles.groupHeader}>UPCOMING</Text>
+              <Text style={styles.groupHeader}>Upcoming</Text>
               {upcoming.map((step, index) => (
                 <StepRow
                   key={index}
@@ -390,7 +390,7 @@ export default function JourneyScreen() {
 
           {completedSteps.length > 0 && (
             <>
-              <Text style={styles.groupHeader}>COMPLETED</Text>
+              <Text style={styles.groupHeader}>Completed</Text>
               {completedSteps.map((step, index) => (
                 <StepRow
                   key={index}
@@ -567,7 +567,6 @@ const styles = StyleSheet.create({
   summaryLabel: {
     fontFamily: Type.bodyBold,
     fontSize: 12,
-    letterSpacing: 0.5,
     color: Palette.purple,
   },
   summaryProgress: {
@@ -578,11 +577,11 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     fontFamily: Type.headingSemiBold,
-    fontSize: 12.5,
-    color: Palette.inkPlaceholder,
-    letterSpacing: 0.6,
+    fontSize: 18,
+    lineHeight: 24,
+    color: Palette.ink,
     marginBottom: 10,
-    marginTop: 20,
+    marginTop: 22,
   },
   milestoneWrap: {
     marginBottom: 8,
@@ -617,7 +616,6 @@ const styles = StyleSheet.create({
   nextLabel: {
     fontFamily: Type.bodyBold,
     fontSize: 12,
-    letterSpacing: 0.5,
     color: Palette.purple,
     marginBottom: 2,
   },
@@ -652,7 +650,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontFamily: Type.bodyBold,
     fontSize: 12,
-    letterSpacing: 0.5,
     color: Palette.inkPlaceholder,
   },
   detailValue: {
@@ -764,9 +761,8 @@ const styles = StyleSheet.create({
   },
   groupHeader: {
     fontFamily: Type.headingSemiBold,
-    fontSize: 12,
-    color: Palette.inkPlaceholder,
-    letterSpacing: 0.6,
+    fontSize: 13,
+    color: Palette.inkMuted,
     marginBottom: 8,
     marginTop: 6,
   },
