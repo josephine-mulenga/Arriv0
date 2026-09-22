@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
   },
   completenessLabel: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: 12,
     letterSpacing: 0.5,
     color: Palette.purple,
   },
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   },
   whyItMatters: {
     fontFamily: Type.bodyBold,
-    fontSize: 10.5,
+    fontSize: 12,
     color: Palette.purple,
   },
   sectionBody: {
@@ -743,7 +743,7 @@ const styles = StyleSheet.create({
   helpFooterText: {
     marginTop: 10,
     fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.inkPlaceholder,
     textAlign: 'center',
   },

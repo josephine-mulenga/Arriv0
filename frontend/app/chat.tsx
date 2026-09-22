@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     marginTop: 2,
     fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.inkPlaceholder,
   },
   messages: {

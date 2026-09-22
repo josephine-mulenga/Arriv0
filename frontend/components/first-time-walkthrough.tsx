@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   },
   stepCount: {
     fontFamily: Type.bodyBold,
-    fontSize: 10.5,
+    fontSize: 12,
     letterSpacing: 0.6,
     color: Palette.purple,
   },

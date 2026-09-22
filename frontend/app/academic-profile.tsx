@@ -63,7 +63,7 @@ export default function AcademicProfileScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <CaretLeftIcon size={18} color={Palette.ink} weight="bold" />
         </Pressable>
-        <SignupProgress step={2} />
+        <SignupProgress step={2} style={{ flex: 1 }} />
       </View>
 
       <DismissKeyboardView>
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   fieldHint: {
     marginTop: -4,
     fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.inkPlaceholder,
   },
   input: {

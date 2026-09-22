@@ -74,6 +74,24 @@ export const Type = {
   bodyBold: 'NunitoSans_700Bold',
 } as const;
 
+// Mobile typography scale — h1 for screen titles/greetings, h2 for section
+// headers, body for anything meant to actually be read (descriptions, the
+// AI brief), small for metadata (timestamps, source names, badges). Line
+// heights are ~1.5x their size, and nothing goes below 12px anywhere in
+// the app, per the project's stated typography standard.
+export const FontSize = {
+  h1: 30,
+  h1Line: 36,
+  h2: 20,
+  h2Line: 26,
+  body: 16,
+  bodyLine: 24,
+  small: 13,
+  smallLine: 18,
+  tiny: 12,
+  tinyLine: 16,
+} as const;
+
 export const Spacing = {
   screenPadding: 20,
   screenPaddingOnboarding: 26,

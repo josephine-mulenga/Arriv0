@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
   },
   stepperDotText: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: 12,
     color: Palette.inkFaint,
   },
   stepperDotTextCurrent: {
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   stepperLabel: {
     marginTop: 4,
     fontFamily: Type.bodyRegular,
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 12,
     textAlign: 'center',
     color: Palette.inkFaint,
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: 12,
     letterSpacing: 0.5,
     color: Palette.purple,
   },
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   },
   nextLabel: {
     fontFamily: Type.bodyBold,
-    fontSize: 10.5,
+    fontSize: 12,
     letterSpacing: 0.5,
     color: Palette.purple,
     marginBottom: 2,
@@ -651,7 +651,7 @@ const styles = StyleSheet.create({
   detailLabel: {
     marginTop: 8,
     fontFamily: Type.bodyBold,
-    fontSize: 10.5,
+    fontSize: 12,
     letterSpacing: 0.5,
     color: Palette.inkPlaceholder,
   },
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
   },
   goalsTreeLabel: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: 12,
     letterSpacing: 0.4,
     color: Palette.inkMuted,
     marginBottom: 8,
@@ -745,7 +745,7 @@ const styles = StyleSheet.create({
   goalSemester: {
     marginTop: -8,
     fontFamily: Type.bodyRegular,
-    fontSize: 10.5,
+    fontSize: 12,
     color: Palette.inkPlaceholder,
   },
   goalsTreeArrow: {
@@ -754,7 +754,7 @@ const styles = StyleSheet.create({
   },
   goalsTreeArrowText: {
     fontFamily: Type.bodySemiBold,
-    fontSize: 11,
+    fontSize: 12,
     color: Palette.purple,
   },
   rowBetween: {
@@ -764,7 +764,7 @@ const styles = StyleSheet.create({
   },
   groupHeader: {
     fontFamily: Type.headingSemiBold,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.inkPlaceholder,
     letterSpacing: 0.6,
     marginBottom: 8,
@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
   cardDate: {
     marginTop: 2,
     fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.inkPlaceholder,
   },
   stepViewLink: {
@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
   },
   stepViewLinkText: {
     fontFamily: Type.bodyBold,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.purple,
   },
   cardFooter: {
@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
   },
   cardStatusLabel: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: 12,
   },
   offlineBanner: {
     flexDirection: 'row',

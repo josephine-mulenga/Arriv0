@@ -18,7 +18,7 @@ import { NewsThumb } from '@/components/ui/news-thumb';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Palette, Spacing, Type } from '@/constants/theme';
+import { Palette, Spacing, Type, FontSize } from '@/constants/theme';
 import { newsVisual } from '@/utils/newsVisuals';
 
 const STALE_AFTER_MS = 15 * 60 * 1000;
@@ -399,8 +399,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginLeft: 86,
     fontFamily: Type.bodyRegular,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: FontSize.body,
+    lineHeight: FontSize.bodyLine,
     color: Palette.inkBody,
   },
   readLink: {
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   },
   relevanceBadgeText: {
     fontFamily: Type.bodyBold,
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: 0.3,
   },
   relevanceBadgeTextHigh: {
@@ -448,8 +448,8 @@ const styles = StyleSheet.create({
   whyRelevant: {
     marginTop: 4,
     fontFamily: Type.bodyRegular,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 20,
     color: Palette.inkMuted,
   },
   badge: {
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontFamily: Type.bodyBold,
-    fontSize: 10.5,
+    fontSize: 12,
   },
   cardFooter: {
     flexDirection: 'row',
@@ -471,16 +471,16 @@ const styles = StyleSheet.create({
   },
   sourceLink: {
     fontFamily: Type.bodyBold,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.purple,
   },
   metaDot: {
     color: Palette.inkPlaceholder,
-    fontSize: 11.5,
+    fontSize: 12,
   },
   metaText: {
     fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.inkPlaceholder,
   },
   askArriLink: {
@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
   },
   askArriText: {
     fontFamily: Type.bodySemiBold,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.purple,
   },
   thumbColumn: {

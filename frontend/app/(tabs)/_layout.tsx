@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontFamily: Type.headingSemiBold,
-    fontSize: 10.5,
+    fontSize: 12,
     marginTop: 3,
   },
 });

@@ -141,7 +141,7 @@ export default function PersonalizeProfileScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <CaretLeftIcon size={18} color={Palette.ink} weight="bold" />
         </Pressable>
-        <SignupProgress step={3} />
+        <SignupProgress step={3} style={{ flex: 1 }} />
       </View>
 
       <DismissKeyboardView>

@@ -29,7 +29,7 @@ import { SideMenu } from '@/components/side-menu';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { NewsThumb } from '@/components/ui/news-thumb';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Palette, Radius, Spacing, Type } from '@/constants/theme';
+import { Palette, Radius, Spacing, Type, FontSize } from '@/constants/theme';
 import { computeOptSpine, formatDate } from '@/utils/date-spine';
 
 const MATCH_THRESHOLD = 70;
@@ -199,9 +199,8 @@ export default function HomeScreen() {
   let greetingLine = `${greetingWord()}${firstName ? `, ${firstName}` : ''}`;
   if (isUrgentDeadline) {
     greetingLine += ` — your OPT window opens in ${urgentDays} day${urgentDays === 1 ? '' : 's'}`;
-  } else if (profile?.streak_days && profile.streak_days > 0) {
-    greetingLine += ` \u{1F525} ${profile.streak_days}`;
   }
+  const showStreak = !isUrgentDeadline && !!profile?.streak_days && profile.streak_days > 0;
 
   const cappedInternshipCount = Math.min(internshipCount, 99);
   const opportunityLabel =
@@ -225,7 +224,14 @@ export default function HomeScreen() {
           <>
             <View style={styles.header}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.greeting}>{greetingLine}</Text>
+                <View style={styles.greetingRow}>
+                  <Text style={styles.greeting}>{greetingLine}</Text>
+                  {showStreak && (
+                    <View style={styles.streakPill}>
+                      <Text style={styles.streakPillText}>{'\u{1F525}'} {profile!.streak_days}</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.subtitle}>Here&apos;s what matters today.</Text>
               </View>
               <Pressable style={styles.iconButton} onPress={() => setMenuOpen(true)}>
@@ -392,17 +398,35 @@ const styles = StyleSheet.create({
     paddingTop: 62,
     paddingBottom: 12,
   },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   greeting: {
     fontFamily: Type.headingBold,
-    fontSize: 25,
-    lineHeight: 30,
+    fontSize: FontSize.h1,
+    lineHeight: FontSize.h1Line,
     letterSpacing: -0.3,
     color: Palette.ink,
+  },
+  streakPill: {
+    backgroundColor: Palette.amberTint,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  streakPillText: {
+    fontFamily: Type.bodyBold,
+    fontSize: FontSize.small,
+    color: Palette.amber,
   },
   subtitle: {
     marginTop: 4,
     fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
+    fontSize: 15,
+    lineHeight: 22,
     color: Palette.inkFaint,
   },
   iconButton: {
@@ -484,8 +508,8 @@ const styles = StyleSheet.create({
   aiCardMessage: {
     marginTop: 7,
     fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    lineHeight: 18,
+    fontSize: FontSize.body,
+    lineHeight: FontSize.bodyLine,
     color: Palette.inkBody,
   },
   aiCardButton: {
@@ -506,10 +530,11 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     fontFamily: Type.headingSemiBold,
-    fontSize: 12,
-    letterSpacing: 0.6,
-    color: Palette.inkPlaceholder,
-    marginTop: 18,
+    fontSize: FontSize.h2,
+    lineHeight: FontSize.h2Line,
+    letterSpacing: 0.2,
+    color: Palette.ink,
+    marginTop: 20,
     marginBottom: 8,
   },
   statusCard: {
@@ -529,7 +554,7 @@ const styles = StyleSheet.create({
   },
   statusLabel: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: FontSize.tiny,
     letterSpacing: 0.4,
     color: Palette.inkMuted,
   },
@@ -563,7 +588,7 @@ const styles = StyleSheet.create({
   ringDate: {
     marginTop: 6,
     fontFamily: Type.bodyRegular,
-    fontSize: 10.5,
+    fontSize: FontSize.tiny,
     color: Palette.inkPlaceholder,
   },
   linkText: {
@@ -683,7 +708,7 @@ const styles = StyleSheet.create({
   forYouMeta: {
     marginTop: 1,
     fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
+    fontSize: FontSize.tiny,
     color: Palette.inkFaint,
   },
   matchBadge: {
@@ -694,7 +719,7 @@ const styles = StyleSheet.create({
   },
   matchBadgeText: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: FontSize.tiny,
     color: Palette.green,
   },
 });

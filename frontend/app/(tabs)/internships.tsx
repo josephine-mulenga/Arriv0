@@ -33,7 +33,7 @@ import { Chip } from '@/components/ui/chip';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Palette, Spacing, Type } from '@/constants/theme';
+import { Palette, Spacing, Type, FontSize } from '@/constants/theme';
 import { friendlyErrorMessage } from '@/utils/errorMessage';
 import { getLastSeen, markCompaniesSeenNow } from '@/utils/watchlistSeen';
 
@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
   },
   matchBannerText: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: 12,
     color: Palette.purple,
   },
   disclaimer: {
@@ -859,7 +859,7 @@ const styles = StyleSheet.create({
   },
   newBadgeText: {
     fontFamily: Type.bodyBold,
-    fontSize: 9.5,
+    fontSize: 12,
     color: Palette.white,
   },
   watchedChip: {
@@ -923,7 +923,7 @@ const styles = StyleSheet.create({
   },
   matchBadgeText: {
     fontFamily: Type.bodyBold,
-    fontSize: 11.5,
+    fontSize: 12,
   },
   sourceBadge: {
     backgroundColor: Palette.dividerLight,
@@ -934,7 +934,7 @@ const styles = StyleSheet.create({
   },
   sourceBadgeText: {
     fontFamily: Type.bodySemiBold,
-    fontSize: 10,
+    fontSize: 12,
     color: Palette.inkFaint,
   },
   metaRow: {
@@ -951,8 +951,8 @@ const styles = StyleSheet.create({
   description: {
     marginTop: 6,
     fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    lineHeight: 18,
+    fontSize: FontSize.body,
+    lineHeight: FontSize.bodyLine,
     color: Palette.inkMuted,
   },
   salary: {
@@ -975,7 +975,7 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontFamily: Type.bodySemiBold,
-    fontSize: 11,
+    fontSize: 12,
     color: Palette.purple,
   },
   sponsorshipBadge: {
@@ -996,7 +996,7 @@ const styles = StyleSheet.create({
   },
   sponsorshipBadgeText: {
     fontFamily: Type.bodySemiBold,
-    fontSize: 11.5,
+    fontSize: 12,
   },
   sponsorshipBadgeTextPositive: {
     color: Palette.green,
@@ -1022,7 +1022,7 @@ const styles = StyleSheet.create({
   },
   workAuthLabel: {
     fontFamily: Type.bodyBold,
-    fontSize: 10.5,
+    fontSize: 12,
     letterSpacing: 0.3,
     color: Palette.inkMuted,
   },
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
   },
   askArriText: {
     fontFamily: Type.bodySemiBold,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.purple,
   },
   applyButton: {

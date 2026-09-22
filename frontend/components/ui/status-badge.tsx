@@ -26,6 +26,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: Type.bodyBold,
-    fontSize: 11,
+    fontSize: 12,
   },
 });

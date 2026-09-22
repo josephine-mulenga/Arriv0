@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
   footerCopy: {
     marginTop: 6,
     fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.inkPlaceholder,
   },
 });

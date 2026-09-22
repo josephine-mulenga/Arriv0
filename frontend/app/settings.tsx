@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   swatchLabel: {
     fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
+    fontSize: 12,
     color: Palette.inkMuted,
   },
   previewRow: {

@@ -76,7 +76,7 @@ export default function SignupScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <CaretLeftIcon size={18} color={Palette.ink} weight="bold" />
         </Pressable>
-        <SignupProgress step={1} />
+        <SignupProgress step={1} style={{ flex: 1 }} />
       </View>
 
       <DismissKeyboardView>
@@ -119,6 +119,17 @@ export default function SignupScreen() {
             containerStyle={styles.fieldGroup}
           />
 
+          <TextField
+            icon={LockSimpleIcon}
+            isPassword
+            placeholder="Confirm Password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            autoComplete="new-password"
+            error={confirmTouched && !passwordsMatch ? "Passwords don't match" : undefined}
+            containerStyle={styles.fieldGroup}
+          />
+
           <View style={styles.checklist}>
             {passwordRules.map((rule) => {
               const passed = rule.test(password);
@@ -130,17 +141,6 @@ export default function SignupScreen() {
               );
             })}
           </View>
-
-          <TextField
-            icon={LockSimpleIcon}
-            isPassword
-            placeholder="Confirm Password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            autoComplete="new-password"
-            error={confirmTouched && !passwordsMatch ? "Passwords don't match" : undefined}
-            containerStyle={styles.fieldGroup}
-          />
 
           <PrimaryButton
             label="Sign Up"
