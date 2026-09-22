@@ -57,22 +57,28 @@ function TypingText({ text, onDone }: { text: string; onDone: () => void }) {
 
   useEffect(() => {
     setVisibleCount(0);
-    if (words.length === 0) {
-      onDone();
-      return;
-    }
+  }, [text]);
+
+  useEffect(() => {
+    if (words.length === 0) return;
     const interval = setInterval(() => {
-      setVisibleCount((prev) => {
-        const next = prev + 1;
-        if (next >= words.length) {
-          clearInterval(interval);
-          onDone();
-        }
-        return next;
-      });
+      setVisibleCount((prev) => Math.min(prev + 1, words.length));
     }, 32);
     return () => clearInterval(interval);
   }, [text]);
+
+  // Calling onDone() straight from the interval (or worse, from inside the
+  // setVisibleCount updater above) triggers "Cannot update a component
+  // (ChatScreen) while rendering a different component (TypingText)" -
+  // React treats that as a state update happening during another
+  // component's render. Detecting completion here, in its own effect that
+  // only reacts to the finished count, and firing onDone via setTimeout
+  // pushes it to its own tick after this render has fully committed.
+  useEffect(() => {
+    if (visibleCount < words.length) return;
+    const timeout = setTimeout(onDone, 0);
+    return () => clearTimeout(timeout);
+  }, [visibleCount, words.length]);
 
   return <Text style={styles.assistantText}>{words.slice(0, visibleCount).join(' ')}</Text>;
 }

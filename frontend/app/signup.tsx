@@ -1,20 +1,17 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, Link } from 'expo-router';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import {
-  CaretLeftIcon,
-  UserIcon,
-  EnvelopeSimpleIcon,
-  LockSimpleIcon,
-  EyeIcon,
-  EyeSlashIcon,
-} from 'phosphor-react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { CaretLeftIcon, UserIcon, EnvelopeSimpleIcon, LockSimpleIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { TextField } from '@/components/ui/text-field';
+import { SocialLoginRow } from '@/components/ui/social-login-row';
 import { AnimatedCheck } from '@/components/ui/animated-check';
-import { Palette, Radius, Type } from '@/constants/theme';
+import { ArrivoLogo } from '@/components/arrivo-logo';
+import { Palette, Type } from '@/constants/theme';
 import { setPendingPassword } from '@/utils/signupDraft';
+import { signInWithProvider, type SocialProvider } from '@/utils/socialAuth';
 
 // Mirrors the backend's password_must_be_strong validator (backend/main.py) exactly —
 // the design spec shows only the first three rows, but the API rejects a password
@@ -34,13 +31,21 @@ export default function SignupScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [socialError, setSocialError] = useState<string | null>(null);
+  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
 
+  const emailTouched = email.trim().length > 0;
   const isEmailValid = EMAIL_PATTERN.test(email.trim());
   const isPasswordValid = passwordRules.every((rule) => rule.test(password));
-  const canContinue = name.trim().length > 0 && isEmailValid && isPasswordValid;
+  const confirmTouched = confirmPassword.length > 0;
+  const passwordsMatch = confirmPassword === password;
+  const canContinue = name.trim().length > 0 && isEmailValid && isPasswordValid && confirmTouched && passwordsMatch;
 
   const handleContinue = () => {
+    if (!canContinue || submitting) return;
+    setSubmitting(true);
     setPendingPassword(password);
     router.push({
       pathname: '/personalize-profile',
@@ -48,105 +53,104 @@ export default function SignupScreen() {
     });
   };
 
+  const handleSocial = async (provider: SocialProvider) => {
+    setSocialError(null);
+    setSocialLoading(provider);
+    try {
+      await signInWithProvider(provider);
+    } catch {
+      setSocialError('Could not sign up. Please try again or use your email.');
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}>
       <Pressable onPress={() => router.back()} style={styles.backButton}>
         <CaretLeftIcon size={18} color={Palette.ink} weight="bold" />
       </Pressable>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Animated.View key="header" entering={FadeInDown.duration(400)}>
+        <Animated.View entering={FadeIn.duration(420)}>
+          <View style={styles.logoBlock}>
+            <ArrivoLogo size={64} />
+          </View>
+
           <Text style={styles.title}>Create your account</Text>
           <Text style={styles.subtitle}>Let&apos;s get you started.</Text>
-        </Animated.View>
 
-        <Animated.View key="name-row" entering={FadeInUp.delay(80).duration(350)}>
-          <View style={styles.inputRow}>
-            <UserIcon size={17} color="#A9A7BE" />
-            <TextInput
-              style={styles.input}
-              placeholder="Full Name"
-              placeholderTextColor={Palette.inkPlaceholder}
-              value={name}
-              onChangeText={setName}
-            />
+          <TextField
+            icon={UserIcon}
+            placeholder="Full Name"
+            value={name}
+            onChangeText={setName}
+            containerStyle={styles.fieldGroup}
+          />
+
+          <TextField
+            icon={EnvelopeSimpleIcon}
+            placeholder="Email Address"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            autoComplete="email"
+            error={emailTouched && !isEmailValid ? 'Enter a valid email address, like you@example.com' : undefined}
+            containerStyle={styles.fieldGroup}
+          />
+
+          <TextField
+            icon={LockSimpleIcon}
+            isPassword
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            autoComplete="new-password"
+            containerStyle={styles.fieldGroup}
+          />
+
+          <View style={styles.checklist}>
+            {passwordRules.map((rule) => {
+              const passed = rule.test(password);
+              return (
+                <View key={rule.label} style={styles.checklistRow}>
+                  <AnimatedCheck done={passed} size={15} />
+                  <Text style={[styles.checklistText, passed && styles.checklistTextPassed]}>{rule.label}</Text>
+                </View>
+              );
+            })}
           </View>
-        </Animated.View>
 
-        <Animated.View key="email-row" entering={FadeInUp.delay(140).duration(350)}>
-          <View style={styles.inputRow}>
-            <EnvelopeSimpleIcon size={17} color="#A9A7BE" />
-            <TextInput
-              style={styles.input}
-              placeholder="Email Address"
-              placeholderTextColor={Palette.inkPlaceholder}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          </View>
-        </Animated.View>
-        {/* Always rendered (never conditionally mounted) so this never shifts
-            the sibling rows below it — a conditionally-present element here
-            would shift every later sibling's position in React's
-            reconciliation, causing them to unmount/remount (and replay their
-            entering animation) every time email validity flips mid-typing.
-            Reserving the height and toggling opacity keeps the layout and
-            every row below it completely stable while typing. */}
-        <Text
-          style={[styles.fieldError, !(email.trim().length > 0 && !isEmailValid) && styles.fieldErrorHidden]}>
-          Enter a valid email address, like you@example.com
-        </Text>
+          <TextField
+            icon={LockSimpleIcon}
+            isPassword
+            placeholder="Confirm Password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            autoComplete="new-password"
+            error={confirmTouched && !passwordsMatch ? "Passwords don't match" : undefined}
+            containerStyle={styles.fieldGroup}
+          />
 
-        <Animated.View key="password-row" entering={FadeInUp.delay(200).duration(350)}>
-          <View style={styles.inputRow}>
-            <LockSimpleIcon size={17} color="#A9A7BE" />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor={Palette.inkPlaceholder}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-            <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
-              {showPassword ? (
-                <EyeSlashIcon size={17} color="#A9A7BE" />
-              ) : (
-                <EyeIcon size={17} color="#A9A7BE" />
-              )}
-            </Pressable>
-          </View>
-        </Animated.View>
-
-        <View key="checklist" style={styles.checklist}>
-          {passwordRules.map((rule, index) => {
-            const passed = rule.test(password);
-            return (
-              <Animated.View
-                key={rule.label}
-                entering={FadeInUp.delay(240 + index * 40).duration(300)}
-                style={styles.checklistRow}>
-                <AnimatedCheck done={passed} size={15} />
-                <Text style={[styles.checklistText, passed && styles.checklistTextPassed]}>
-                  {rule.label}
-                </Text>
-              </Animated.View>
-            );
-          })}
-        </View>
-
-        <Animated.View key="actions" entering={FadeInUp.delay(400).duration(350)}>
           <PrimaryButton
             label="Sign Up"
             onPress={handleContinue}
+            loading={submitting}
             disabled={!canContinue}
             style={styles.submitButton}
           />
+
+          <SocialLoginRow
+            onGoogle={() => handleSocial('google')}
+            onApple={() => handleSocial('apple')}
+            onMicrosoft={() => handleSocial('azure')}
+          />
+          {socialLoading ? <Text style={styles.socialStatusText}>Connecting...</Text> : null}
+          {socialError ? <Text style={styles.socialErrorText}>{socialError}</Text> : null}
 
           <Link href="/login" style={styles.link}>
             <Text style={styles.linkText}>
@@ -176,7 +180,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 26,
-    paddingTop: 18,
+    paddingTop: 10,
+  },
+  logoBlock: {
+    alignItems: 'center',
+    marginBottom: 12,
   },
   title: {
     fontFamily: Type.headingBold,
@@ -190,40 +198,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     color: Palette.inkFaint,
-    marginBottom: 24,
+    marginBottom: 22,
   },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Palette.borderInput,
-    backgroundColor: Palette.surfaceSubtle,
-    borderRadius: Radius.input,
-    paddingHorizontal: 14,
-    height: 50,
-    marginBottom: 11,
-  },
-  input: {
-    flex: 1,
-    fontFamily: Type.bodyRegular,
-    fontSize: 14,
-    color: Palette.ink,
-  },
-  fieldError: {
-    marginTop: -6,
-    marginBottom: 11,
-    fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    color: Palette.danger,
-  },
-  fieldErrorHidden: {
-    opacity: 0,
+  fieldGroup: {
+    marginBottom: 4,
   },
   checklist: {
     gap: 7,
-    marginTop: 4,
-    marginBottom: 20,
+    marginTop: 6,
+    marginBottom: 10,
     paddingHorizontal: 2,
   },
   checklistRow: {
@@ -240,10 +223,24 @@ const styles = StyleSheet.create({
     color: Palette.inkMuted,
   },
   submitButton: {
-    marginTop: 4,
+    marginTop: 6,
+  },
+  socialStatusText: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    color: Palette.inkFaint,
+  },
+  socialErrorText: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    color: Palette.danger,
   },
   link: {
-    marginTop: 16,
+    marginTop: 20,
     alignSelf: 'center',
   },
   linkText: {
