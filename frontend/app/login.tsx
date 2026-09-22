@@ -7,6 +7,7 @@ import { EnvelopeSimpleIcon, LockSimpleIcon } from 'phosphor-react-native';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { TextField } from '@/components/ui/text-field';
 import { SocialLoginRow } from '@/components/ui/social-login-row';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { ArrivoLogo } from '@/components/arrivo-logo';
 import { Palette, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
@@ -75,6 +76,7 @@ export default function LoginScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}>
+      <DismissKeyboardView>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -149,6 +151,7 @@ export default function LoginScreen() {
           </Link>
         </Animated.View>
       </ScrollView>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }

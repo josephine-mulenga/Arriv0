@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated, {
-  BounceIn,
   FadeInUp,
   useSharedValue,
   useAnimatedStyle,
@@ -23,6 +22,8 @@ export default function WelcomeScreen() {
   const { user, initializing } = useAuth();
   const [checkingRecovery, setCheckingRecovery] = useState(Platform.OS === 'web');
   const float = useSharedValue(0);
+  const logoScale = useSharedValue(0.85);
+  const logoOpacity = useSharedValue(0);
 
   useEffect(() => {
     float.value = withRepeat(
@@ -33,6 +34,12 @@ export default function WelcomeScreen() {
       -1,
       false
     );
+    // A gentle fade-in-and-grow on first paint, distinct from the
+    // continuous float loop above (which keeps running afterward) —
+    // deliberately slow and eased rather than a bounce/overshoot, to read
+    // as calm rather than playful on the very first screen a user sees.
+    logoOpacity.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
+    logoScale.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
   }, []);
 
   // If a password-reset link falls back to this screen (root layout's own
@@ -57,7 +64,8 @@ export default function WelcomeScreen() {
   }, [user]);
 
   const floatStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: float.value }],
+    transform: [{ translateY: float.value }, { scale: logoScale.value }],
+    opacity: logoOpacity.value,
   }));
 
   // An already-authenticated session landing here — e.g. a bookmark, a
@@ -89,7 +97,7 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        <Animated.View entering={BounceIn.duration(900)} style={floatStyle}>
+        <Animated.View style={floatStyle}>
           <ArrivoLogo size={140} />
         </Animated.View>
 

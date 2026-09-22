@@ -16,6 +16,7 @@ import { router } from 'expo-router';
 import { CaretLeftIcon, CaretDownIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { getUserProfile, updateProfile } from '@/api';
@@ -221,6 +222,7 @@ export default function EditProfileScreen() {
         <View style={{ width: 20 }} />
       </View>
 
+      <DismissKeyboardView>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {loading ? (
           <Text style={styles.bodyText}>Loading your profile...</Text>
@@ -318,6 +320,7 @@ export default function EditProfileScreen() {
           </>
         )}
       </ScrollView>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }

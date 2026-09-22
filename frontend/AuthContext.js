@@ -127,7 +127,8 @@ export const AuthProvider = ({ children }) => {
     biggestConcern,
     hasJobOffer,
     plansAfterGraduation,
-    workExperienceMonths
+    workExperienceMonths,
+    citizenshipCountry
   ) => {
     try {
       setLoading(true);
@@ -148,7 +149,8 @@ export const AuthProvider = ({ children }) => {
         biggestConcern,
         hasJobOffer,
         plansAfterGraduation,
-        workExperienceMonths
+        workExperienceMonths,
+        citizenshipCountry
       );
       return data;
     } catch (err) {

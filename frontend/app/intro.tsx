@@ -33,7 +33,11 @@ export default function IntroScreen() {
         ))}
       </View>
 
-      <View style={styles.spacer} />
+      <View style={styles.spacer} pointerEvents="none">
+        <View style={[styles.decorCircle, styles.decorCircleLarge]} />
+        <View style={[styles.decorCircle, styles.decorCircleSmall]} />
+        <IconTile icon={SparkleIcon} tint={Palette.purpleCard} color={Palette.purple} size={64} iconSize={28} radius={20} />
+      </View>
 
       <PrimaryButton label="Next" onPress={() => router.push('/signup')} />
       <Pressable onPress={() => router.push('/signup')} style={styles.skip}>
@@ -82,6 +86,26 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  decorCircle: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: Palette.purpleTint,
+  },
+  decorCircleLarge: {
+    width: 220,
+    height: 220,
+    opacity: 0.5,
+  },
+  decorCircleSmall: {
+    width: 130,
+    height: 130,
+    top: 40,
+    left: 40,
+    backgroundColor: Palette.purpleCard,
+    opacity: 0.7,
   },
   skip: {
     marginTop: 16,
@@ -99,9 +123,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   dotActive: {
     backgroundColor: Palette.purple,

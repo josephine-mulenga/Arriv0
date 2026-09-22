@@ -5,6 +5,7 @@ import * as Linking from 'expo-linking';
 import { EnvelopeSimpleIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { resetPassword } from '@/api';
 
@@ -41,6 +42,7 @@ export default function ResetPasswordScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+      <DismissKeyboardView>
       <View style={styles.content}>
         <Text style={styles.title}>Reset your password</Text>
 
@@ -82,6 +84,7 @@ export default function ResetPasswordScreen() {
           Back to log in
         </Text>
       </View>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }

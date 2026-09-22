@@ -32,7 +32,7 @@ const handleResponse = async (response) => {
   return data;
 };
 
-export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate, major, hasSsn, hasBankAccount, cptMonthsUsed, referralCode, biggestConcern, hasJobOffer, plansAfterGraduation, workExperienceMonths) => {
+export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate, major, hasSsn, hasBankAccount, cptMonthsUsed, referralCode, biggestConcern, hasJobOffer, plansAfterGraduation, workExperienceMonths, citizenshipCountry) => {
   const response = await fetch(`${BASE_URL}/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -45,6 +45,7 @@ export const signup = async (email, password, name, school, visaType, programSta
       program_start_date: programStartDate,
       program_end_date: programEndDate,
       major: major,
+      citizenship_country: citizenshipCountry || undefined,
       has_ssn: hasSsn,
       has_bank_account: hasBankAccount,
       cpt_months_used: cptMonthsUsed,

@@ -2191,6 +2191,7 @@ class ProfileFields(BaseModel):
     program_start_date: str
     program_end_date: str
     major: Optional[str] = None
+    citizenship_country: Optional[str] = None
     has_ssn: Optional[bool] = False
     has_bank_account: Optional[bool] = False
     cpt_months_used: Optional[int] = 0
@@ -2602,6 +2603,7 @@ def _create_user_profile(user_id: str, data: ProfileFields) -> None:
         "program_start_date": data.program_start_date,
         "program_end_date": data.program_end_date,
         "major": data.major,
+        "citizenship_country": data.citizenship_country,
         "has_ssn": data.has_ssn,
         "has_bank_account": data.has_bank_account,
         "cpt_months_used": data.cpt_months_used,

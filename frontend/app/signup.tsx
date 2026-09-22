@@ -8,6 +8,8 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { TextField } from '@/components/ui/text-field';
 import { SocialLoginRow } from '@/components/ui/social-login-row';
 import { AnimatedCheck } from '@/components/ui/animated-check';
+import { SignupProgress } from '@/components/ui/signup-progress';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { ArrivoLogo } from '@/components/arrivo-logo';
 import { Palette, Type } from '@/constants/theme';
 import { setPendingPassword } from '@/utils/signupDraft';
@@ -48,7 +50,7 @@ export default function SignupScreen() {
     setSubmitting(true);
     setPendingPassword(password);
     router.push({
-      pathname: '/personalize-profile',
+      pathname: '/academic-profile',
       params: { name, email },
     });
   };
@@ -70,10 +72,14 @@ export default function SignupScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}>
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
-        <CaretLeftIcon size={18} color={Palette.ink} weight="bold" />
-      </Pressable>
+      <View style={styles.topRow}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <CaretLeftIcon size={18} color={Palette.ink} weight="bold" />
+        </Pressable>
+        <SignupProgress step={1} />
+      </View>
 
+      <DismissKeyboardView>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeIn.duration(420)}>
           <View style={styles.logoBlock}>
@@ -159,6 +165,7 @@ export default function SignupScreen() {
           </Link>
         </Animated.View>
       </ScrollView>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }
@@ -169,6 +176,13 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.white,
     paddingTop: 62,
   },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    marginBottom: 6,
+  },
   backButton: {
     width: 34,
     height: 34,
@@ -176,7 +190,6 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.dividerLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 20,
   },
   content: {
     padding: 26,
@@ -220,7 +233,8 @@ const styles = StyleSheet.create({
     color: Palette.inkMuted,
   },
   checklistTextPassed: {
-    color: Palette.inkMuted,
+    color: Palette.green,
+    fontFamily: Type.bodySemiBold,
   },
   submitButton: {
     marginTop: 6,

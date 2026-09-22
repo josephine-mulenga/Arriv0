@@ -16,6 +16,7 @@ import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { generateReferralCode, getReferralStats, sendReferralInvite, verifyReferralCode } from '@/api';
 import { friendlyErrorMessage } from '@/utils/errorMessage';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 
 interface ReferralStats {
   referral_code: string | null;
@@ -114,6 +115,7 @@ export default function ReferralsScreen() {
         <View style={{ width: 20 }} />
       </View>
 
+      <DismissKeyboardView>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.heroIconSquare}>
           <GiftIcon size={34} color={Palette.purple} weight="fill" />
@@ -209,6 +211,7 @@ export default function ReferralsScreen() {
           {redeemMessage ? <Text style={styles.messageText}>{redeemMessage}</Text> : null}
         </View>
       </ScrollView>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }

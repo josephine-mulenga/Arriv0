@@ -24,9 +24,16 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prim
   const pressed = useSharedValue(0);
   const isDisabled = disabled || loading;
 
+  // Driving disabled/pressed/default entirely off one shared-value-backed
+  // style (rather than layering a separate opacity-based `disabled` style
+  // in the style array) avoids the array's last-entry-wins merge silently
+  // overriding it — this is also what fixes the button reading as a washed-
+  // out pale lavender: a solid purple faded by opacity looks pastel on a
+  // white screen, whereas a distinct neutral gray reads as "not ready yet"
+  // while keeping the enabled color fully solid, vivid purple always.
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
-    backgroundColor: pressed.value > 0.5 ? Palette.purpleDark : Palette.purple,
+    backgroundColor: isDisabled ? Palette.borderInput : pressed.value > 0.5 ? Palette.purpleDark : Palette.purple,
   }));
 
   return (
@@ -41,8 +48,12 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prim
         scale.value = withSpring(1, { damping: 9, stiffness: 200 });
         pressed.value = withTiming(0, { duration: 150 });
       }}
-      style={[styles.button, isDisabled && styles.disabled, style, animatedStyle]}>
-      {loading ? <ActivityIndicator color={Palette.white} /> : <Text style={styles.label}>{label}</Text>}
+      style={[styles.button, style, animatedStyle]}>
+      {loading ? (
+        <ActivityIndicator color={isDisabled ? Palette.inkPlaceholder : Palette.white} />
+      ) : (
+        <Text style={[styles.label, isDisabled && styles.labelDisabled]}>{label}</Text>
+      )}
     </AnimatedPressable>
   );
 }
@@ -55,12 +66,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  disabled: {
-    opacity: 0.5,
-  },
   label: {
     color: Palette.white,
     fontFamily: Type.headingSemiBold,
     fontSize: 16,
+  },
+  labelDisabled: {
+    color: Palette.inkPlaceholder,
   },
 });

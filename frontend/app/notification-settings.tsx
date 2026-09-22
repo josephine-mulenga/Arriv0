@@ -5,6 +5,7 @@ import { CaretLeftIcon, WarningCircleIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Chip } from '@/components/ui/chip';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { updateNotificationSettings, getTimezones } from '@/api';
@@ -75,6 +76,7 @@ export default function NotificationSettingsScreen() {
         <View style={{ width: 20 }} />
       </View>
 
+      <DismissKeyboardView>
       <ScrollView contentContainerStyle={styles.content}>
         {!notificationsEnabled && (
           <View style={styles.offBanner}>
@@ -122,6 +124,7 @@ export default function NotificationSettingsScreen() {
           style={styles.submitButton}
         />
       </ScrollView>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }

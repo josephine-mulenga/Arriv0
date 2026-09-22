@@ -7,6 +7,7 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { supabase } from '@/supabase';
 import { friendlyErrorMessage } from '@/utils/errorMessage';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 
 // Mirrors the backend's password_must_be_strong validator (backend/main.py)
 // for consistent UX — this submission goes straight to Supabase, not
@@ -111,6 +112,7 @@ export default function ResetPasswordConfirmScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+      <DismissKeyboardView>
       <View style={styles.content}>
         <Text style={styles.title}>Set a new password</Text>
         <Text style={styles.subtitle}>Choose a new password for your account.</Text>
@@ -175,6 +177,7 @@ export default function ResetPasswordConfirmScreen() {
           style={styles.submitButton}
         />
       </View>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }

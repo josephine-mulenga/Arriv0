@@ -1,29 +1,14 @@
 import { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import {
-  CaretDownIcon,
-  GraduationCapIcon,
-  BriefcaseIcon,
-  CheckCircleIcon,
-} from 'phosphor-react-native';
+import { GraduationCapIcon, BriefcaseIcon, CheckCircleIcon, CaretLeftIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { PressableScale } from '@/components/ui/pressable-scale';
 import { AnimatedCheck } from '@/components/ui/animated-check';
-import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Chip } from '@/components/ui/chip';
+import { SignupProgress } from '@/components/ui/signup-progress';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { takePendingPassword } from '@/utils/signupDraft';
@@ -42,14 +27,6 @@ const afterGraduationOptions = [
   'Return to my home country',
   'Not sure yet',
 ];
-
-const visaTypes: { label: string; value: 'F1' | 'J1' | 'M1' }[] = [
-  { label: 'F-1', value: 'F1' },
-  { label: 'J-1', value: 'J1' },
-  { label: 'M-1', value: 'M1' },
-];
-
-const yearLevels = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
 
 const plans = [
   {
@@ -72,50 +49,26 @@ const plans = [
   },
 ];
 
-function InlineDropdown({
-  label,
-  value,
-  onPress,
-}: {
-  label: string;
-  value: string | null;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.dropdownRow} onPress={onPress}>
-      <Text style={value ? styles.dropdownValueFilled : styles.dropdownValuePlaceholder}>
-        {value ?? label}
-      </Text>
-      <CaretDownIcon size={15} color={Palette.inkFaint} />
-    </Pressable>
-  );
-}
-
 export default function PersonalizeProfileScreen() {
-  const { name, email } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     name: string;
     email: string;
+    school: string;
+    major: string;
+    visaType: string;
+    citizenshipCountry: string;
+    programStartDate: string;
+    programEndDate: string;
   }>();
+  const { name, email, school, major, visaType, citizenshipCountry, programStartDate, programEndDate } = params;
+
   const [password] = useState(() => takePendingPassword() ?? '');
   const { signup, login, loading, error } = useAuth();
 
-  const [school, setSchool] = useState('');
-  const [major, setMajor] = useState('');
-  const [visaType, setVisaType] = useState<'F1' | 'J1' | 'M1'>('F1');
-  const [yearLevel, setYearLevel] = useState<string | null>(null);
-  const [yearLevelOpen, setYearLevelOpen] = useState(false);
   const [selectedPlans, setSelectedPlans] = useState<string[]>([]);
   const togglePlan = (key: string) => {
     setSelectedPlans((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
   };
-
-  const [startMonth, setStartMonth] = useState('');
-  const [startDay, setStartDay] = useState('');
-  const [startYear, setStartYear] = useState('');
-
-  const [endMonth, setEndMonth] = useState('');
-  const [endDay, setEndDay] = useState('');
-  const [endYear, setEndYear] = useState('');
 
   const [biggestConcern, setBiggestConcern] = useState<string | null>(null);
   const [hasJobOffer, setHasJobOffer] = useState<boolean | null>(null);
@@ -125,10 +78,6 @@ export default function PersonalizeProfileScreen() {
   const [referralCode, setReferralCode] = useState('');
   const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
 
-  const programStartDate = startYear && startMonth && startDay ? `${startYear}-${startMonth}-${startDay}` : '';
-  const programEndDate = endYear && endMonth && endDay ? `${endYear}-${endMonth}-${endDay}` : '';
-  const canSubmit = school.trim().length > 0 && !!programStartDate && !!programEndDate;
-
   const handleCreateAccount = async () => {
     try {
       const result = await signup(
@@ -136,10 +85,10 @@ export default function PersonalizeProfileScreen() {
         password,
         name,
         school,
-        visaType,
+        (visaType as 'F1' | 'J1' | 'M1') || 'F1',
         programStartDate,
         programEndDate,
-        major.trim() || undefined,
+        major?.trim() || undefined,
         undefined,
         undefined,
         undefined,
@@ -147,7 +96,8 @@ export default function PersonalizeProfileScreen() {
         biggestConcern ?? undefined,
         hasJobOffer ?? false,
         plansAfterGraduation ?? undefined,
-        workExperienceMonths ? Number(workExperienceMonths) : 0
+        workExperienceMonths ? Number(workExperienceMonths) : 0,
+        citizenshipCountry || undefined
       );
       // When email confirmation is required there's no session to log into
       // yet - logging in here would just fail with an unrelated "Invalid
@@ -180,225 +130,147 @@ export default function PersonalizeProfileScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: '66%' }]} />
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}>
+      <View style={styles.topRow}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <CaretLeftIcon size={18} color={Palette.ink} weight="bold" />
+        </Pressable>
+        <SignupProgress step={3} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Tell us about you</Text>
-        <Text style={styles.subtitle}>This helps us personalize your experience.</Text>
+      <DismissKeyboardView>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Text style={styles.title}>Almost there</Text>
+          <Text style={styles.subtitle}>This helps Arriv0 personalize your experience.</Text>
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>School / University</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Select your school"
-            placeholderTextColor={Palette.inkPlaceholder}
-            value={school}
-            onChangeText={setSchool}
-          />
-        </View>
+          <Text style={styles.sectionHeader}>YOUR GOALS</Text>
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Major</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Computer Science"
-            placeholderTextColor={Palette.inkPlaceholder}
-            value={major}
-            onChangeText={setMajor}
-          />
-          <Text style={styles.fieldHint}>Used to personalize your news, timeline, and internship matches.</Text>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Visa Type</Text>
-          <View style={styles.segmentRow}>
-            {visaTypes.map((v) => {
-              const selected = visaType === v.value;
-              return (
-                <PressableScale
-                  key={v.value}
-                  style={[styles.segment, selected && styles.segmentSelected]}
-                  onPress={() => setVisaType(v.value)}>
-                  <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{v.label}</Text>
-                </PressableScale>
-              );
-            })}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>What are you planning next?</Text>
+            <View style={styles.planList}>
+              {plans.map((p) => {
+                const selected = selectedPlans.includes(p.key);
+                const PlanIcon = p.icon;
+                return (
+                  <PressableScale
+                    key={p.key}
+                    scaleTo={0.97}
+                    style={[styles.planRow, selected && styles.planRowSelected]}
+                    onPress={() => togglePlan(p.key)}>
+                    <PlanIcon size={19} color={selected ? Palette.purple : Palette.inkMuted} weight={selected ? 'fill' : 'regular'} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.planTitle}>{p.title}</Text>
+                      <Text style={styles.planHint}>{p.hint}</Text>
+                    </View>
+                    <AnimatedCheck done={selected} />
+                  </PressableScale>
+                );
+              })}
+            </View>
           </View>
-        </View>
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Year Level</Text>
-          <InlineDropdown label="Select year" value={yearLevel} onPress={() => setYearLevelOpen(true)} />
-        </View>
-        <Modal visible={yearLevelOpen} transparent animationType="fade" onRequestClose={() => setYearLevelOpen(false)}>
-          <Pressable style={styles.modalOverlay} onPress={() => setYearLevelOpen(false)}>
-            <Pressable style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Year Level</Text>
-              {yearLevels.map((level) => (
-                <Pressable
-                  key={level}
-                  style={styles.modalOption}
-                  onPress={() => {
-                    setYearLevel(level);
-                    setYearLevelOpen(false);
-                  }}>
-                  <Text style={level === yearLevel ? styles.modalOptionTextSelected : styles.modalOptionText}>
-                    {level}
-                  </Text>
-                </Pressable>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>What are your plans after graduation?</Text>
+            <View style={styles.chipWrap}>
+              {afterGraduationOptions.map((option) => (
+                <Chip
+                  key={option}
+                  label={option}
+                  selected={plansAfterGraduation === option}
+                  onPress={() => setPlansAfterGraduation(option)}
+                />
               ))}
-            </Pressable>
+            </View>
+          </View>
+
+          <Text style={styles.sectionHeader}>YOUR SITUATION</Text>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>What&apos;s your biggest concern right now?</Text>
+            <View style={styles.chipWrap}>
+              {concernOptions.map((option) => (
+                <Chip
+                  key={option}
+                  label={option}
+                  selected={biggestConcern === option}
+                  onPress={() => setBiggestConcern(option)}
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Do you already have a job or internship offer?</Text>
+            <View style={styles.segmentRow}>
+              <PressableScale
+                style={[styles.segment, hasJobOffer === true && styles.segmentSelected]}
+                onPress={() => setHasJobOffer(true)}>
+                <Text style={[styles.segmentText, hasJobOffer === true && styles.segmentTextSelected]}>Yes</Text>
+              </PressableScale>
+              <PressableScale
+                style={[styles.segment, hasJobOffer === false && styles.segmentSelected]}
+                onPress={() => setHasJobOffer(false)}>
+                <Text style={[styles.segmentText, hasJobOffer === false && styles.segmentTextSelected]}>No</Text>
+              </PressableScale>
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Months of US work experience (if any)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="0"
+              placeholderTextColor={Palette.inkPlaceholder}
+              value={workExperienceMonths}
+              onChangeText={(v) => setWorkExperienceMonths(v.replace(/[^0-9]/g, ''))}
+              keyboardType="number-pad"
+            />
+          </View>
+
+          <Text style={styles.sectionHeader}>REFERRAL</Text>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Referral code (optional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Got a code from a friend?"
+              placeholderTextColor={Palette.inkPlaceholder}
+              value={referralCode}
+              onChangeText={(v) => setReferralCode(v.toUpperCase())}
+              autoCapitalize="characters"
+            />
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          <PrimaryButton
+            label={loading ? 'Creating account...' : 'Finish Setup'}
+            onPress={handleCreateAccount}
+            loading={loading}
+            style={styles.submitButton}
+          />
+
+          <Pressable onPress={handleCreateAccount} disabled={loading} style={styles.skipLink}>
+            <Text style={styles.skipLinkText}>Skip for now</Text>
           </Pressable>
-        </Modal>
 
-        <View style={styles.dateRow}>
-          <View style={[styles.fieldGroup, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Program Start</Text>
-            <DatePickerField
-              label="Select date"
-              month={startMonth}
-              day={startDay}
-              year={startYear}
-              onChangeMonth={setStartMonth}
-              onChangeDay={setStartDay}
-              onChangeYear={setStartYear}
-            />
-          </View>
-          <View style={[styles.fieldGroup, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Program End</Text>
-            <DatePickerField
-              label="Select date"
-              month={endMonth}
-              day={endDay}
-              year={endYear}
-              onChangeMonth={setEndMonth}
-              onChangeDay={setEndDay}
-              onChangeYear={setEndYear}
-              showIcon
-            />
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>What are you planning next?</Text>
-          <View style={styles.planList}>
-            {plans.map((p) => {
-              const selected = selectedPlans.includes(p.key);
-              const PlanIcon = p.icon;
-              return (
-                <PressableScale
-                  key={p.key}
-                  scaleTo={0.97}
-                  style={[styles.planRow, selected && styles.planRowSelected]}
-                  onPress={() => togglePlan(p.key)}>
-                  <PlanIcon size={19} color={selected ? Palette.purple : Palette.inkMuted} weight={selected ? 'fill' : 'regular'} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.planTitle}>{p.title}</Text>
-                    <Text style={styles.planHint}>{p.hint}</Text>
-                  </View>
-                  <AnimatedCheck done={selected} />
-                </PressableScale>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>What&apos;s your biggest concern right now?</Text>
-          <View style={styles.chipWrap}>
-            {concernOptions.map((option) => (
-              <Chip
-                key={option}
-                label={option}
-                selected={biggestConcern === option}
-                onPress={() => setBiggestConcern(option)}
-              />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Do you already have a job or internship offer?</Text>
-          <View style={styles.segmentRow}>
-            <PressableScale
-              style={[styles.segment, hasJobOffer === true && styles.segmentSelected]}
-              onPress={() => setHasJobOffer(true)}>
-              <Text style={[styles.segmentText, hasJobOffer === true && styles.segmentTextSelected]}>Yes</Text>
-            </PressableScale>
-            <PressableScale
-              style={[styles.segment, hasJobOffer === false && styles.segmentSelected]}
-              onPress={() => setHasJobOffer(false)}>
-              <Text style={[styles.segmentText, hasJobOffer === false && styles.segmentTextSelected]}>No</Text>
-            </PressableScale>
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>What are your plans after graduation?</Text>
-          <View style={styles.chipWrap}>
-            {afterGraduationOptions.map((option) => (
-              <Chip
-                key={option}
-                label={option}
-                selected={plansAfterGraduation === option}
-                onPress={() => setPlansAfterGraduation(option)}
-              />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Months of US work experience (if any)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="0"
-            placeholderTextColor={Palette.inkPlaceholder}
-            value={workExperienceMonths}
-            onChangeText={(v) => setWorkExperienceMonths(v.replace(/[^0-9]/g, ''))}
-            keyboardType="number-pad"
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Referral code (optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Got a code from a friend?"
-            placeholderTextColor={Palette.inkPlaceholder}
-            value={referralCode}
-            onChangeText={(v) => setReferralCode(v.toUpperCase())}
-            autoCapitalize="characters"
-          />
-        </View>
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <PrimaryButton
-          label={loading ? 'Creating account...' : 'Continue'}
-          onPress={handleCreateAccount}
-          disabled={!canSubmit || loading}
-          style={styles.submitButton}
-        />
-
-        <Text style={styles.legalText}>
-          By signing up, you agree to our{' '}
-          <Text
-            style={styles.legalLink}
-            onPress={() => Linking.openURL('https://www.freeprivacypolicy.com/live/6d431a24-221e-4dfc-aa18-ebd77fc28f93')}>
-            Privacy Policy
-          </Text>{' '}
-          and{' '}
-          <Text
-            style={styles.legalLink}
-            onPress={() => Linking.openURL('https://www.freeprivacypolicy.com/live/994c0a00-5d88-47e1-99a9-1ef79f7be6f8')}>
-            Terms of Service
+          <Text style={styles.legalText}>
+            By signing up, you agree to our{' '}
+            <Text
+              style={styles.legalLink}
+              onPress={() => Linking.openURL('https://www.freeprivacypolicy.com/live/6d431a24-221e-4dfc-aa18-ebd77fc28f93')}>
+              Privacy Policy
+            </Text>{' '}
+            and{' '}
+            <Text
+              style={styles.legalLink}
+              onPress={() => Linking.openURL('https://www.freeprivacypolicy.com/live/994c0a00-5d88-47e1-99a9-1ef79f7be6f8')}>
+              Terms of Service
+            </Text>
           </Text>
-        </Text>
-      </ScrollView>
+        </ScrollView>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }
@@ -408,6 +280,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Palette.white,
     paddingTop: 62,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    marginBottom: 6,
+  },
+  backButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: Palette.dividerLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   confirmationRoot: {
     flex: 1,
@@ -433,22 +320,10 @@ const styles = StyleSheet.create({
   confirmationButton: {
     marginTop: 8,
   },
-  progressTrack: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: Palette.track,
-    marginHorizontal: 26,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: Palette.purple,
-  },
   content: {
     padding: 26,
-    paddingTop: 22,
-    gap: 18,
+    paddingTop: 18,
+    gap: 14,
   },
   fieldGroup: {
     gap: 7,
@@ -465,17 +340,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Palette.inkFaint,
     marginTop: -8,
+    marginBottom: 4,
+  },
+  sectionHeader: {
+    fontFamily: Type.headingSemiBold,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    color: Palette.inkPlaceholder,
+    marginTop: 6,
   },
   fieldLabel: {
     fontFamily: Type.bodyBold,
     fontSize: 12.5,
     color: Palette.inkMuted,
-  },
-  fieldHint: {
-    marginTop: -3,
-    fontFamily: Type.bodyRegular,
-    fontSize: 11.5,
-    color: Palette.inkPlaceholder,
   },
   input: {
     borderWidth: 1,
@@ -520,62 +397,6 @@ const styles = StyleSheet.create({
   segmentTextSelected: {
     color: Palette.purple,
   },
-  dropdownRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 48,
-    borderWidth: 1,
-    borderColor: Palette.borderInput,
-    backgroundColor: Palette.surfaceSubtle,
-    borderRadius: Radius.input,
-    paddingHorizontal: 14,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  dropdownValueFilled: {
-    fontFamily: Type.bodyRegular,
-    fontSize: 14,
-    color: Palette.ink,
-  },
-  dropdownValuePlaceholder: {
-    fontFamily: Type.bodyRegular,
-    fontSize: 14,
-    color: Palette.inkPlaceholder,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: Palette.scrim,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: Palette.white,
-    borderRadius: Radius.cardLarge,
-    padding: 16,
-  },
-  modalTitle: {
-    fontFamily: Type.headingSemiBold,
-    fontSize: 16,
-    marginBottom: 8,
-    color: Palette.ink,
-  },
-  modalOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Palette.dividerLight,
-  },
-  modalOptionText: {
-    fontFamily: Type.bodyRegular,
-    color: Palette.ink,
-  },
-  modalOptionTextSelected: {
-    fontFamily: Type.bodyBold,
-    color: Palette.purple,
-  },
   planList: {
     gap: 8,
   },
@@ -610,6 +431,15 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 4,
+  },
+  skipLink: {
+    marginTop: 4,
+    alignSelf: 'center',
+  },
+  skipLinkText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 13.5,
+    color: Palette.inkFaint,
   },
   legalText: {
     fontFamily: Type.bodyRegular,

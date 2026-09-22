@@ -9,6 +9,7 @@ import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { submitFeedback } from '@/api';
 import { friendlyErrorMessage } from '@/utils/errorMessage';
+import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 
 const CATEGORIES = [
   { key: 'feature', label: 'Feature idea' },
@@ -53,6 +54,7 @@ export default function FeedbackScreen() {
         <View style={{ width: 20 }} />
       </View>
 
+      <DismissKeyboardView>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {submitted ? (
           <View style={styles.successState}>
@@ -117,6 +119,7 @@ export default function FeedbackScreen() {
           </>
         )}
       </ScrollView>
+      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }
