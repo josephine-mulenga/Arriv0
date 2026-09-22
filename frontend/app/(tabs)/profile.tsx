@@ -22,6 +22,7 @@ import {
   BookmarkSimpleIcon,
   UserCircleIcon,
   LifebuoyIcon,
+  WarningCircleIcon,
   type Icon,
 } from 'phosphor-react-native';
 
@@ -283,6 +284,19 @@ export default function ProfileScreen() {
                 { label: 'Push notifications', value: profile.push_token ? 'Enabled' : 'Disabled' },
                 { label: 'Daily briefing time', value: profile.notification_time },
               ]}
+              footer={
+                !profile.push_token ? (
+                  <View style={styles.notifBanner}>
+                    <WarningCircleIcon size={15} color={Palette.amber} weight="fill" />
+                    <Text style={styles.notifBannerText}>
+                      Notifications are off. You may miss important immigration updates.
+                    </Text>
+                    <Pressable onPress={() => Linking.openSettings()} hitSlop={6}>
+                      <Text style={styles.notifBannerAction}>Turn on</Text>
+                    </Pressable>
+                  </View>
+                ) : undefined
+              }
             />
 
             <Section
@@ -732,6 +746,29 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: Palette.inkPlaceholder,
     textAlign: 'center',
+  },
+  notifBanner: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Palette.amberTint,
+    borderWidth: 1,
+    borderColor: Palette.amberBorder,
+    borderRadius: 10,
+    padding: 10,
+  },
+  notifBannerText: {
+    flex: 1,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: Palette.inkBody,
+  },
+  notifBannerAction: {
+    fontFamily: Type.bodyBold,
+    fontSize: 12.5,
+    color: Palette.purple,
   },
   modalOverlay: {
     flex: 1,

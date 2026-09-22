@@ -37,17 +37,17 @@ const STEPS: Step[] = [
   },
   {
     title: 'Your Journey',
-    body: 'Track your entire F1 journey from arrival to OPT — see what is done and what is next.',
+    body: 'Track your entire F1 journey from arrival to OPT.',
     rect: ({ width, height }) => ({ x: (width / 5) * 1, y: height - 78, width: width / 5, height: 78 }),
   },
   {
     title: 'Immigration News',
-    body: 'News filtered to what matters to YOU, based on your visa, major, and timeline.',
+    body: 'News filtered to what matters to YOU.',
     rect: ({ width, height }) => ({ x: (width / 5) * 2, y: height - 78, width: width / 5, height: 78 }),
   },
   {
     title: 'Opportunities',
-    body: 'Internships matched to your profile — watch companies for instant alerts.',
+    body: 'Internships matched to your profile.',
     rect: ({ width, height }) => ({ x: (width / 5) * 3, y: height - 78, width: width / 5, height: 78 }),
   },
   {
@@ -93,7 +93,7 @@ export function FirstTimeWalkthrough({ onDone }: { onDone: () => void }) {
           <XIcon size={16} color={Palette.inkFaint} />
         </Pressable>
         <Text style={styles.stepCount}>
-          STEP {step + 1} OF {STEPS.length}
+          {step + 1} of {STEPS.length}
         </Text>
         <Text style={styles.title}>{current.title}</Text>
         <Text style={styles.body}>{current.body}</Text>
@@ -120,6 +120,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2.5,
     borderColor: Palette.purple,
+    shadowColor: Palette.purple,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+    elevation: 12,
   },
   tooltip: {
     position: 'absolute',

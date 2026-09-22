@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import Animated, {
   useSharedValue,
@@ -45,6 +46,15 @@ export default function NotificationPermissionScreen() {
     goHome();
   };
 
+  // Recorded purely so the Profile banner knows to offer a way back into
+  // Settings instead of silently assuming "never asked" - actual re-prompt
+  // suppression is enforced at the OS/permission-status level in
+  // registerForPushNotifications.js, not by this flag.
+  const handleNotNow = async () => {
+    await AsyncStorage.setItem('arriv0_notifications_declined', 'true');
+    goHome();
+  };
+
   return (
     <View style={styles.root}>
       <Animated.View style={[styles.iconWrap, floatStyle]}>
@@ -66,8 +76,8 @@ export default function NotificationPermissionScreen() {
       <View style={styles.spacer} />
 
       <View style={styles.buttonBlock}>
-        <PrimaryButton label="Enable Notifications" onPress={handleEnable} />
-        <OutlineButton label="Maybe Later" onPress={goHome} style={styles.laterButton} />
+        <PrimaryButton label="Turn on notifications" onPress={handleEnable} />
+        <OutlineButton label="Not now" onPress={handleNotNow} style={styles.laterButton} />
       </View>
     </View>
   );

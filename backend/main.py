@@ -535,13 +535,23 @@ def calculate_onboarding_score_quick(profile: dict, user_id: str) -> int:
     return score
 
 def build_student_profile_context(profile: dict, days_until_end: int, opt_window_opens: int, year_name: str) -> str:
-    major = profile.get("major") or "Not specified"
+    # Every free-text profile field ends up inside the AI's prompt context
+    # below - sanitize_input() (the same prompt-injection filter /chat runs
+    # user questions through) is applied to all of them for consistency,
+    # not just the ones added most recently, since any of them could
+    # contain attacker-supplied text if entered directly via the API rather
+    # than through the app's own constrained UI (a dropdown, etc).
+    name = sanitize_input(profile.get("name")) or "the student"
+    school = sanitize_input(profile.get("school")) or "Not specified"
+    major = sanitize_input(profile.get("major")) or "Not specified"
+    citizenship_country = sanitize_input(profile.get("citizenship_country")) or "Not specified"
     has_ssn = profile.get("has_ssn", False)
     has_bank_account = profile.get("has_bank_account", False)
     cpt_months_used = profile.get("cpt_months_used", 0)
     biggest_concern = sanitize_input(profile.get("biggest_concern"))
     has_job_offer = profile.get("has_job_offer", False)
     plans_after_graduation = sanitize_input(profile.get("plans_after_graduation"))
+    planning_next = sanitize_input(profile.get("planning_next"))
     work_experience_months = profile.get("work_experience_months")
 
     stem_keywords = ["computer", "science", "engineering", "technology", "mathematics", "biology", "chemistry", "physics", "cybersecurity", "data", "information"]
@@ -557,11 +567,11 @@ def build_student_profile_context(profile: dict, days_until_end: int, opt_window
 
     context = f"""
 Student profile:
-- Name: {profile.get('name')}
-- School: {profile.get('school')}
+- Name: {name}
+- School: {school}
 - Major: {major}
 - Visa type: {profile.get('visa_type')}
-- Country of citizenship: {profile.get('citizenship_country') or 'Not specified'}
+- Country of citizenship: {citizenship_country}
 - Year: {year_name}
 - Program end date: {profile.get('program_end_date')}
 - Days until program ends: {days_until_end}
@@ -570,6 +580,7 @@ Student profile:
 - Has US bank account: {'Yes' if has_bank_account else 'No — may need guidance on opening a bank account'}
 - Full-time CPT months used: {cpt_months_used} months
 - Likely STEM OPT eligible: {'Yes — qualifies for 24-month STEM OPT extension' if is_likely_stem else 'Check with DSO — major may not qualify for STEM OPT'}
+- What they're planning next: {planning_next or 'Not specified'}
 - Biggest concern: {biggest_concern or 'Not specified'}
 - Has a job offer lined up: {'Yes' if has_job_offer else 'No'}
 - Plans after graduation: {plans_after_graduation or 'Not specified'}
@@ -2199,6 +2210,7 @@ class ProfileFields(BaseModel):
     biggest_concern: Optional[str] = None
     has_job_offer: Optional[bool] = False
     plans_after_graduation: Optional[str] = None
+    planning_next: Optional[str] = None
     work_experience_months: Optional[int] = 0
 
     @validator('name')
@@ -2341,6 +2353,7 @@ class UpdateProfileRequest(BaseModel):
     biggest_concern: Optional[str] = None
     has_job_offer: Optional[bool] = None
     plans_after_graduation: Optional[str] = None
+    planning_next: Optional[str] = None
     work_experience_months: Optional[int] = None
     career_interests: Optional[List[str]] = None
     location_preference: Optional[str] = None
@@ -2611,6 +2624,7 @@ def _create_user_profile(user_id: str, data: ProfileFields) -> None:
         "biggest_concern": data.biggest_concern,
         "has_job_offer": data.has_job_offer,
         "plans_after_graduation": data.plans_after_graduation,
+        "planning_next": data.planning_next,
         "work_experience_months": data.work_experience_months
     }).execute()
 

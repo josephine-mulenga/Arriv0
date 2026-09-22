@@ -32,7 +32,31 @@ const handleResponse = async (response) => {
   return data;
 };
 
-export const signup = async (email, password, name, school, visaType, programStartDate, programEndDate, major, hasSsn, hasBankAccount, cptMonthsUsed, referralCode, biggestConcern, hasJobOffer, plansAfterGraduation, workExperienceMonths, citizenshipCountry) => {
+// A named-fields object rather than another positional argument - this
+// list has grown (and been extended) enough times that one more
+// positional slot risked a silently-miscounted call somewhere. Every
+// field the signup flow can collect lives here now; add new ones the same
+// way instead of appending another positional parameter.
+export const signup = async ({
+  email,
+  password,
+  name,
+  school,
+  visaType,
+  programStartDate,
+  programEndDate,
+  major,
+  citizenshipCountry,
+  hasSsn,
+  hasBankAccount,
+  cptMonthsUsed,
+  referralCode,
+  biggestConcern,
+  hasJobOffer,
+  plansAfterGraduation,
+  planningNext,
+  workExperienceMonths,
+}) => {
   const response = await fetch(`${BASE_URL}/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -44,7 +68,7 @@ export const signup = async (email, password, name, school, visaType, programSta
       visa_type: visaType,
       program_start_date: programStartDate,
       program_end_date: programEndDate,
-      major: major,
+      major: major || undefined,
       citizenship_country: citizenshipCountry || undefined,
       has_ssn: hasSsn,
       has_bank_account: hasBankAccount,
@@ -53,6 +77,7 @@ export const signup = async (email, password, name, school, visaType, programSta
       biggest_concern: biggestConcern || undefined,
       has_job_offer: hasJobOffer,
       plans_after_graduation: plansAfterGraduation || undefined,
+      planning_next: planningNext || undefined,
       work_experience_months: workExperienceMonths
     })
   });

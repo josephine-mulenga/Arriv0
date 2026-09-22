@@ -19,8 +19,6 @@ import { Palette, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { registerForPushNotifications } from '@/utils/registerPushNotifications';
 
-const WALKTHROUGH_SHOWN_KEY = 'arriv0_walkthrough_shown';
-
 function TabIcon({ Icon: IconComponent, color, focused }: { Icon: Icon; color: string; focused: boolean }) {
   return <IconComponent size={21} color={color} weight={focused ? 'fill' : 'regular'} />;
 }
@@ -39,20 +37,26 @@ export default function TabLayout() {
     }
   }, [user]);
 
-  // First-time walkthrough: shown once, the first time this tab layout ever
-  // mounts for a logged-in user (i.e. right after signup completes the
-  // onboarding flow) - the AsyncStorage flag makes it permanent, so it never
-  // reappears on later logins even after the app is fully closed.
+  // First-time walkthrough: 'show_walkthrough' is set exactly once, by
+  // personalize-profile.tsx right after a brand-new signup completes -
+  // login.tsx never sets it, so an existing user logging in never sees
+  // this, no matter how many times they log in. 'walkthrough_completed' is
+  // the permanent record that it already ran, checked here as a second
+  // guard against ever showing it twice for the same install.
   useEffect(() => {
     if (!user) return;
-    AsyncStorage.getItem(WALKTHROUGH_SHOWN_KEY).then((shown) => {
-      if (!shown) setShowWalkthrough(true);
-    });
+    (async () => {
+      const completed = await AsyncStorage.getItem('walkthrough_completed');
+      if (completed) return;
+      const shouldShow = await AsyncStorage.getItem('show_walkthrough');
+      if (shouldShow === 'true') setShowWalkthrough(true);
+    })();
   }, [user]);
 
   const dismissWalkthrough = () => {
     setShowWalkthrough(false);
-    AsyncStorage.setItem(WALKTHROUGH_SHOWN_KEY, 'true').catch(() => {});
+    AsyncStorage.setItem('walkthrough_completed', 'true').catch(() => {});
+    AsyncStorage.removeItem('show_walkthrough').catch(() => {});
     router.replace('/(tabs)');
   };
 

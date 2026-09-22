@@ -111,47 +111,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signup = async (
-    email,
-    password,
-    name,
-    school,
-    visaType,
-    programStartDate,
-    programEndDate,
-    major,
-    hasSsn,
-    hasBankAccount,
-    cptMonthsUsed,
-    referralCode,
-    biggestConcern,
-    hasJobOffer,
-    plansAfterGraduation,
-    workExperienceMonths,
-    citizenshipCountry
-  ) => {
+  const signup = async (fields) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await apiSignup(
-        email,
-        password,
-        name,
-        school,
-        visaType,
-        programStartDate,
-        programEndDate,
-        major,
-        hasSsn,
-        hasBankAccount,
-        cptMonthsUsed,
-        referralCode,
-        biggestConcern,
-        hasJobOffer,
-        plansAfterGraduation,
-        workExperienceMonths,
-        citizenshipCountry
-      );
+      const data = await apiSignup(fields);
       return data;
     } catch (err) {
       const message = friendlyErrorMessage(err, 'Could not create your account. Please try again.');

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GraduationCapIcon, BriefcaseIcon, CheckCircleIcon, CaretLeftIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
@@ -65,10 +66,11 @@ export default function PersonalizeProfileScreen() {
   const [password] = useState(() => takePendingPassword() ?? '');
   const { signup, login, loading, error } = useAuth();
 
-  const [selectedPlans, setSelectedPlans] = useState<string[]>([]);
-  const togglePlan = (key: string) => {
-    setSelectedPlans((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const selectPlan = (key: string) => {
+    setSelectedPlan((prev) => (prev === key ? null : key));
   };
+  const planningNext = plans.find((p) => p.key === selectedPlan)?.title;
 
   const [biggestConcern, setBiggestConcern] = useState<string | null>(null);
   const [hasJobOffer, setHasJobOffer] = useState<boolean | null>(null);
@@ -80,25 +82,23 @@ export default function PersonalizeProfileScreen() {
 
   const handleCreateAccount = async () => {
     try {
-      const result = await signup(
+      const result = await signup({
         email,
         password,
         name,
         school,
-        (visaType as 'F1' | 'J1' | 'M1') || 'F1',
+        visaType: (visaType as 'F1' | 'J1' | 'M1') || 'F1',
         programStartDate,
         programEndDate,
-        major?.trim() || undefined,
-        undefined,
-        undefined,
-        undefined,
-        referralCode.trim() || undefined,
-        biggestConcern ?? undefined,
-        hasJobOffer ?? false,
-        plansAfterGraduation ?? undefined,
-        workExperienceMonths ? Number(workExperienceMonths) : 0,
-        citizenshipCountry || undefined
-      );
+        major: major?.trim() || undefined,
+        citizenshipCountry: citizenshipCountry || undefined,
+        referralCode: referralCode.trim() || undefined,
+        biggestConcern: biggestConcern ?? undefined,
+        hasJobOffer: hasJobOffer ?? false,
+        plansAfterGraduation: plansAfterGraduation ?? undefined,
+        planningNext: planningNext || undefined,
+        workExperienceMonths: workExperienceMonths ? Number(workExperienceMonths) : 0,
+      });
       // When email confirmation is required there's no session to log into
       // yet - logging in here would just fail with an unrelated "Invalid
       // email or password" (the account exists but isn't confirmed), which
@@ -108,6 +108,11 @@ export default function PersonalizeProfileScreen() {
         return;
       }
       await login(email, password);
+      // Marks this specific session as "just finished signup" so the home
+      // screen shows the first-time walkthrough exactly once - set here and
+      // nowhere else, so logging in with an existing account (login.tsx)
+      // never triggers it.
+      await AsyncStorage.setItem('show_walkthrough', 'true');
       router.replace('/notification-permission');
     } catch {
       // error is already captured by useAuth's error state
@@ -150,14 +155,14 @@ export default function PersonalizeProfileScreen() {
             <Text style={styles.fieldLabel}>What are you planning next?</Text>
             <View style={styles.planList}>
               {plans.map((p) => {
-                const selected = selectedPlans.includes(p.key);
+                const selected = selectedPlan === p.key;
                 const PlanIcon = p.icon;
                 return (
                   <PressableScale
                     key={p.key}
                     scaleTo={0.97}
                     style={[styles.planRow, selected && styles.planRowSelected]}
-                    onPress={() => togglePlan(p.key)}>
+                    onPress={() => selectPlan(p.key)}>
                     <PlanIcon size={19} color={selected ? Palette.purple : Palette.inkMuted} weight={selected ? 'fill' : 'regular'} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.planTitle}>{p.title}</Text>
