@@ -6,14 +6,11 @@ import { CaretLeftIcon, UserIcon, EnvelopeSimpleIcon, LockSimpleIcon } from 'pho
 
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { TextField } from '@/components/ui/text-field';
-import { SocialLoginRow } from '@/components/ui/social-login-row';
 import { AnimatedCheck } from '@/components/ui/animated-check';
 import { SignupProgress } from '@/components/ui/signup-progress';
-import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { ArrivoLogo } from '@/components/arrivo-logo';
 import { Palette, Type } from '@/constants/theme';
 import { setPendingPassword } from '@/utils/signupDraft';
-import { signInWithProvider, type SocialProvider } from '@/utils/socialAuth';
 
 // Mirrors the backend's password_must_be_strong validator (backend/main.py) exactly —
 // the design spec shows only the first three rows, but the API rejects a password
@@ -35,8 +32,6 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [socialError, setSocialError] = useState<string | null>(null);
-  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
 
   const emailTouched = email.trim().length > 0;
   const isEmailValid = EMAIL_PATTERN.test(email.trim());
@@ -55,18 +50,6 @@ export default function SignupScreen() {
     });
   };
 
-  const handleSocial = async (provider: SocialProvider) => {
-    setSocialError(null);
-    setSocialLoading(provider);
-    try {
-      await signInWithProvider(provider);
-    } catch {
-      setSocialError('Could not sign up. Please try again or use your email.');
-    } finally {
-      setSocialLoading(null);
-    }
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -79,8 +62,12 @@ export default function SignupScreen() {
         <SignupProgress step={1} style={{ flex: 1 }} />
       </View>
 
-      <DismissKeyboardView>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bounces
+        showsVerticalScrollIndicator={false}>
         <Animated.View entering={FadeIn.duration(420)}>
           <View style={styles.logoBlock}>
             <ArrivoLogo size={64} />
@@ -150,14 +137,6 @@ export default function SignupScreen() {
             style={styles.submitButton}
           />
 
-          <SocialLoginRow
-            onGoogle={() => handleSocial('google')}
-            onApple={() => handleSocial('apple')}
-            onMicrosoft={() => handleSocial('azure')}
-          />
-          {socialLoading ? <Text style={styles.socialStatusText}>Connecting...</Text> : null}
-          {socialError ? <Text style={styles.socialErrorText}>{socialError}</Text> : null}
-
           <Link href="/login" style={styles.link}>
             <Text style={styles.linkText}>
               Already have an account? <Text style={styles.linkTextStrong}>Log in</Text>
@@ -165,7 +144,6 @@ export default function SignupScreen() {
           </Link>
         </Animated.View>
       </ScrollView>
-      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }
@@ -238,20 +216,6 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 6,
-  },
-  socialStatusText: {
-    marginTop: 10,
-    textAlign: 'center',
-    fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    color: Palette.inkFaint,
-  },
-  socialErrorText: {
-    marginTop: 10,
-    textAlign: 'center',
-    fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    color: Palette.danger,
   },
   link: {
     marginTop: 20,

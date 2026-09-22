@@ -8,7 +8,6 @@ import { PressableScale } from '@/components/ui/pressable-scale';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { SearchableDropdown } from '@/components/ui/searchable-dropdown';
 import { SignupProgress } from '@/components/ui/signup-progress';
-import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { COUNTRIES } from '@/utils/countries';
 
@@ -66,8 +65,12 @@ export default function AcademicProfileScreen() {
         <SignupProgress step={2} style={{ flex: 1 }} />
       </View>
 
-      <DismissKeyboardView>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bounces
+        showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>Your academic profile</Text>
           <Text style={styles.subtitle}>This helps us build your F1 timeline.</Text>
 
@@ -148,8 +151,7 @@ export default function AcademicProfileScreen() {
           </Text>
 
           <PrimaryButton label="Continue" onPress={handleContinue} disabled={!canContinue} style={styles.submitButton} />
-        </ScrollView>
-      </DismissKeyboardView>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

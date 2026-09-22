@@ -9,7 +9,6 @@ import { PressableScale } from '@/components/ui/pressable-scale';
 import { AnimatedCheck } from '@/components/ui/animated-check';
 import { Chip } from '@/components/ui/chip';
 import { SignupProgress } from '@/components/ui/signup-progress';
-import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { takePendingPassword } from '@/utils/signupDraft';
@@ -66,15 +65,33 @@ export default function PersonalizeProfileScreen() {
   const [password] = useState(() => takePendingPassword() ?? '');
   const { signup, login, loading, error } = useAuth();
 
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const selectPlan = (key: string) => {
-    setSelectedPlan((prev) => (prev === key ? null : key));
+  // A student can genuinely be both "graduating, then OPT" and "internship
+  // during study" at once (or worry about more than one thing at a time) -
+  // these are all multi-select. Each still stores into a single `text`
+  // column on the backend, so the selected labels are joined into one
+  // comma-separated string on submit rather than needing a new array
+  // column for what's fundamentally still one profile field.
+  const [selectedPlans, setSelectedPlans] = useState<string[]>([]);
+  const togglePlan = (key: string) => {
+    setSelectedPlans((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   };
-  const planningNext = plans.find((p) => p.key === selectedPlan)?.title;
+  const planningNext = plans
+    .filter((p) => selectedPlans.includes(p.key))
+    .map((p) => p.title)
+    .join(', ');
 
-  const [biggestConcern, setBiggestConcern] = useState<string | null>(null);
+  const [biggestConcerns, setBiggestConcerns] = useState<string[]>([]);
+  const toggleConcern = (option: string) => {
+    setBiggestConcerns((prev) => (prev.includes(option) ? prev.filter((o) => o !== option) : [...prev, option]));
+  };
+
   const [hasJobOffer, setHasJobOffer] = useState<boolean | null>(null);
-  const [plansAfterGraduation, setPlansAfterGraduation] = useState<string | null>(null);
+
+  const [plansAfterGraduationList, setPlansAfterGraduationList] = useState<string[]>([]);
+  const toggleAfterGraduation = (option: string) => {
+    setPlansAfterGraduationList((prev) => (prev.includes(option) ? prev.filter((o) => o !== option) : [...prev, option]));
+  };
+
   const [workExperienceMonths, setWorkExperienceMonths] = useState('');
 
   const [referralCode, setReferralCode] = useState('');
@@ -93,9 +110,9 @@ export default function PersonalizeProfileScreen() {
         major: major?.trim() || undefined,
         citizenshipCountry: citizenshipCountry || undefined,
         referralCode: referralCode.trim() || undefined,
-        biggestConcern: biggestConcern ?? undefined,
+        biggestConcern: biggestConcerns.length ? biggestConcerns.join(', ') : undefined,
         hasJobOffer: hasJobOffer ?? false,
-        plansAfterGraduation: plansAfterGraduation ?? undefined,
+        plansAfterGraduation: plansAfterGraduationList.length ? plansAfterGraduationList.join(', ') : undefined,
         planningNext: planningNext || undefined,
         workExperienceMonths: workExperienceMonths ? Number(workExperienceMonths) : 0,
       });
@@ -144,8 +161,12 @@ export default function PersonalizeProfileScreen() {
         <SignupProgress step={3} style={{ flex: 1 }} />
       </View>
 
-      <DismissKeyboardView>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bounces
+        showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>Almost there</Text>
           <Text style={styles.subtitle}>This helps Arriv0 personalize your experience.</Text>
 
@@ -155,14 +176,14 @@ export default function PersonalizeProfileScreen() {
             <Text style={styles.fieldLabel}>What are you planning next?</Text>
             <View style={styles.planList}>
               {plans.map((p) => {
-                const selected = selectedPlan === p.key;
+                const selected = selectedPlans.includes(p.key);
                 const PlanIcon = p.icon;
                 return (
                   <PressableScale
                     key={p.key}
                     scaleTo={0.97}
                     style={[styles.planRow, selected && styles.planRowSelected]}
-                    onPress={() => selectPlan(p.key)}>
+                    onPress={() => togglePlan(p.key)}>
                     <PlanIcon size={19} color={selected ? Palette.purple : Palette.inkMuted} weight={selected ? 'fill' : 'regular'} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.planTitle}>{p.title}</Text>
@@ -177,13 +198,15 @@ export default function PersonalizeProfileScreen() {
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>What are your plans after graduation?</Text>
+            <Text style={styles.fieldHint}>Select all that apply.</Text>
             <View style={styles.chipWrap}>
               {afterGraduationOptions.map((option) => (
                 <Chip
                   key={option}
                   label={option}
-                  selected={plansAfterGraduation === option}
-                  onPress={() => setPlansAfterGraduation(option)}
+                  selected={plansAfterGraduationList.includes(option)}
+                  onPress={() => toggleAfterGraduation(option)}
+                  showCheck
                 />
               ))}
             </View>
@@ -193,13 +216,15 @@ export default function PersonalizeProfileScreen() {
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>What&apos;s your biggest concern right now?</Text>
+            <Text style={styles.fieldHint}>Select all that apply.</Text>
             <View style={styles.chipWrap}>
               {concernOptions.map((option) => (
                 <Chip
                   key={option}
                   label={option}
-                  selected={biggestConcern === option}
-                  onPress={() => setBiggestConcern(option)}
+                  selected={biggestConcerns.includes(option)}
+                  onPress={() => toggleConcern(option)}
+                  showCheck
                 />
               ))}
             </View>
@@ -274,8 +299,7 @@ export default function PersonalizeProfileScreen() {
               Terms of Service
             </Text>
           </Text>
-        </ScrollView>
-      </DismissKeyboardView>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -358,6 +382,12 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyBold,
     fontSize: 12.5,
     color: Palette.inkMuted,
+  },
+  fieldHint: {
+    marginTop: -3,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    color: Palette.inkPlaceholder,
   },
   input: {
     borderWidth: 1,

@@ -6,13 +6,10 @@ import { EnvelopeSimpleIcon, LockSimpleIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { TextField } from '@/components/ui/text-field';
-import { SocialLoginRow } from '@/components/ui/social-login-row';
-import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 import { ArrivoLogo } from '@/components/arrivo-logo';
 import { Palette, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { resendConfirmation } from '@/api';
-import { signInWithProvider, type SocialProvider } from '@/utils/socialAuth';
 
 export default function LoginScreen() {
   const { login, loading, error } = useAuth();
@@ -21,8 +18,6 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [resent, setResent] = useState(false);
-  const [socialError, setSocialError] = useState<string | null>(null);
-  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
 
   // AuthContext maps most Supabase auth errors to plain copy already, but
   // this collapses everything else it might ever produce (a future
@@ -59,27 +54,16 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSocial = async (provider: SocialProvider) => {
-    setSocialError(null);
-    setSocialLoading(provider);
-    try {
-      await signInWithProvider(provider);
-    } catch {
-      setSocialError('Could not sign in. Please try again or use your email.');
-    } finally {
-      setSocialLoading(null);
-    }
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}>
-      <DismissKeyboardView>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bounces
         showsVerticalScrollIndicator={false}>
         <Animated.View entering={FadeIn.duration(420)}>
           <View style={styles.logoBlock}>
@@ -136,14 +120,6 @@ export default function LoginScreen() {
             style={styles.submitButton}
           />
 
-          <SocialLoginRow
-            onGoogle={() => handleSocial('google')}
-            onApple={() => handleSocial('apple')}
-            onMicrosoft={() => handleSocial('azure')}
-          />
-          {socialLoading ? <Text style={styles.socialStatusText}>Connecting...</Text> : null}
-          {socialError ? <Text style={styles.socialErrorText}>{socialError}</Text> : null}
-
           <Link href="/signup" style={styles.link}>
             <Text style={styles.linkText}>
               Don&apos;t have an account? <Text style={styles.linkTextStrong}>Sign up</Text>
@@ -151,7 +127,6 @@ export default function LoginScreen() {
           </Link>
         </Animated.View>
       </ScrollView>
-      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }
@@ -213,20 +188,6 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 14,
-  },
-  socialStatusText: {
-    marginTop: 10,
-    textAlign: 'center',
-    fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    color: Palette.inkFaint,
-  },
-  socialErrorText: {
-    marginTop: 10,
-    textAlign: 'center',
-    fontFamily: Type.bodyRegular,
-    fontSize: 12.5,
-    color: Palette.danger,
   },
   link: {
     marginTop: 22,

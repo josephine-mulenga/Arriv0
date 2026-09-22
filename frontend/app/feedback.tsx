@@ -9,7 +9,6 @@ import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { submitFeedback } from '@/api';
 import { friendlyErrorMessage } from '@/utils/errorMessage';
-import { DismissKeyboardView } from '@/components/ui/dismiss-keyboard-view';
 
 const CATEGORIES = [
   { key: 'feature', label: 'Feature idea' },
@@ -54,8 +53,11 @@ export default function FeedbackScreen() {
         <View style={{ width: 20 }} />
       </View>
 
-      <DismissKeyboardView>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bounces>
         {submitted ? (
           <View style={styles.successState}>
             <CheckCircleIcon size={48} color={Palette.green} weight="fill" />
@@ -119,7 +121,6 @@ export default function FeedbackScreen() {
           </>
         )}
       </ScrollView>
-      </DismissKeyboardView>
     </KeyboardAvoidingView>
   );
 }
