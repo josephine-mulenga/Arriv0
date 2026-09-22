@@ -59,8 +59,8 @@ export default function NotificationPermissionScreen() {
       <Text style={styles.title}>Stay updated</Text>
 
       <Text style={styles.body}>
-        Allow notifications so you never miss important deadlines, milestones and immigration
-        updates.
+        Arriv0 sends you alerts about immigration deadlines, new internships, and urgent policy
+        changes. Turn on notifications so you never miss what matters.
       </Text>
 
       <View style={styles.spacer} />

@@ -24,7 +24,12 @@ export const registerForPushNotifications = async (userId, token) => {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
-    if (existingStatus !== 'granted') {
+    // Only ask when the OS has never asked before ('undetermined'). Once the
+    // user has explicitly granted or denied, this runs again on every tab
+    // mount (see (tabs)/_layout.tsx) - re-requesting after a 'denied' would
+    // mean re-prompting a user who already said no every time they open the
+    // app, instead of respecting their choice.
+    if (existingStatus === 'undetermined') {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
@@ -46,8 +51,6 @@ export const registerForPushNotifications = async (userId, token) => {
 
     const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const pushToken = pushTokenData.data;
-
-    console.log('Expo push token:', pushToken);
 
     await savePushToken(userId, pushToken, token);
     console.log('Push token saved to backend.');

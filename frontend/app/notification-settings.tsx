@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { CaretLeftIcon } from 'phosphor-react-native';
+import { CaretLeftIcon, WarningCircleIcon } from 'phosphor-react-native';
 
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Chip } from '@/components/ui/chip';
@@ -19,6 +19,20 @@ export default function NotificationSettingsScreen() {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    (async () => {
+      try {
+        const Notifications = await import('expo-notifications');
+        const { status } = await Notifications.getPermissionsAsync();
+        setNotificationsEnabled(status === 'granted');
+      } catch {
+        // leave the banner hidden if permission status can't be read
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const fetchTimezones = async () => {
@@ -62,6 +76,15 @@ export default function NotificationSettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {!notificationsEnabled && (
+          <View style={styles.offBanner}>
+            <WarningCircleIcon size={16} color={Palette.amber} weight="fill" />
+            <Text style={styles.offBannerText}>
+              Notifications are off. You may miss important immigration updates.
+            </Text>
+          </View>
+        )}
+
         <Text style={styles.bodyText}>Choose when you&apos;d like to receive your daily status update.</Text>
 
         <Text style={styles.label}>Time (24hr, HH:MM)</Text>
@@ -119,6 +142,23 @@ const styles = StyleSheet.create({
     color: Palette.ink,
   },
   content: { padding: 26, paddingTop: 0, gap: 12 },
+  offBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Palette.amberTint,
+    borderWidth: 1,
+    borderColor: Palette.amberBorder,
+    borderRadius: Radius.input,
+    padding: 12,
+  },
+  offBannerText: {
+    flex: 1,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: Palette.inkBody,
+  },
   bodyText: {
     fontFamily: Type.bodyRegular,
     fontSize: 13.5,

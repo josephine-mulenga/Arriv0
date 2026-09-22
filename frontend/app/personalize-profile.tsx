@@ -100,6 +100,7 @@ export default function PersonalizeProfileScreen() {
   const { signup, login, loading, error } = useAuth();
 
   const [school, setSchool] = useState('');
+  const [major, setMajor] = useState('');
   const [visaType, setVisaType] = useState<'F1' | 'J1' | 'M1'>('F1');
   const [yearLevel, setYearLevel] = useState<string | null>(null);
   const [yearLevelOpen, setYearLevelOpen] = useState(false);
@@ -138,7 +139,7 @@ export default function PersonalizeProfileScreen() {
         visaType,
         programStartDate,
         programEndDate,
-        undefined,
+        major.trim() || undefined,
         undefined,
         undefined,
         undefined,
@@ -198,6 +199,18 @@ export default function PersonalizeProfileScreen() {
             value={school}
             onChangeText={setSchool}
           />
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Major</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Computer Science"
+            placeholderTextColor={Palette.inkPlaceholder}
+            value={major}
+            onChangeText={setMajor}
+          />
+          <Text style={styles.fieldHint}>Used to personalize your news, timeline, and internship matches.</Text>
         </View>
 
         <View style={styles.fieldGroup}>
@@ -457,6 +470,12 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyBold,
     fontSize: 12.5,
     color: Palette.inkMuted,
+  },
+  fieldHint: {
+    marginTop: -3,
+    fontFamily: Type.bodyRegular,
+    fontSize: 11.5,
+    color: Palette.inkPlaceholder,
   },
   input: {
     borderWidth: 1,
