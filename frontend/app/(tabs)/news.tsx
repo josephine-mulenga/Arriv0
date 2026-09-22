@@ -1,28 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import {
-  IdentificationCardIcon,
-  BriefcaseIcon,
-  GraduationCapIcon,
-  NewspaperIcon,
   BookmarkSimpleIcon,
+  NewspaperIcon,
   SparkleIcon,
   ArrowSquareOutIcon,
   CaretDownIcon,
   CaretUpIcon,
-  type Icon,
 } from 'phosphor-react-native';
 
 import { getNews, addBookmark, getBookmarks, deleteBookmark } from '@/api';
 import { useAuth } from '@/AuthContext';
 import { Chip } from '@/components/ui/chip';
-import { IconTile } from '@/components/ui/icon-tile';
+import { NewsThumb } from '@/components/ui/news-thumb';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Palette, Spacing, Type } from '@/constants/theme';
+import { newsVisual } from '@/utils/newsVisuals';
 
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
@@ -51,15 +48,14 @@ interface Bookmark {
   news_image_url?: string;
 }
 
-const tagStyle: Record<string, { tint: string; color: string; icon: Icon }> = {
-  'F1 Visa': { tint: Palette.purpleTint, color: Palette.purple, icon: IdentificationCardIcon },
-  OPT: { tint: Palette.greenTint, color: Palette.green, icon: BriefcaseIcon },
-  CPT: { tint: Palette.amberTint, color: Palette.amber, icon: BriefcaseIcon },
-  'STEM OPT': { tint: Palette.redTint, color: Palette.red, icon: GraduationCapIcon },
-};
-
-function tagVisual(tag: string) {
-  return tagStyle[tag] ?? { tint: Palette.purpleTint, color: Palette.purple, icon: NewspaperIcon };
+function minutesAgoLabel(timestamp: number | null): string {
+  if (!timestamp) return '';
+  const minutes = Math.floor((Date.now() - timestamp) / 60000);
+  if (minutes < 1) return 'Last updated: just now';
+  if (minutes === 1) return 'Last updated: 1 minute ago';
+  if (minutes < 60) return `Last updated: ${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours === 1 ? 'Last updated: 1 hour ago' : `Last updated: ${hours} hours ago`;
 }
 
 function relativeAge(dateString?: string): string {
@@ -107,7 +103,17 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string | number>>(new Set());
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [, setTick] = useState(0);
   const lastFetchedAt = useRef(0);
+
+  // Forces a re-render every 30s purely so the "Last updated: X minutes
+  // ago" label stays live while the user sits on this screen, without
+  // needing an actual new fetch.
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchNews = async (tag: string, targetPage: number, append: boolean) => {
     try {
@@ -118,10 +124,11 @@ export default function NewsScreen() {
       setPage(data.page ?? targetPage);
       setErrorMessage(null);
       lastFetchedAt.current = Date.now();
+      setLastUpdatedAt(Date.now());
     } catch {
       if (!append) {
         setNewsItems([]);
-        setErrorMessage('We could not refresh your immigration news.');
+        setErrorMessage('Could not refresh news. Pull down to try again.');
       }
     }
   };
@@ -219,6 +226,9 @@ export default function NewsScreen() {
         }>
         <View style={styles.header}>
           <Text style={styles.title}>Immigration News</Text>
+          {selectedTab !== 'Saved' && lastUpdatedAt ? (
+            <Text style={styles.lastUpdated}>{minutesAgoLabel(lastUpdatedAt)}</Text>
+          ) : null}
         </View>
 
         <ScrollView
@@ -246,7 +256,7 @@ export default function NewsScreen() {
         )}
 
         {displayedNews.map((item, index) => {
-          const visual = tagVisual(item.tag);
+          const visual = newsVisual(item.tag);
           const saved = isBookmarked(item);
           const isHigh = item.relevance === 'HIGH';
           const itemKey = item.id ?? index;
@@ -258,11 +268,7 @@ export default function NewsScreen() {
               style={[styles.card, index === displayedNews.length - 1 && styles.cardLast]}>
               <Pressable style={styles.cardTop} onPress={() => toggleExpanded(itemKey)}>
                 <View style={styles.thumbColumn}>
-                  {item.image_url ? (
-                    <Image source={{ uri: item.image_url }} style={styles.thumbImage} />
-                  ) : (
-                    <IconTile icon={visual.icon} tint={visual.tint} color={visual.color} size={74} iconSize={28} />
-                  )}
+                  <NewsThumb imageUrl={item.image_url} tag={item.tag} size={74} />
                   <Pressable hitSlop={8} onPress={() => handleToggleBookmark(item)} style={styles.bookmarkButton}>
                     <BookmarkSimpleIcon
                       size={17}
@@ -354,6 +360,12 @@ const styles = StyleSheet.create({
     fontFamily: Type.headingBold,
     fontSize: 22,
     color: Palette.ink,
+  },
+  lastUpdated: {
+    marginTop: 3,
+    fontFamily: Type.bodyRegular,
+    fontSize: 12,
+    color: Palette.inkPlaceholder,
   },
   chipScroll: {
     height: 64,

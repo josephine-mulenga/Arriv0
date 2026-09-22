@@ -884,7 +884,7 @@ def update_daily_streak(user_id: str, correlation_id: str = None) -> None:
 
         if new_streak in STREAK_MILESTONES and row.get("push_token"):
             try:
-                httpx.post(
+                streak_response = httpx.post(
                     EXPO_PUSH_URL,
                     json={
                         "to": row["push_token"],
@@ -895,6 +895,15 @@ def update_daily_streak(user_id: str, correlation_id: str = None) -> None:
                     headers={"Content-Type": "application/json"},
                     timeout=5.0
                 )
+                # See send_push_notification's comment: a 200 here only means
+                # Expo accepted the request, not that the push itself will
+                # arrive - the real result is the per-ticket status below.
+                streak_ticket = None
+                if streak_response.status_code == 200:
+                    streak_data = streak_response.json().get("data")
+                    streak_ticket = streak_data[0] if isinstance(streak_data, list) and streak_data else streak_data
+                if not isinstance(streak_ticket, dict) or streak_ticket.get("status") != "ok":
+                    logger.error(f"Streak milestone push ticket rejected: status={streak_response.status_code} body={streak_response.text[:300]}")
             except Exception as e:
                 logger.error(f"Failed to send streak milestone notification: {e}")
     except Exception as e:
@@ -1033,7 +1042,10 @@ Write a short warm personalized morning notification message under 100 words. Us
         logger.error(f"Failed to generate morning message: {e}")
         return f"Good morning {student.get('name')}! Check your Arriv0 app for today's immigration update."
 
-async def send_push_notification(push_token: str, title: str, body: str):
+async def send_push_notification(push_token: str, title: str, body: str) -> bool:
+    if not push_token or not push_token.startswith("ExponentPushToken"):
+        logger.error(f"Refusing to send push - not a valid Expo push token format: {(push_token or '')[:24]}...")
+        return False
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(
@@ -1041,7 +1053,25 @@ async def send_push_notification(push_token: str, title: str, body: str):
                 json={"to": push_token, "title": title, "body": body, "sound": "default"},
                 headers={"Content-Type": "application/json"}
             )
-            return response.status_code == 200
+            # Expo's push endpoint returns HTTP 200 even when the push itself
+            # was rejected - the real result is a per-ticket "status" in the
+            # response body ("ok" or "error", with a details.error code like
+            # DeviceNotRegistered or MessageTooBig). Treating a 200 status
+            # code alone as "sent" - what this used to do - means a whole
+            # class of silent failures (dead tokens, malformed payloads)
+            # would log as successful sends that never actually arrived.
+            if response.status_code != 200:
+                logger.error(f"Expo push API returned {response.status_code}: {response.text[:300]}")
+                return False
+            payload = response.json()
+            tickets = payload.get("data")
+            ticket = tickets[0] if isinstance(tickets, list) and tickets else tickets
+            if not isinstance(ticket, dict) or ticket.get("status") != "ok":
+                error_code = (ticket or {}).get("details", {}).get("error") if isinstance(ticket, dict) else None
+                error_message = (ticket or {}).get("message") if isinstance(ticket, dict) else None
+                logger.error(f"Expo push ticket rejected: error={error_code} message={error_message} raw={payload}")
+                return False
+            return True
     except httpx.TimeoutException:
         logger.error("Push notification timed out after 5 seconds")
         return False
@@ -1065,8 +1095,11 @@ async def send_morning_notifications():
                 user_current_time = user_now.strftime("%H:%M")
                 if user_current_time == notification_time:
                     message = await generate_morning_message(user)
-                    await send_push_notification(user["push_token"], "Good morning from Arriv0", message)
-                    log_security_event("NOTIFICATION_SENT", f"Morning notification sent at {notification_time} {user_timezone}")
+                    sent = await send_push_notification(user["push_token"], "Good morning from Arriv0", message)
+                    if sent:
+                        log_security_event("NOTIFICATION_SENT", f"Morning notification sent at {notification_time} {user_timezone}")
+                    else:
+                        logger.error(f"Morning notification failed to deliver to user {user.get('id', '')[:8]}***")
             except Exception as e:
                 logger.error(f"Failed to process notification for {user.get('name')}: {e}")
     except Exception as e:
@@ -1084,8 +1117,8 @@ async def send_opt_countdown_alerts():
                 cpt_months_used = user.get("cpt_months_used") or 0
                 if cpt_months_used >= 9:
                     cpt_message = f"You have used {cpt_months_used} months of full-time CPT. Using 12 months makes you permanently ineligible for OPT. Contact your DSO now."
-                    await send_push_notification(user["push_token"], "Arriv0 CPT Risk Alert", cpt_message)
-                    logger.info(f"CPT risk alert sent to {user['name']} — {cpt_months_used} months used")
+                    sent = await send_push_notification(user["push_token"], "Arriv0 CPT Risk Alert", cpt_message)
+                    logger.info(f"CPT risk alert {'sent' if sent else 'FAILED to send'} to {user['name']} — {cpt_months_used} months used")
 
                 if not user.get("program_end_date"):
                     continue
@@ -1105,8 +1138,8 @@ async def send_opt_countdown_alerts():
                     alert_message = f"Hey {user['name']}! Your program ends in 30 days. If you have not submitted your OPT application contact your DSO immediately."
 
                 if alert_message:
-                    await send_push_notification(user["push_token"], "Arriv0 OPT Alert", alert_message)
-                    logger.info(f"OPT countdown alert sent to {user['name']} — {days_until_opt} days until window")
+                    sent = await send_push_notification(user["push_token"], "Arriv0 OPT Alert", alert_message)
+                    logger.info(f"OPT countdown alert {'sent' if sent else 'FAILED to send'} to {user['name']} — {days_until_opt} days until window")
 
             except Exception as e:
                 logger.error(f"Failed to process OPT alert for {user.get('name')}: {e}")
@@ -1320,8 +1353,11 @@ async def send_internship_notifications():
                         message = f"New internship match: {title} at {company} ({top['source']}). Check it out in Arriv0."
                     else:
                         message = f"{len(new_jobs)} new internships match your major, including {title} at {company} ({top['source']})."
-                    await send_push_notification(user["push_token"], "New Internship Match", message)
-                    log_security_event("INTERNSHIP_NOTIFICATION_SENT", f"{len(new_jobs)} new matches sent to user {user['id'][:8]}***")
+                    sent = await send_push_notification(user["push_token"], "New Internship Match", message)
+                    if sent:
+                        log_security_event("INTERNSHIP_NOTIFICATION_SENT", f"{len(new_jobs)} new matches sent to user {user['id'][:8]}***")
+                    else:
+                        logger.error(f"Internship match notification FAILED to deliver to user {user['id'][:8]}***")
 
                 # Record every job seen this run (not just the ones just notified
                 # about) so a listing that later drops off the first page of
@@ -1375,8 +1411,11 @@ async def check_watched_companies():
                                 message = f"{company} just posted: {title} ({top['source']}). Check it out in Arriv0."
                             else:
                                 message = f"{company} posted {len(new_jobs)} new internships, including {title}."
-                            await send_push_notification(user["push_token"], f"New at {company}", message)
-                            log_security_event("WATCHED_COMPANY_NOTIFICATION_SENT", f"{len(new_jobs)} new {company} postings sent to user {user['id'][:8]}***")
+                            sent = await send_push_notification(user["push_token"], f"New at {company}", message)
+                            if sent:
+                                log_security_event("WATCHED_COMPANY_NOTIFICATION_SENT", f"{len(new_jobs)} new {company} postings sent to user {user['id'][:8]}***")
+                            else:
+                                logger.error(f"Watched-company notification FAILED to deliver to user {user['id'][:8]}*** for {company}")
 
                         if all_jobs:
                             supabase_admin.table("internships_seen").upsert(
@@ -2101,8 +2140,8 @@ async def _notify_users_of_news(newly_inserted: list, log_label: str):
                 # AI-personalized body text.
                 headline = news["title"] if len(news["title"]) <= 65 else news["title"][:62] + "..."
                 title = f"Urgent: {headline}" if news["urgent"] else headline
-                await send_push_notification(user["push_token"], title, personalized)
-                logger.info(f"{log_label} sent to {user['name']}")
+                sent = await send_push_notification(user["push_token"], title, personalized)
+                logger.info(f"{log_label} {'sent' if sent else 'FAILED to send'} to {user['name']}")
                 break
 
 async def process_and_notify():
@@ -3241,7 +3280,7 @@ Write EXACTLY 3 short lines for a compact home-screen brief, separated by newlin
 Line 1: whether there's an urgent deadline right now. If none, say so plainly (e.g. "No urgent deadlines today.").
 Line 2: their single next concrete step, starting with "Next: " (e.g. "Next: renew your I-20 before it expires.").
 Line 3: one relevant, real detail from the context above (a specific recent news item, or their CPT/OPT eligibility status) - never invent a specific count of articles, opportunities, or matches that isn't given to you above.
-Plain English. No bullet points, no markdown, no emoji."""
+Plain English. No bullet points, no markdown, no emoji. If you mention any date, write it out in plain English (e.g. "March 2, 2029") - never a raw ISO date like "2029-03-02"."""
 
     try:
         response = openai_client.chat.completions.create(

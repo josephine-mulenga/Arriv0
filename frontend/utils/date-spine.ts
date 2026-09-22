@@ -54,7 +54,7 @@ export function programElapsedPercent(
 
 export function formatDate(value: string | Date): string {
   return toDate(value).toLocaleDateString('en-US', {
-    month: 'short',
+    month: 'long',
     day: 'numeric',
     year: 'numeric',
   });
