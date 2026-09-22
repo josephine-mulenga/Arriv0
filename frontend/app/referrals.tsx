@@ -15,6 +15,7 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { generateReferralCode, getReferralStats, sendReferralInvite, verifyReferralCode } from '@/api';
+import { friendlyErrorMessage } from '@/utils/errorMessage';
 
 interface ReferralStats {
   referral_code: string | null;
@@ -79,7 +80,7 @@ export default function ReferralsScreen() {
       const refreshed = await getReferralStats(token);
       setStats(refreshed);
     } catch (err) {
-      setInviteMessage(err instanceof Error ? err.message : 'Could not send that invite.');
+      setInviteMessage(friendlyErrorMessage(err, 'Could not send that invite. Please try again.'));
     } finally {
       setInviting(false);
     }
@@ -94,7 +95,7 @@ export default function ReferralsScreen() {
       setRedeemMessage(result.message);
       if (result.valid) setRedeemCode('');
     } catch (err) {
-      setRedeemMessage(err instanceof Error ? err.message : 'Could not verify that code.');
+      setRedeemMessage(friendlyErrorMessage(err, 'Could not verify that code. Please try again.'));
     } finally {
       setRedeeming(false);
     }

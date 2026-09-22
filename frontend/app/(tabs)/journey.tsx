@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import {
   MagnifyingGlassIcon,
   CheckCircleIcon,
@@ -16,6 +16,7 @@ import {
 import { getTimeline, getMilestones, getMiniGoals, toggleMiniGoal } from '@/api';
 import { useAuth } from '@/AuthContext';
 import { RailRow } from '@/components/ui/rail-row';
+import { AnimatedCheck } from '@/components/ui/animated-check';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -194,7 +195,7 @@ export default function JourneyScreen() {
   const completedSteps = data ? data.steps.filter((s) => isEffectivelyDone(s)) : [];
 
   return (
-    <View style={styles.root}>
+    <Animated.View style={styles.root} entering={FadeIn.duration(220)}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.title}>Your F1 Journey</Text>
@@ -260,7 +261,7 @@ export default function JourneyScreen() {
                   onPress={() => setExpandedId(isExpanded ? null : m.id)}>
                   <View style={[styles.milestoneDot, { backgroundColor: m.status === 'locked' ? Palette.white : dotColor, borderColor: dotColor }]}>
                     {m.status === 'done' ? (
-                      <CheckCircleIcon size={isNext ? 20 : 16} color={Palette.white} weight="fill" />
+                      <AnimatedCheck done size={isNext ? 20 : 16} doneColor={Palette.white} />
                     ) : (
                       <Text style={styles.milestoneEmoji}>{m.icon}</Text>
                     )}
@@ -326,7 +327,7 @@ export default function JourneyScreen() {
                           <Pressable key={goal.id} style={styles.goalRow} onPress={() => handleToggleGoal(goal)}>
                             <View style={styles.goalRail}>
                               <View style={[styles.goalDot, goal.done && styles.goalDotDone]}>
-                                {goal.done ? <CheckCircleIcon size={13} color={Palette.white} weight="fill" /> : null}
+                                {goal.done ? <AnimatedCheck done size={13} doneColor={Palette.white} /> : null}
                               </View>
                               {goalIndex < goalsForMilestone.length - 1 && <View style={styles.goalLine} />}
                             </View>
@@ -404,7 +405,7 @@ export default function JourneyScreen() {
           )}
         </View>
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -437,18 +438,29 @@ function StepRow({
     <RailRow dotColor={status.color} dotFilled={status.filled} isLast={isLast} index={index}>
       <Pressable
         style={[styles.card, { borderLeftColor: status.color }]}
-        onPress={() => step.link && Linking.openURL(step.link)}>
+        disabled={!isConfirmable}
+        onPress={onToggleConfirm}>
         <Text style={styles.cardTitle}>{step.task}</Text>
         {step.date_range ? <Text style={styles.cardDate}>{step.date_range}</Text> : null}
+        {step.link ? (
+          <Pressable
+            style={styles.stepViewLink}
+            onPress={(e) => {
+              e.stopPropagation();
+              Linking.openURL(step.link!);
+            }}
+            hitSlop={6}>
+            <ArrowSquareOutIcon size={12} color={Palette.purple} weight="bold" />
+            <Text style={styles.stepViewLinkText}>View</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.cardFooter}>
           <Text style={[styles.cardStatusLabel, { color: status.color }]}>
             {isConfirmable && !effectiveDone ? 'Tap to confirm' : status.label}
           </Text>
-          <Pressable hitSlop={10} disabled={!isConfirmable} onPress={onToggleConfirm}>
-            <Animated.View style={iconAnimatedStyle}>
-              <StatusIcon size={18} color={status.color} weight={status.filled ? 'fill' : 'regular'} />
-            </Animated.View>
-          </Pressable>
+          <Animated.View style={iconAnimatedStyle}>
+            <StatusIcon size={18} color={status.color} weight={status.filled ? 'fill' : 'regular'} />
+          </Animated.View>
         </View>
       </Pressable>
     </RailRow>
@@ -776,6 +788,18 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodyRegular,
     fontSize: 11.5,
     color: Palette.inkPlaceholder,
+  },
+  stepViewLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginTop: 6,
+  },
+  stepViewLinkText: {
+    fontFamily: Type.bodyBold,
+    fontSize: 11.5,
+    color: Palette.purple,
   },
   cardFooter: {
     flexDirection: 'row',

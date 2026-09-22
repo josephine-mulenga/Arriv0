@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import {
   ListIcon,
   BellIcon,
@@ -123,7 +123,7 @@ export default function HomeScreen() {
   const newsTodayCount = news.filter((n) => isWithinLastDay(n.created_at)).length || news.length;
 
   return (
-    <View style={styles.root}>
+    <Animated.View style={styles.root} entering={FadeIn.duration(220)}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
@@ -236,35 +236,36 @@ export default function HomeScreen() {
         </View>
 
         {news[0] && (
-          <Pressable style={styles.forYouCard} onPress={() => router.push('/(tabs)/news')}>
-            <View style={styles.forYouIconTile}>
-              <NewspaperIcon size={16} color={Palette.purple} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.forYouTitle} numberOfLines={2}>{news[0].title}</Text>
-              {news[0].tag ? <Text style={styles.forYouMeta}>{news[0].tag}</Text> : null}
-            </View>
-          </Pressable>
+          <Animated.View entering={FadeInUp.delay(180).duration(320)}>
+            <Pressable style={styles.forYouCard} onPress={() => router.push('/(tabs)/news')}>
+              <View style={styles.forYouIconTile}>
+                <NewspaperIcon size={16} color={Palette.purple} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.forYouTitle} numberOfLines={2}>{news[0].title}</Text>
+                {news[0].tag ? <Text style={styles.forYouMeta}>{news[0].tag}</Text> : null}
+              </View>
+            </Pressable>
+          </Animated.View>
         )}
 
         {internships.map((item, index) => (
-          <Pressable
-            key={item.id ?? index}
-            style={styles.forYouCard}
-            onPress={() => router.push('/(tabs)/internships')}>
-            <View style={styles.forYouIconTile}>
-              <BriefcaseIcon size={16} color={Palette.purple} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.forYouTitle} numberOfLines={1}>{item.title}</Text>
-              {item.company ? <Text style={styles.forYouMeta}>{item.company}</Text> : null}
-            </View>
-          </Pressable>
+          <Animated.View key={item.id ?? index} entering={FadeInUp.delay(220 + index * 45).duration(320)}>
+            <Pressable style={styles.forYouCard} onPress={() => router.push('/(tabs)/internships')}>
+              <View style={styles.forYouIconTile}>
+                <BriefcaseIcon size={16} color={Palette.purple} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.forYouTitle} numberOfLines={1}>{item.title}</Text>
+                {item.company ? <Text style={styles.forYouMeta}>{item.company}</Text> : null}
+              </View>
+            </Pressable>
+          </Animated.View>
         ))}
       </ScrollView>
 
       <SideMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
-    </View>
+    </Animated.View>
   );
 }
 

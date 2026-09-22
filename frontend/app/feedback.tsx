@@ -8,6 +8,7 @@ import { Chip } from '@/components/ui/chip';
 import { Palette, Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { submitFeedback } from '@/api';
+import { friendlyErrorMessage } from '@/utils/errorMessage';
 
 const CATEGORIES = [
   { key: 'feature', label: 'Feature idea' },
@@ -33,7 +34,7 @@ export default function FeedbackScreen() {
       setSubmitted(true);
       setMessage('');
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not send your feedback.');
+      setErrorMessage(friendlyErrorMessage(err, 'Could not send your feedback. Please try again.'));
     } finally {
       setSubmitting(false);
     }

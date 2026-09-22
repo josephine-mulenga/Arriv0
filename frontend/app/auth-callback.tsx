@@ -47,10 +47,12 @@ export default function AuthCallbackScreen() {
       }
 
       const { access_token: accessToken, user: sessionUser } = session;
-      // The app's own session lives in AuthContext/AsyncStorage, not this
-      // client's persisted session - drop the latter once we've pulled out
-      // what we need, same as reset-password-confirm.tsx does.
-      await supabase.auth.signOut();
+      // AuthContext now sources its session directly from this same
+      // Supabase client (persistSession + autoRefreshToken), so this
+      // session IS the app's session - signing out here would immediately
+      // destroy the login this screen just confirmed. loginWithToken just
+      // makes the app's state update right away rather than waiting on
+      // AuthContext's onAuthStateChange listener to notice it.
       await loginWithToken(accessToken, sessionUser.id, sessionUser.email);
       setStatus('loggedIn');
       router.replace('/(tabs)');

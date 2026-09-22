@@ -1,22 +1,34 @@
-import { useEffect } from 'react';
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { useEffect, useState } from 'react';
+import { LayoutChangeEvent, StyleProp, View, StyleSheet, ViewStyle } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 
 import { Palette, Radius } from '@/constants/theme';
 
-// Grey placeholder shape that pulses gently — used everywhere a spinner
-// used to be, sized/shaped per screen to roughly match the real content
-// so the layout doesn't visibly jump once data arrives.
+// Grey placeholder shape with a lighter highlight bar sweeping left to
+// right — used everywhere a spinner used to be, sized/shaped per screen to
+// roughly match the real content so the layout doesn't visibly jump once
+// data arrives.
 export function Skeleton({ style }: { style?: StyleProp<ViewStyle> }) {
-  const opacity = useSharedValue(0.5);
+  const [width, setWidth] = useState(0);
+  const translateX = useSharedValue(-1);
 
   useEffect(() => {
-    opacity.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }), -1, true);
+    translateX.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.ease) }), -1, false);
   }, []);
 
-  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value * width }],
+  }));
 
-  return <Animated.View style={[styles.base, style, animatedStyle]} />;
+  const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
+
+  return (
+    <View style={[styles.base, style]} onLayout={onLayout}>
+      {width > 0 && (
+        <Animated.View style={[styles.highlight, { width: width * 0.6 }, animatedStyle]} />
+      )}
+    </View>
+  );
 }
 
 // A generic "card" skeleton — thumbnail + a couple of lines — reused by
@@ -48,6 +60,14 @@ const styles = StyleSheet.create({
   base: {
     backgroundColor: Palette.dividerLight,
     borderRadius: Radius.cardSmall,
+    overflow: 'hidden',
+  },
+  highlight: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   row: {
     flexDirection: 'row',

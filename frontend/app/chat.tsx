@@ -25,17 +25,24 @@ import { chat, getChatHistory, clearChatHistory } from '@/api';
 import { ArrivoLogo } from '@/components/arrivo-logo';
 import { Palette, Type } from '@/constants/theme';
 import { usePreferences } from '@/PreferencesContext';
+import { markHasChatted } from '@/utils/chatUsage';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const LOADING_MESSAGES = ['Thinking...', 'Breaking it down...', 'Pulling the latest...', 'Almost there...'];
+const LOADING_MESSAGES = [
+  'Thinking...',
+  'Breaking it down...',
+  'Pulling the latest info...',
+  'Almost there...',
+  'Connecting the dots...',
+];
 
 function LoadingIndicator() {
   const [index, setIndex] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
-    }, 1400);
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
   return <Text style={styles.assistantText}>{LOADING_MESSAGES[index]}</Text>;
@@ -142,6 +149,7 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, userMessage]);
     setQuestion('');
     setLoading(true);
+    markHasChatted();
 
     try {
       const data = await chat(question, token);

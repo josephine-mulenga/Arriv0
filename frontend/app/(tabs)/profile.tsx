@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   CaretRightIcon,
   CaretDownIcon,
@@ -20,6 +21,7 @@ import {
   SlidersHorizontalIcon,
   BookmarkSimpleIcon,
   UserCircleIcon,
+  LifebuoyIcon,
   type Icon,
 } from 'phosphor-react-native';
 
@@ -51,6 +53,9 @@ interface ScoreData {
   percentage: number;
   next_step?: string | null;
 }
+
+const SUPPORT_EMAIL = 'prince@arriv0.com';
+const COFOUNDER_EMAIL = 'josephine@arriv0.com';
 
 const yearLevelNames: Record<number, string> = {
   1: 'Freshman',
@@ -152,12 +157,20 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handleContactSupport = () => {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
+  };
+
+  const handleReportBug = () => {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Bug Report — Arriv0')}`);
+  };
+
   const graduationYear = profile?.program_end_date ? profile.program_end_date.slice(0, 4) : null;
 
   const toggle = (id: string) => setExpandedSection((prev) => (prev === id ? null : id));
 
   return (
-    <View style={styles.root}>
+    <Animated.View style={styles.root} entering={FadeIn.duration(220)}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>My Profile</Text>
 
@@ -319,6 +332,31 @@ export default function ProfileScreen() {
               }
             />
 
+            <Section
+              id="help"
+              icon={LifebuoyIcon}
+              title="HELP & SUPPORT"
+              expanded={expandedSection === 'help'}
+              onToggle={() => toggle('help')}
+              rows={[
+                { label: 'Support', value: SUPPORT_EMAIL, onPress: handleContactSupport },
+                { label: 'Co-founder', value: COFOUNDER_EMAIL, onPress: () => Linking.openURL(`mailto:${COFOUNDER_EMAIL}`) },
+              ]}
+              footer={
+                <>
+                  <View style={styles.helpButtonRow}>
+                    <Pressable style={styles.helpButton} onPress={handleContactSupport}>
+                      <Text style={styles.helpButtonText}>Contact Support</Text>
+                    </Pressable>
+                    <Pressable style={[styles.helpButton, styles.helpButtonSecondary]} onPress={handleReportBug}>
+                      <Text style={[styles.helpButtonText, styles.helpButtonTextSecondary]}>Report a Bug</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.helpFooterText}>We read every message and respond within 24 hours.</Text>
+                </>
+              }
+            />
+
             <Text style={styles.groupLabel}>More</Text>
             <View style={styles.group}>
               <ActionRow icon={GiftIcon} label="Invite Friends" onPress={() => router.push('/referrals')} />
@@ -363,7 +401,7 @@ export default function ProfileScreen() {
           </View>
         </Pressable>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -662,6 +700,38 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodySemiBold,
     fontSize: 12.5,
     color: Palette.danger,
+  },
+  helpButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  helpButton: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: Palette.purple,
+    borderRadius: 10,
+    paddingVertical: 9,
+  },
+  helpButtonSecondary: {
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.purple,
+  },
+  helpButtonText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 12.5,
+    color: Palette.white,
+  },
+  helpButtonTextSecondary: {
+    color: Palette.purple,
+  },
+  helpFooterText: {
+    marginTop: 10,
+    fontFamily: Type.bodyRegular,
+    fontSize: 11.5,
+    color: Palette.inkPlaceholder,
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,

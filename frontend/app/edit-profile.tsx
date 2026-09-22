@@ -19,6 +19,7 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { useAuth } from '@/AuthContext';
 import { getUserProfile, updateProfile } from '@/api';
+import { friendlyErrorMessage } from '@/utils/errorMessage';
 
 const months = [
   { label: 'January', value: '01' }, { label: 'February', value: '02' }, { label: 'March', value: '03' },
@@ -121,7 +122,7 @@ export default function EditProfileScreen() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   const [name, setName] = useState('');
@@ -201,7 +202,7 @@ export default function EditProfileScreen() {
       setSaved(true);
       setTimeout(() => router.back(), 800);
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+      setError(friendlyErrorMessage(err, 'Something went wrong. Please try again.'));
     } finally {
       setSaving(false);
     }

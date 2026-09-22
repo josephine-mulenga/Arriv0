@@ -6,6 +6,7 @@ import { LockSimpleIcon, EyeIcon, EyeSlashIcon, CheckCircleIcon } from 'phosphor
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Palette, Radius, Type } from '@/constants/theme';
 import { supabase } from '@/supabase';
+import { friendlyErrorMessage } from '@/utils/errorMessage';
 
 // Mirrors the backend's password_must_be_strong validator (backend/main.py)
 // for consistent UX — this submission goes straight to Supabase, not
@@ -67,7 +68,7 @@ export default function ResetPasswordConfirmScreen() {
       await supabase.auth.signOut();
       setDone(true);
     } catch (err: any) {
-      setError(err?.message || 'Could not update your password. Please try again.');
+      setError(friendlyErrorMessage(err, 'Could not update your password. Please try again.'));
     } finally {
       setLoading(false);
     }

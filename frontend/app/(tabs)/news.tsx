@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import {
   IdentificationCardIcon,
   BriefcaseIcon,
@@ -8,6 +9,9 @@ import {
   NewspaperIcon,
   BookmarkSimpleIcon,
   SparkleIcon,
+  ArrowSquareOutIcon,
+  CaretDownIcon,
+  CaretUpIcon,
   type Icon,
 } from 'phosphor-react-native';
 
@@ -19,6 +23,8 @@ import { SkeletonList } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Palette, Spacing, Type } from '@/constants/theme';
+
+const STALE_AFTER_MS = 15 * 60 * 1000;
 
 const TABS = ['For You', 'F1 Visa', 'OPT', 'CPT', 'STEM OPT', 'Saved'];
 
@@ -98,7 +104,10 @@ export default function NewsScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string | number>>(new Set());
+  const lastFetchedAt = useRef(0);
 
   const fetchNews = async (tag: string, targetPage: number, append: boolean) => {
     try {
@@ -108,6 +117,7 @@ export default function NewsScreen() {
       setHasMore(!!data.has_more);
       setPage(data.page ?? targetPage);
       setErrorMessage(null);
+      lastFetchedAt.current = Date.now();
     } catch {
       if (!append) {
         setNewsItems([]);
@@ -135,6 +145,28 @@ export default function NewsScreen() {
     setNewsItems(null);
     fetchNews(selectedTab, 1, false);
   }, [token, selectedTab]);
+
+  // Re-pull whenever the tab actually regains focus (not just on mount) if
+  // it's been more than 15 minutes since the last successful fetch — the
+  // screen stays mounted while the user is elsewhere, so without this a
+  // plain useEffect would keep showing stale news indefinitely.
+  useFocusEffect(
+    useCallback(() => {
+      if (!token || selectedTab === 'Saved') return;
+      if (Date.now() - lastFetchedAt.current < STALE_AFTER_MS) return;
+      fetchNews(selectedTab, 1, false);
+    }, [token, selectedTab])
+  );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    if (selectedTab === 'Saved') {
+      await fetchBookmarks();
+    } else {
+      await fetchNews(selectedTab, 1, false);
+    }
+    setRefreshing(false);
+  };
 
   const handleLoadMore = async () => {
     setLoadingMore(true);
@@ -166,11 +198,25 @@ export default function NewsScreen() {
     });
   };
 
+  const toggleExpanded = (id: string | number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const displayedNews = selectedTab === 'Saved' ? bookmarks.map(bookmarkToNewsItem) : newsItems ?? [];
 
   return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <Animated.View style={styles.root} entering={FadeIn.duration(220)}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Palette.purple} colors={[Palette.purple]} />
+        }>
         <View style={styles.header}>
           <Text style={styles.title}>Immigration News</Text>
         </View>
@@ -203,9 +249,14 @@ export default function NewsScreen() {
           const visual = tagVisual(item.tag);
           const saved = isBookmarked(item);
           const isHigh = item.relevance === 'HIGH';
+          const itemKey = item.id ?? index;
+          const expanded = expandedIds.has(itemKey);
           return (
-            <View key={item.id ?? index} style={[styles.card, index === displayedNews.length - 1 && styles.cardLast]}>
-              <Pressable style={styles.cardTop} onPress={() => item.link && Linking.openURL(item.link)}>
+            <Animated.View
+              key={itemKey}
+              entering={FadeInUp.delay(Math.min(index, 8) * 45).duration(320)}
+              style={[styles.card, index === displayedNews.length - 1 && styles.cardLast]}>
+              <Pressable style={styles.cardTop} onPress={() => toggleExpanded(itemKey)}>
                 <View style={styles.thumbColumn}>
                   {item.image_url ? (
                     <Image source={{ uri: item.image_url }} style={styles.thumbImage} />
@@ -237,22 +288,33 @@ export default function NewsScreen() {
                     ) : null}
                   </View>
 
-                  <Text style={styles.headline} numberOfLines={1}>
+                  <Text style={styles.headline} numberOfLines={expanded ? undefined : 1}>
                     <Text style={styles.sourcePrefix}>{item.source || 'Source'} says: </Text>
                     {item.title}
                   </Text>
 
                   {item.why_relevant ? (
-                    <Text style={styles.whyRelevant} numberOfLines={2}>
+                    <Text style={styles.whyRelevant} numberOfLines={expanded ? undefined : 2}>
                       Why this matters for you: {item.why_relevant}
                     </Text>
                   ) : null}
                 </View>
+                {expanded ? (
+                  <CaretUpIcon size={14} color={Palette.chevron} />
+                ) : (
+                  <CaretDownIcon size={14} color={Palette.chevron} />
+                )}
               </Pressable>
 
+              {expanded && item.body ? <Text style={styles.expandedBody}>{item.body}</Text> : null}
+
               <View style={styles.cardFooter}>
-                <Pressable onPress={() => item.link && Linking.openURL(item.link)} hitSlop={4}>
-                  <Text style={styles.sourceLink}>Source: {item.source || 'Unknown'}</Text>
+                <Pressable
+                  style={styles.readLink}
+                  onPress={() => item.link && Linking.openURL(item.link)}
+                  hitSlop={4}>
+                  <ArrowSquareOutIcon size={12} color={Palette.purple} weight="bold" />
+                  <Text style={styles.sourceLink}>Read on {item.source || 'source'}</Text>
                 </Pressable>
                 {item.created_at ? <Text style={styles.metaDot}>·</Text> : null}
                 <Text style={styles.metaText}>{relativeAge(item.created_at)}</Text>
@@ -262,7 +324,7 @@ export default function NewsScreen() {
                   <Text style={styles.askArriText}>Ask Arri about this</Text>
                 </Pressable>
               </View>
-            </View>
+            </Animated.View>
           );
         })}
 
@@ -276,7 +338,7 @@ export default function NewsScreen() {
           </Pressable>
         )}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -318,7 +380,21 @@ const styles = StyleSheet.create({
   },
   cardTop: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 12,
+  },
+  expandedBody: {
+    marginTop: 8,
+    marginLeft: 86,
+    fontFamily: Type.bodyRegular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: Palette.inkBody,
+  },
+  readLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   badgeRow: {
     flexDirection: 'row',

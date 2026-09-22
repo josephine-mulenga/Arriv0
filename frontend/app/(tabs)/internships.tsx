@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import Animated, { FadeIn, FadeInUp, LinearTransition, SlideInRight, SlideOutLeft } from 'react-native-reanimated';
 import {
   BriefcaseIcon,
   MagnifyingGlassIcon,
@@ -12,6 +13,9 @@ import {
   BookmarkSimpleIcon,
   SparkleIcon,
   ShieldCheckIcon,
+  ArrowSquareOutIcon,
+  CaretDownIcon,
+  CaretUpIcon,
 } from 'phosphor-react-native';
 
 import {
@@ -30,8 +34,12 @@ import { SkeletonList } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Palette, Spacing, Type } from '@/constants/theme';
+import { friendlyErrorMessage } from '@/utils/errorMessage';
+import { getLastSeen, markCompaniesSeenNow } from '@/utils/watchlistSeen';
 
 const SECTIONS = ['Recommended', 'New This Week', 'Watching', 'Saved'];
+const STALE_AFTER_MS = 30 * 60 * 1000;
+const NEW_POSTING_WINDOW_DAYS = 3;
 
 interface SponsorshipSignal {
   label: string;
@@ -140,7 +148,11 @@ export default function InternshipsScreen() {
   const [watchingItems, setWatchingItems] = useState<InternshipItem[] | null>(null);
   const [brokenLogos, setBrokenLogos] = useState<Set<string>>(new Set());
   const [watching, setWatching] = useState(false);
+  const [newCounts, setNewCounts] = useState<Record<string, number>>({});
+  const [refreshing, setRefreshing] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string | number>>(new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFetchedAt = useRef(0);
 
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
 
@@ -225,12 +237,13 @@ export default function InternshipsScreen() {
       setMajorMatched(!!data.major_matched);
       setErrorMessage(null);
       setNotConfigured(false);
+      lastFetchedAt.current = Date.now();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not load internships.';
-      if (message.toLowerCase().includes("isn't set up")) {
+      const rawMessage = err instanceof Error ? err.message : '';
+      if (rawMessage.toLowerCase().includes("isn't set up")) {
         setNotConfigured(true);
       } else {
-        setErrorMessage(message);
+        setErrorMessage(friendlyErrorMessage(err, 'Could not load opportunities right now.'));
       }
       if (!append) setItems([]);
     }
@@ -241,10 +254,25 @@ export default function InternshipsScreen() {
     fetchInternships('', 1, false);
   }, [token]);
 
-  // "Watching" is fetched lazily the first time that section is opened,
-  // one getInternships call per watched company (reusing the same
-  // major/company-search endpoint the rest of this screen already uses),
-  // merged into one list.
+  // Re-pull whenever the tab regains focus if it's been more than 30
+  // minutes since the last successful fetch — the screen stays mounted
+  // while the user is elsewhere, so a plain mount-only effect would keep
+  // showing stale postings indefinitely.
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      if (Date.now() - lastFetchedAt.current < STALE_AFTER_MS) return;
+      fetchInternships(query.trim(), 1, false);
+    }, [token])
+  );
+
+  // "Watching" is fetched lazily the first time that section is opened, one
+  // getInternships call per watched company (reusing the same major/
+  // company-search endpoint the rest of this screen already uses), merged
+  // into one list. Also tallies how many of each company's postings are
+  // newer than the last time this section was viewed, for the "New" badge
+  // on the watched-company chips — then marks all of them seen so the badge
+  // clears once the user has actually looked.
   useEffect(() => {
     if (section !== 'Watching' || !token || watchedCompanies.length === 0) return;
     (async () => {
@@ -255,16 +283,28 @@ export default function InternshipsScreen() {
         );
         const merged: InternshipItem[] = [];
         const seen = new Set<string>();
-        for (const data of results) {
-          for (const item of data.results ?? []) {
+        const counts: Record<string, number> = {};
+        for (let i = 0; i < results.length; i++) {
+          const company = watchedCompanies[i].name;
+          const lastSeenIso = await getLastSeen(company);
+          const lastSeenAt = lastSeenIso
+            ? new Date(lastSeenIso).getTime()
+            : Date.now() - NEW_POSTING_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+          for (const item of results[i].results ?? []) {
             const key = `${(item.title || '').toLowerCase()}|${(item.company || '').toLowerCase()}`;
             if (!seen.has(key)) {
               seen.add(key);
               merged.push(item);
             }
+            const postedAt = new Date(item.posted_date || item.created || 0).getTime();
+            if (postedAt > lastSeenAt) {
+              counts[company] = (counts[company] ?? 0) + 1;
+            }
           }
         }
         setWatchingItems(merged);
+        setNewCounts(counts);
+        markCompaniesSeenNow(watchedCompanies.map((c) => c.name));
       } catch {
         setWatchingItems([]);
       }
@@ -273,6 +313,21 @@ export default function InternshipsScreen() {
 
   const handleSearch = () => {
     fetchInternships(query.trim(), 1, false);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchInternships(query.trim(), 1, false);
+    setRefreshing(false);
+  };
+
+  const toggleExpanded = (id: string | number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const handleLoadMore = async () => {
@@ -323,8 +378,13 @@ export default function InternshipsScreen() {
   const showWatchManager = section === 'Watching';
 
   return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <Animated.View style={styles.root} entering={FadeIn.duration(220)}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Palette.purple} colors={[Palette.purple]} />
+        }>
         <View style={styles.header}>
           <Text style={styles.title}>Opportunities for you</Text>
           <Text style={styles.subtitle}>Based on your major, skills, and graduation year</Text>
@@ -417,23 +477,38 @@ export default function InternshipsScreen() {
             )}
 
             {watchedCompanies.length > 0 && (
-              <View style={styles.watchedChipsRow}>
-                {watchedCompanies.map((item) => (
-                  <View key={item.name} style={styles.watchedChip}>
-                    {item.logo_url && !brokenLogos.has(item.logo_url) ? (
-                      <Image
-                        source={{ uri: item.logo_url }}
-                        style={styles.watchedChipLogo}
-                        onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
-                      />
-                    ) : null}
-                    <Text style={styles.watchedChipText}>{item.name}</Text>
-                    <Pressable onPress={() => handleUnwatch(item.name)} hitSlop={8}>
-                      <XIcon size={12} color={Palette.purple} weight="bold" />
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
+              <Animated.View layout={LinearTransition.duration(220)} style={styles.watchedChipsRow}>
+                {watchedCompanies.map((item) => {
+                  const newCount = newCounts[item.name] ?? 0;
+                  return (
+                    <Animated.View
+                      key={item.name}
+                      entering={SlideInRight.duration(240)}
+                      exiting={SlideOutLeft.duration(180)}
+                      layout={LinearTransition.duration(220)}
+                      style={styles.watchedChip}>
+                      {item.logo_url && !brokenLogos.has(item.logo_url) ? (
+                        <Image
+                          source={{ uri: item.logo_url }}
+                          style={styles.watchedChipLogo}
+                          onError={() => setBrokenLogos((prev) => new Set(prev).add(item.logo_url!))}
+                        />
+                      ) : (
+                        <BuildingsIcon size={13} color={Palette.purple} />
+                      )}
+                      <Text style={styles.watchedChipText}>{item.name}</Text>
+                      {newCount > 0 && (
+                        <View style={styles.newBadge}>
+                          <Text style={styles.newBadgeText}>New · {newCount}</Text>
+                        </View>
+                      )}
+                      <Pressable onPress={() => handleUnwatch(item.name)} hitSlop={8}>
+                        <XIcon size={12} color={Palette.purple} weight="bold" />
+                      </Pressable>
+                    </Animated.View>
+                  );
+                })}
+              </Animated.View>
             )}
           </View>
         )}
@@ -483,9 +558,14 @@ export default function InternshipsScreen() {
           const sponsorship = sponsorshipSummary(item.sponsorship_language);
           const matchColors = matchBadgeStyle(item.match_score);
           const saved = isBookmarked(item);
+          const itemKey = item.id ?? index;
+          const expanded = expandedIds.has(itemKey);
           return (
-            <View key={item.id ?? index} style={[styles.card, index === displayedItems.length - 1 && styles.cardLast]}>
-              <Pressable onPress={() => applyUrl && Linking.openURL(applyUrl)}>
+            <Animated.View
+              key={itemKey}
+              entering={FadeInUp.delay(Math.min(index, 8) * 45).duration(320)}
+              style={[styles.card, index === displayedItems.length - 1 && styles.cardLast]}>
+              <Pressable onPress={() => toggleExpanded(itemKey)}>
                 <View style={styles.cardTop}>
                   {item.logo_url && !brokenLogos.has(item.logo_url) ? (
                     <Image
@@ -525,65 +605,82 @@ export default function InternshipsScreen() {
                       </View>
                     ) : null}
                   </View>
+                  {expanded ? (
+                    <CaretUpIcon size={14} color={Palette.chevron} />
+                  ) : (
+                    <CaretDownIcon size={14} color={Palette.chevron} />
+                  )}
                 </View>
 
                 {item.description ? (
-                  <Text style={styles.description} numberOfLines={2}>{stripHtml(item.description)}</Text>
+                  <Text style={styles.description} numberOfLines={expanded ? undefined : 2}>
+                    {stripHtml(item.description)}
+                  </Text>
                 ) : null}
                 {salary ? <Text style={styles.salary}>{salary}</Text> : null}
 
-                {item.match_pills && item.match_pills.length > 0 ? (
-                  <View style={styles.pillsRow}>
-                    {item.match_pills.map((pill, pillIndex) => (
-                      <View key={pillIndex} style={styles.pill}>
-                        <Text style={styles.pillText}>{pill}</Text>
+                {expanded && (
+                  <>
+                    {item.match_pills && item.match_pills.length > 0 ? (
+                      <View style={styles.pillsRow}>
+                        {item.match_pills.map((pill, pillIndex) => (
+                          <View key={pillIndex} style={styles.pill}>
+                            <Text style={styles.pillText}>{pill}</Text>
+                          </View>
+                        ))}
                       </View>
-                    ))}
-                  </View>
-                ) : null}
+                    ) : null}
 
-                <View
-                  style={[
-                    styles.sponsorshipBadge,
-                    sponsorship.kind === 'negative'
-                      ? styles.sponsorshipBadgeNegative
-                      : sponsorship.kind === 'positive'
-                        ? styles.sponsorshipBadgePositive
-                        : styles.sponsorshipBadgeNeutral,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.sponsorshipBadgeText,
-                      sponsorship.kind === 'negative'
-                        ? styles.sponsorshipBadgeTextNegative
-                        : sponsorship.kind === 'positive'
-                          ? styles.sponsorshipBadgeTextPositive
-                          : styles.sponsorshipBadgeTextNeutral,
-                    ]}>
-                    {sponsorship.kind === 'negative' ? `⚠ ${sponsorship.label}` : sponsorship.label}
-                  </Text>
-                </View>
+                    <View
+                      style={[
+                        styles.sponsorshipBadge,
+                        sponsorship.kind === 'negative'
+                          ? styles.sponsorshipBadgeNegative
+                          : sponsorship.kind === 'positive'
+                            ? styles.sponsorshipBadgePositive
+                            : styles.sponsorshipBadgeNeutral,
+                      ]}>
+                      <Text
+                        style={[
+                          styles.sponsorshipBadgeText,
+                          sponsorship.kind === 'negative'
+                            ? styles.sponsorshipBadgeTextNegative
+                            : sponsorship.kind === 'positive'
+                              ? styles.sponsorshipBadgeTextPositive
+                              : styles.sponsorshipBadgeTextNeutral,
+                        ]}>
+                        {sponsorship.kind === 'negative' ? `⚠ ${sponsorship.label}` : sponsorship.label}
+                      </Text>
+                    </View>
 
-                <View style={styles.workAuthBlock}>
-                  <View style={styles.workAuthHeader}>
-                    <ShieldCheckIcon size={13} color={Palette.inkMuted} />
-                    <Text style={styles.workAuthLabel}>Work authorization</Text>
-                  </View>
-                  <Text style={styles.workAuthText}>{workAuthText(item.sponsorship_language)}</Text>
-                </View>
+                    <View style={styles.workAuthBlock}>
+                      <View style={styles.workAuthHeader}>
+                        <ShieldCheckIcon size={13} color={Palette.inkMuted} />
+                        <Text style={styles.workAuthLabel}>Work authorization</Text>
+                      </View>
+                      <Text style={styles.workAuthText}>{workAuthText(item.sponsorship_language)}</Text>
+                    </View>
+                  </>
+                )}
               </Pressable>
 
               <View style={styles.cardFooter}>
                 <Pressable hitSlop={8} onPress={() => handleToggleBookmark(item)} style={styles.footerAction}>
                   <BookmarkSimpleIcon size={16} color={saved ? Palette.purple : Palette.inkFaint} weight={saved ? 'fill' : 'regular'} />
                 </Pressable>
-                <View style={{ flex: 1 }} />
                 <Pressable style={styles.askArriLink} onPress={() => handleAskArri(item)} hitSlop={6}>
                   <SparkleIcon size={12} color={Palette.purple} weight="fill" />
                   <Text style={styles.askArriText}>Ask Arri about this</Text>
                 </Pressable>
+                <View style={{ flex: 1 }} />
+                {applyUrl ? (
+                  <Pressable style={styles.applyButton} onPress={() => Linking.openURL(applyUrl)}>
+                    <Text style={styles.applyButtonText}>Apply</Text>
+                    <ArrowSquareOutIcon size={12} color={Palette.white} weight="bold" />
+                  </Pressable>
+                ) : null}
               </View>
-            </View>
+            </Animated.View>
           );
         })}
 
@@ -597,7 +694,7 @@ export default function InternshipsScreen() {
           </Pressable>
         )}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -754,6 +851,17 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 12,
   },
+  newBadge: {
+    backgroundColor: Palette.danger,
+    borderRadius: 7,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  newBadgeText: {
+    fontFamily: Type.bodyBold,
+    fontSize: 9.5,
+    color: Palette.white,
+  },
   watchedChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -778,6 +886,7 @@ const styles = StyleSheet.create({
   },
   cardTop: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 10,
   },
   jobLogo: {
@@ -941,6 +1050,20 @@ const styles = StyleSheet.create({
     fontFamily: Type.bodySemiBold,
     fontSize: 11.5,
     color: Palette.purple,
+  },
+  applyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Palette.purple,
+    borderRadius: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  applyButtonText: {
+    fontFamily: Type.bodySemiBold,
+    fontSize: 12,
+    color: Palette.white,
   },
   loadMoreButton: {
     alignItems: 'center',
